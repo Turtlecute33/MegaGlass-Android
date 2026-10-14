@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="transfers">Transfers</string>
+    <string name="transfers_active">Active (%1$d)</string>
+    <string name="transfers_finished">Finished (%1$d)</string>
+    <string name="pause">Pause</string>
+    <string name="resume">Resume</string>
+    <string name="pause_all">Pause all</string>
+    <string name="resume_all">Resume all</string>
+    <string name="cancel_all">Cancel all</string>
+    <string name="cancel_all_title">Cancel all transfers?</string>
+    <string name="cancel_all_text">Downloads and uploads in progress stop. Files that are already complete stay.</string>
+    <string name="cancel_transfer">Cancel transfer</string>
+    <string name="clear_finished">Clear finished</string>
+    <string name="move_to_top">Move to top</string>
+    <string name="remove_from_list">Remove from list</string>
+    <string name="no_active_transfers">No active transfers</string>
+    <string name="no_finished_transfers">No finished transfers</string>
+    <string name="file_moved_or_deleted">The file was moved or deleted</string>
+    <string name="transfer_over_quota">Transfer quota exceeded. Transfers continue when the quota is available again.</string>
+    <string name="n_transfers">%1$d active</string>
+    <string name="status_queued">Queued</string>
+    <string name="status_paused">Paused</string>
+    <string name="status_retrying">Retrying…</string>
+    <string name="status_completing">Completing…</string>
+</resources>

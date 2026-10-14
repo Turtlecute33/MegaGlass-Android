@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="link_title">MEGA link</string>
+    <string name="link_folder">Shared folder link</string>
+    <string name="link_album">Shared album</string>
+    <string name="link_import">Import</string>
+    <string name="link_import_title">Import to Cloud drive</string>
+    <string name="link_import_here">Import here</string>
+    <string name="link_imported">Imported to your Cloud drive</string>
+    <string name="link_download_all">Download all</string>
+    <string name="link_view">View</string>
+    <string name="link_preparing">Getting the file…</string>
+    <string name="link_loading_folder">Opening the folder…</string>
+    <string name="link_e2ee">Decrypted on this device</string>
+    <string name="link_album_empty">This album is empty</string>
+    <string name="link_unlock">Open</string>
+    <string name="link_password_title">This link has a password</string>
+    <string name="link_password_text">Enter the password that the owner gave you.</string>
+    <string name="link_password">Password</string>
+    <string name="link_password_wrong">Wrong password. Try again.</string>
+    <string name="link_key_title">Decryption key needed</string>
+    <string name="link_key_text">This link has no key, or the key is not correct. Enter the key that the owner sent you.</string>
+    <string name="link_key">Decryption key</string>
+    <string name="link_key_wrong">This key does not open the link.</string>
+    <string name="link_unavailable">Link not available</string>
+    <string name="link_error_invalid">This is not a valid MEGA link.</string>
+    <string name="link_error_not_found">This link does not exist, or the owner removed it.</string>
+    <string name="link_error_taken_down">This link was taken down because it breaks the MEGA terms of service.</string>
+    <string name="link_error_terminated">The account that shared this link was closed.</string>
+    <string name="link_error_quota">Not enough storage space in your account.</string>
+</resources>

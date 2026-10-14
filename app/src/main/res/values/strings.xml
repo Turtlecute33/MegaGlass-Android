@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MegaGlass</string>
+
+    <!-- Common -->
+    <string name="back">Back</string>
+    <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
+    <string name="done">Done</string>
+    <string name="save">Save</string>
+    <string name="close">Close</string>
+    <string name="retry">Retry</string>
+    <string name="more">More options</string>
+    <string name="search">Search</string>
+    <string name="error_title">Something went wrong</string>
+    <string name="no_app_to_open">No app can open this file</string>
+    <string name="copied">Copied to clipboard</string>
+    <string name="empty_folder">Empty folder</string>
+    <plurals name="n_files">
+        <item quantity="one">%d file</item>
+        <item quantity="other">%d files</item>
+    </plurals>
+    <plurals name="n_folders">
+        <item quantity="one">%d folder</item>
+        <item quantity="other">%d folders</item>
+    </plurals>
+    <plurals name="n_items">
+        <item quantity="one">%d item</item>
+        <item quantity="other">%d items</item>
+    </plurals>
+    <plurals name="n_selected">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+    <string name="favourite">Favourite</string>
+    <string name="link">Link</string>
+    <string name="offline">Offline</string>
+    <string name="invalid_name">A name cannot contain \\ / : * ? \" &lt; &gt; |</string>
+
+    <!-- Navigation -->
+    <string name="tab_home">Home</string>
+    <string name="tab_drive">Drive</string>
+    <string name="tab_photos">Photos</string>
+    <string name="tab_shared">Shared</string>
+    <string name="tab_menu">Me</string>
+
+    <!-- Session -->
+    <string name="logging_in">Logging in…</string>
+    <string name="loading_files">Loading your files…</string>
+    <string name="account_blocked">Account blocked</string>
+    <string name="logout">Log out</string>
+    <string name="resume_failed">Cannot connect to MEGA</string>
+
+    <!-- Transfers notification -->
+    <string name="channel_transfers">Transfers</string>
+    <string name="notif_transfers_both">%1$d downloads, %2$d uploads</string>
+    <plurals name="notif_uploading">
+        <item quantity="one">Uploading %d file</item>
+        <item quantity="other">Uploading %d files</item>
+    </plurals>
+    <plurals name="notif_downloading">
+        <item quantity="one">Downloading %d file</item>
+        <item quantity="other">Downloading %d files</item>
+    </plurals>
+</resources>

@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Settings index -->
+    <string name="settings_general">General</string>
+    <string name="settings_privacy">Privacy and account</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_appearance_summary">Theme, colours, hidden items</string>
+    <string name="settings_camera_uploads">Camera uploads</string>
+    <string name="settings_camera_uploads_summary">Back up photos and videos automatically</string>
+    <string name="settings_transfers">Transfers</string>
+    <string name="settings_transfers_summary">Speed, download folder, file versions</string>
+    <string name="settings_storage">Storage</string>
+    <string name="settings_storage_summary">Cache, offline files, previous versions</string>
+    <string name="settings_security">Security and privacy</string>
+    <string name="settings_security_summary">Passcode, two-factor authentication, sessions</string>
+    <string name="settings_account_summary">Profile, plan, storage use</string>
+    <string name="settings_about_summary">Version %1$s, licences</string>
+
+    <!-- Appearance -->
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_display">Display</string>
+    <string name="settings_dynamic_color">Dynamic colour</string>
+    <string name="settings_dynamic_color_summary">Use the colours of your wallpaper</string>
+    <string name="settings_pure_black">Pure black</string>
+    <string name="settings_pure_black_summary">Black backgrounds in the dark theme. Saves battery on OLED screens.</string>
+    <string name="settings_show_hidden">Show hidden items</string>
+    <string name="settings_show_hidden_summary">Show files and folders that you marked as hidden</string>
+    <string name="settings_photo_columns">Photos per row</string>
+
+    <!-- Transfers -->
+    <string name="settings_speed">Speed</string>
+    <string name="settings_fast_transfers">Fast transfers</string>
+    <string name="settings_fast_on">8 parallel connections for each file</string>
+    <string name="settings_fast_off">4 connections for downloads, 3 for uploads</string>
+    <string name="settings_https">Use HTTPS for transfers</string>
+    <string name="settings_https_summary">File data is end-to-end encrypted in all cases. HTTPS also hides the transfer from your network, but it is a little slower.</string>
+    <string name="settings_downloads">Downloads</string>
+    <string name="settings_download_location">Download location</string>
+    <string name="settings_location_default">Default (Download/MegaGlass)</string>
+    <string name="settings_location_choose">Choose a folder</string>
+    <string name="settings_location_failed">MegaGlass cannot write to this folder</string>
+    <string name="settings_location_access">Without access to all files, downloads go to the folder of the app.</string>
+    <string name="settings_cloud">In your cloud</string>
+    <string name="settings_versioning">File versions</string>
+    <string name="settings_versioning_summary">Keep the old version when you upload a file with the same name</string>
+    <string name="settings_rubbish_clean">Clean the rubbish bin automatically</string>
+    <string name="settings_rubbish_clean_summary">Delete items after some days</string>
+    <string name="settings_rubbish_clean_off">Never</string>
+    <string name="settings_rubbish_clean_pro">Your plan does not allow this period</string>
+    <plurals name="settings_days">
+        <item quantity="one">After %d day</item>
+        <item quantity="other">After %d days</item>
+    </plurals>
+
+    <!-- Storage -->
+    <string name="settings_on_device">On this device</string>
+    <string name="settings_clear_cache">Clear cache</string>
+    <string name="settings_cache_summary">Thumbnails and temporary files: %1$s</string>
+    <string name="settings_clear_cache_text">Thumbnails and temporary copies are deleted. They download again when needed.</string>
+    <string name="settings_clear_offline">Remove offline files</string>
+    <string name="settings_offline_summary">Files kept on this device: %1$s</string>
+    <string name="settings_clear_offline_text">All offline files are deleted from this device. They stay in your cloud.</string>
+    <string name="settings_delete_versions">Delete previous versions</string>
+    <string name="settings_versions_summary">Space used by previous versions: %1$s</string>
+    <string name="settings_delete_versions_text">The previous versions of all your files are deleted permanently. The current versions stay.</string>
+    <string name="settings_clear">Clear</string>
+    <string name="settings_delete">Delete</string>
+
+    <!-- Security -->
+    <string name="security_app_lock">App lock</string>
+    <string name="security_passcode">Passcode lock</string>
+    <string name="security_passcode_summary">Ask for a passcode when MegaGlass opens</string>
+    <string name="security_change_passcode">Change passcode</string>
+    <string name="security_biometric">Unlock with biometrics</string>
+    <string name="security_biometric_summary">Use your fingerprint or face instead of the passcode</string>
+    <string name="security_biometric_unavailable">No strong biometric is set up on this device</string>
+    <string name="security_timeout">Lock after</string>
+    <string name="security_timeout_now">Immediately</string>
+    <plurals name="security_seconds">
+        <item quantity="one">%d second</item>
+        <item quantity="other">%d seconds</item>
+    </plurals>
+    <plurals name="security_minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
+    <string name="security_block_screenshots">Block screenshots</string>
+    <string name="security_block_screenshots_summary">Also hides the app content in the recent apps screen</string>
+    <string name="security_passcode_off_title">Turn off the passcode</string>
+    <string name="security_current_passcode">Current passcode</string>
+    <string name="security_turn_off">Turn off</string>
+    <string name="security_wrong_passcode">Wrong passcode</string>
+    <string name="security_account">Account security</string>
+    <string name="security_2fa">Two-factor authentication</string>
+    <string name="security_2fa_on">On. Log-in needs a code from your authenticator app.</string>
+    <string name="security_2fa_off">Off. Turn it on for more protection.</string>
+    <string name="security_checking">Checking…</string>
+    <string name="security_2fa_disable_title">Turn off two-factor authentication?</string>
+    <string name="security_2fa_disable_text">Enter the code from your authenticator app.</string>
+    <string name="security_2fa_code_title">Enter your 6-digit code</string>
+    <string name="security_2fa_intro_title">Protect your account with a second step</string>
+    <string name="security_2fa_intro_text">After you turn this on, MEGA asks for a 6-digit code from an authenticator app each time you log in. You need an authenticator app on this device or another device.</string>
+    <string name="security_2fa_start">Set up</string>
+    <string name="security_2fa_step1">1. Add this key to your authenticator app</string>
+    <string name="security_2fa_step2">2. Enter the 6-digit code that the app shows</string>
+    <string name="security_2fa_done_title">Two-factor authentication is on</string>
+    <string name="security_2fa_done_text">If you lose access to your authenticator app, you need your recovery key. Save it now if you did not do this before.</string>
+    <string name="security_copy">Copy</string>
+    <string name="security_open_authenticator">Open authenticator</string>
+    <string name="security_no_authenticator">No authenticator app is installed. Copy the key into your app.</string>
+    <string name="security_change_password">Change password</string>
+    <string name="security_change_password_text">Your password encrypts your data. MEGA cannot see it or reset it for you.</string>
+    <string name="security_current_password">Current password</string>
+    <string name="security_new_password">New password</string>
+    <string name="security_password_changed">Password changed</string>
+    <string name="security_change_email">Change e-mail</string>
+    <string name="security_change_email_text">Your e-mail is %1$s. We send a confirmation link to the new address. The change is complete when you open the link.</string>
+    <string name="security_new_email">New e-mail</string>
+    <string name="security_send_confirmation">Send confirmation</string>
+    <string name="security_email_sent">We sent a link to %1$s. Open it to complete the change.</string>
+    <string name="security_email_used">This e-mail is already used by another account</string>
+    <string name="security_master_only">Only the administrator of the business account can do this</string>
+    <string name="security_too_many">Too many attempts. Wait a few minutes and try again.</string>
+    <string name="security_wrong_password">Wrong password</string>
+    <string name="security_wrong_code">Wrong code. Try again.</string>
+    <string name="security_recovery_key">Recovery key</string>
+    <string name="security_recovery_key_summary">The only way to get your data back if you forget your password</string>
+    <string name="security_recovery_key_text">Your recovery key lets you reset your password without losing your data. Keep it in a safe place, not in your MEGA cloud. Enter your password to show it.</string>
+    <string name="security_show_key">Show recovery key</string>
+    <string name="security_key_warning">Anybody with this key and access to your e-mail can take your account. Do not share it.</string>
+    <string name="security_key_saved">Recovery key saved</string>
+    <string name="security_sessions">Active sessions</string>
+    <string name="security_sessions_summary">Devices and browsers where you are logged in</string>
+    <string name="security_this_device">This device</string>
+    <string name="security_close_others">Log out others</string>
+    <string name="security_close_others_title">Log out all other sessions?</string>
+    <string name="security_close_others_text">All devices and browsers except this one are logged out.</string>
+    <string name="security_close_session_title">Log out this session?</string>
+    <string name="security_session_closed">Session closed</string>
+
+    <!-- Passcode -->
+    <string name="security_passcode_new">Enter a new passcode</string>
+    <string name="security_passcode_confirm">Enter the passcode again</string>
+    <plurals name="security_passcode_digits">
+        <item quantity="one">%d digit</item>
+        <item quantity="other">%d digits</item>
+    </plurals>
+    <string name="security_use_4">Use 4 digits</string>
+    <string name="security_use_6">Use 6 digits</string>
+    <string name="security_passcode_mismatch">The passcodes are not the same. Try again.</string>
+    <string name="security_passcode_set">Passcode lock is on</string>
+
+    <!-- Lock screen -->
+    <string name="lock_title">MegaGlass is locked</string>
+    <string name="lock_subtitle">Enter your passcode</string>
+    <plurals name="lock_attempts_left">
+        <item quantity="one">Wrong passcode. %d attempt left before log-out.</item>
+        <item quantity="other">Wrong passcode. %d attempts left before log-out.</item>
+    </plurals>
+    <string name="lock_delete">Delete</string>
+    <string name="lock_use_biometric">Unlock with biometrics</string>
+    <string name="lock_biometric_title">Unlock MegaGlass</string>
+    <string name="lock_use_passcode">Use passcode</string>
+
+    <!-- About -->
+    <string name="about_privacy">MegaGlass has no analytics, no ads and no telemetry. Files are encrypted on this device before they are uploaded. The app connects only to MEGA.</string>
+    <string name="about_versions">Versions</string>
+    <string name="about_app_version">MegaGlass</string>
+    <string name="about_sdk_version">MEGA SDK</string>
+    <string name="about_licences">Open-source licences</string>
+    <string name="about_native_licences">Boost Software License, ISC, curl, Apache License 2.0, Unicode, public domain, MIT, BSD</string>
+</resources>

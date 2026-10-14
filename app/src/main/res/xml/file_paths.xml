@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Folders whose files can be shared with other apps (read-only, per-URI grants). -->
+<paths>
+    <cache-path name="open" path="open/" />
+    <cache-path name="camera" path="camera/" />
+    <files-path name="offline" path="offline/" />
+    <external-files-path name="downloads" path="." />
+    <external-path name="storage" path="." />
+</paths>

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Me tab -->
+    <string name="menu_files">Files</string>
+    <string name="menu_transfers">Transfers</string>
+    <plurals name="menu_transfers_active">
+        <item quantity="one">%d transfer in progress</item>
+        <item quantity="other">%d transfers in progress</item>
+    </plurals>
+    <string name="menu_devices">Devices</string>
+    <string name="menu_device_centre">Backups and devices</string>
+    <string name="menu_device_centre_summary">Backups, syncs and camera uploads of all your devices</string>
+    <string name="menu_sync">Sync</string>
+    <string name="menu_sync_summary">Keep folders on this device and in your cloud the same</string>
+    <string name="menu_people">People</string>
+    <string name="menu_contacts">Contacts</string>
+    <string name="menu_notifications">Notifications</string>
+    <string name="menu_app">App</string>
+    <string name="settings_title">Settings</string>
+    <string name="about_title">About</string>
+    <string name="logout_title">Log out?</string>
+    <string name="logout_text">Offline files, cached thumbnails and the transfer history on this device are deleted. Your files stay in your cloud.</string>
+    <plurals name="logout_transfers_warning">
+        <item quantity="one">%d transfer is not finished. It stops when you log out.</item>
+        <item quantity="other">%d transfers are not finished. They stop when you log out.</item>
+    </plurals>
+    <string name="menu_storage_of">%1$s of %2$s</string>
+
+    <!-- Plans -->
+    <string name="plan_free">Free</string>
+    <string name="plan_pro_i">Pro I</string>
+    <string name="plan_pro_ii">Pro II</string>
+    <string name="plan_pro_iii">Pro III</string>
+    <string name="plan_pro_lite">Pro Lite</string>
+    <string name="plan_starter">Starter</string>
+    <string name="plan_basic">Basic</string>
+    <string name="plan_essential">Essential</string>
+    <string name="plan_business">Business</string>
+    <string name="plan_pro_flexi">Pro Flexi</string>
+
+    <!-- Account -->
+    <string name="account_title">Account</string>
+    <string name="account_profile">Profile</string>
+    <string name="account_name">Name</string>
+    <string name="account_email">E-mail</string>
+    <string name="account_change_photo">Change photo</string>
+    <string name="account_remove_photo">Remove photo</string>
+    <string name="avatar_read_failed">Cannot read this image</string>
+    <string name="account_storage">Storage</string>
+    <string name="account_of">of %1$s</string>
+    <string name="account_versions">Previous versions</string>
+    <string name="account_free">Free space</string>
+    <string name="account_transfer_quota">Transfer quota</string>
+    <string name="account_plan_title">Plan</string>
+    <string name="account_plan">Current plan</string>
+    <string name="account_renews">Renews on</string>
+    <string name="account_expires">Expires on</string>
+    <string name="account_upgrade">Upgrade or manage plan</string>
+    <string name="account_upgrade_summary">Opens mega.io in your browser</string>
+    <string name="account_achievements">Achievements</string>
+    <string name="account_achievements_value">+%1$s storage, +%2$s transfer</string>
+    <string name="account_danger">Delete account</string>
+    <string name="account_cancel">Cancel and delete my account</string>
+    <string name="account_cancel_title">Delete your account?</string>
+    <string name="account_cancel_text">MEGA sends you an e-mail with a link. When you open the link and confirm with your password, your account and all your files are deleted permanently. Nobody can get them back.</string>
+    <string name="account_cancel_send">Send e-mail</string>
+    <string name="account_cancel_sent_title">Check your e-mail</string>
+    <string name="account_cancel_sent_text">We sent a link to %1$s. Your account stays active until you confirm with the link.</string>
+</resources>

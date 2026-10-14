@@ -1,0 +1,55 @@
+diff --git a/src/transferslot.cpp b/src/transferslot.cpp
+index 689cdd8..0a80ba6 100644
+--- a/src/transferslot.cpp
++++ b/src/transferslot.cpp
+@@ -31,6 +31,10 @@
+ #include "mega/raid.h"
+ #include "mega/testhooks.h"
+ 
++#ifdef __ANDROID__
++#include <unistd.h>
++#endif
++
+ namespace mega {
+ 
+ TransferSlotFileAccess::TransferSlotFileAccess(std::unique_ptr<FileAccess>&& p, Transfer* t)
+@@ -90,8 +94,11 @@ const dstime TransferSlot::XFERTIMEOUT = 600;
+ // max time without progress callbacks
+ const dstime TransferSlot::PROGRESSTIMEOUT = 10;
+ 
+-#if defined(__ANDROID__) || defined(USE_IOS)
++#if defined(USE_IOS)
+     const m_off_t TransferSlot::MAX_REQ_SIZE = 2097152; // 2 MB
++#elif defined(__ANDROID__)
++    // Upper limit. The constructor lowers it on devices with less RAM.
++    const m_off_t TransferSlot::MAX_REQ_SIZE = 16777216; // 16 MB
+ #elif defined (_WIN32) || defined(HAVE_AIO_RT)
+     const m_off_t TransferSlot::MAX_REQ_SIZE = 41943040; // 40 MB [Previous value: 16777216 -> 16 MB]
+ #else
+@@ -163,6 +170,26 @@ TransferSlot::TransferSlot(Transfer* ctransfer)
+     {
+         LOG_warn << "[Windows] Error getting RAM usage info";
+     }
++#elif defined(__ANDROID__)
++    // Each connection buffers one request, so scale the request size with the device RAM.
++    // Total RAM is used because free RAM on Android is mostly page cache and changes a lot.
++    const long pages = sysconf(_SC_PHYS_PAGES);
++    const long pageSize = sysconf(_SC_PAGESIZE);
++    const m_off_t totalRam =
++        (pages > 0 && pageSize > 0) ? static_cast<m_off_t>(pages) * pageSize : 0;
++    const m_off_t gib = 1073741824;
++    if (totalRam < 4 * gib)
++    {
++        maxRequestSize = 2097152; // 2 MB
++    }
++    else if (totalRam < 6 * gib)
++    {
++        maxRequestSize = 4194304; // 4 MB
++    }
++    else if (totalRam < 8 * gib)
++    {
++        maxRequestSize = 8388608; // 8 MB
++    }
+ #endif
+ }
+ 

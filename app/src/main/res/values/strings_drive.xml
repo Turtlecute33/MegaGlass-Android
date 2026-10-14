@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cloud_drive">Cloud drive</string>
+    <string name="incoming_shares">Incoming shares</string>
+    <string name="rubbish_bin">Rubbish bin</string>
+    <string name="backups">Backups</string>
+    <string name="name">Name</string>
+    <string name="create">Create</string>
+    <string name="add">Add</string>
+    <string name="undo">Undo</string>
+    <string name="select_all">Select all</string>
+    <string name="new_folder">New folder</string>
+    <string name="new_text_file">New text file</string>
+    <string name="upload_files">Upload files</string>
+    <string name="upload_folder">Upload folder</string>
+    <string name="take_photo">Take photo</string>
+    <string name="no_folders_here">No folders here</string>
+    <string name="move_here">Move here</string>
+    <string name="copy_here">Copy here</string>
+    <string name="upload_here">Upload here</string>
+
+    <string name="storage_access_title">Allow access to files?</string>
+    <string name="storage_access_text">MegaGlass saves downloads in Download/MegaGlass and uploads folders straight from storage, without making copies. Android asks you to allow access to all files for this.</string>
+    <string name="storage_access_allow">Allow</string>
+    <string name="storage_access_app_folder">Use app folder</string>
+    <string name="folder_upload_needs_access">To upload folders, allow access to all files.</string>
+    <string name="folder_upload_started">Uploading folder %1$s</string>
+
+    <string name="action_info">Info</string>
+    <string name="action_download">Download</string>
+    <string name="action_offline">Available offline</string>
+    <string name="action_get_link">Share link</string>
+    <string name="action_remove_link">Remove link</string>
+    <string name="action_share_folder">Share folder</string>
+    <string name="action_send">Send to…</string>
+    <string name="action_open_with">Open with</string>
+    <string name="action_rename">Rename</string>
+    <string name="action_move">Move</string>
+    <string name="action_copy">Copy</string>
+    <string name="action_versions">Versions</string>
+    <string name="action_favourite">Add to favourites</string>
+    <string name="action_unfavourite">Remove from favourites</string>
+    <string name="action_hide">Hide</string>
+    <string name="action_unhide">Unhide</string>
+    <string name="action_leave_share">Leave share</string>
+    <string name="action_rubbish">Move to rubbish bin</string>
+    <string name="action_restore">Restore</string>
+    <string name="action_delete_forever">Delete permanently</string>
+
+    <plurals name="download_started">
+        <item quantity="one">Downloading %d item</item>
+        <item quantity="other">Downloading %d items</item>
+    </plurals>
+    <plurals name="upload_started">
+        <item quantity="one">Uploading %d file</item>
+        <item quantity="other">Uploading %d files</item>
+    </plurals>
+    <plurals name="upload_items">
+        <item quantity="one">Upload %d file</item>
+        <item quantity="other">Upload %d files</item>
+    </plurals>
+    <plurals name="restored">
+        <item quantity="one">%d item restored</item>
+        <item quantity="other">%d items restored</item>
+    </plurals>
+    <plurals name="moved_to_rubbish">
+        <item quantity="one">%d item moved to the rubbish bin</item>
+        <item quantity="other">%d items moved to the rubbish bin</item>
+    </plurals>
+    <plurals name="moved">
+        <item quantity="one">%d item moved</item>
+        <item quantity="other">%d items moved</item>
+    </plurals>
+    <plurals name="copied">
+        <item quantity="one">%d item copied</item>
+        <item quantity="other">%d items copied</item>
+    </plurals>
+    <plurals name="move_items">
+        <item quantity="one">Move %d item</item>
+        <item quantity="other">Move %d items</item>
+    </plurals>
+    <plurals name="copy_items">
+        <item quantity="one">Copy %d item</item>
+        <item quantity="other">Copy %d items</item>
+    </plurals>
+    <plurals name="delete_forever_title">
+        <item quantity="one">Delete %d item permanently?</item>
+        <item quantity="other">Delete %d items permanently?</item>
+    </plurals>
+    <string name="delete_forever_text">You cannot undo this.</string>
+    <string name="leave_share_title">Leave this share?</string>
+    <string name="leave_share_text">You lose access to this folder. The owner can share it with you again.</string>
+    <string name="offline_started">Saving for offline use</string>
+    <string name="offline_removed">Removed from this device</string>
+    <string name="link_removed">Link removed</string>
+    <string name="hidden_done">Hidden. Show hidden items in Settings.</string>
+    <string name="remove_label">Remove label</string>
+    <string name="creating_link">Creating link…</string>
+    <string name="decryption_key">Decryption key</string>
+    <string name="copy_key">Copy key</string>
+    <string name="copy_link">Copy link</string>
+    <string name="separate_key">Send the key separately</string>
+
+    <string name="sort">Sort</string>
+    <string name="list_view">List view</string>
+    <string name="grid_view">Grid view</string>
+    <string name="sort_name_asc">Name (A–Z)</string>
+    <string name="sort_name_desc">Name (Z–A)</string>
+    <string name="sort_newest">Newest</string>
+    <string name="sort_oldest">Oldest</string>
+    <string name="sort_largest">Largest</string>
+    <string name="sort_smallest">Smallest</string>
+    <string name="sort_label">Label</string>
+    <string name="sort_favourite">Favourites first</string>
+
+    <string name="empty_cloud_title">Your cloud is empty</string>
+    <string name="empty_folder_title">This folder is empty</string>
+    <string name="empty_folder_hint">Upload files or create folders with the + button.</string>
+    <string name="empty_rubbish_title">The rubbish bin is empty</string>
+    <string name="empty_backups_title">No backups</string>
+    <string name="empty_rubbish">Empty rubbish bin</string>
+    <string name="empty_rubbish_text">Everything in the rubbish bin is deleted permanently. You cannot undo this.</string>
+    <string name="empty_rubbish_confirm">Empty</string>
+
+    <string name="item_not_found">This item no longer exists</string>
+    <string name="details">Details</string>
+    <string name="info_type">Type</string>
+    <string name="info_folder">Folder</string>
+    <string name="info_size">Size</string>
+    <string name="info_contains">Contains</string>
+    <string name="info_location">Location</string>
+    <string name="info_created">Created</string>
+    <string name="info_modified">Modified</string>
+    <string name="info_duration">Duration</string>
+    <string name="info_owner">Owner</string>
+    <string name="sharing">Sharing</string>
+    <string name="pending">Pending</string>
+    <string name="no_link">No public link</string>
+    <string name="description">Description</string>
+    <string name="description_hint">Add a description</string>
+    <string name="access_read">Read only</string>
+    <string name="access_readwrite">Read and write</string>
+    <string name="access_full">Full access</string>
+    <string name="access_owner">Owner</string>
+    <plurals name="n_versions">
+        <item quantity="one">%d previous version</item>
+        <item quantity="other">%d previous versions</item>
+    </plurals>
+    <string name="current_version">Current</string>
+    <string name="delete">Delete</string>
+    <string name="delete_previous_versions">Delete previous versions</string>
+    <string name="delete_previous_versions_text">Only the current version stays. You cannot undo this.</string>
+</resources>

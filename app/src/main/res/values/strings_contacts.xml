@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="contacts_title">Contacts</string>
+    <plurals name="contacts_count">
+        <item quantity="one">%d contact</item>
+        <item quantity="other">%d contacts</item>
+    </plurals>
+    <string name="contacts_search_hint">Search contacts</string>
+    <string name="contacts_add">Add contact</string>
+    <string name="contacts_requests">Contact requests</string>
+    <string name="contacts_requests_none">No pending requests</string>
+    <plurals name="contacts_pending">
+        <item quantity="one">%d request waiting for you</item>
+        <item quantity="other">%d requests waiting for you</item>
+    </plurals>
+    <string name="contacts_empty">No contacts yet</string>
+    <string name="contacts_empty_hint">Add people by e-mail to share folders with them.</string>
+    <string name="contacts_no_match">No contacts match your search</string>
+    <string name="contacts_invite_text">We send an invitation to this e-mail. When the person accepts, you become contacts.</string>
+    <string name="contacts_email">E-mail</string>
+    <string name="contacts_message_optional">Message (optional)</string>
+    <string name="contacts_send_invite">Send invitation</string>
+    <string name="contact_invite_sent">Invitation sent to %1$s</string>
+    <string name="contact_invite_cancelled">Invitation cancelled</string>
+    <string name="contact_reminder_sent">Reminder sent</string>
+    <string name="contact_request_accepted">Request accepted</string>
+    <string name="contact_request_denied">Request declined</string>
+    <string name="contact_request_ignored">Request ignored</string>
+    <string name="contact_error_exists">This person is already a contact or has an invitation.</string>
+    <string name="contact_error_args">You cannot invite yourself.</string>
+    <string name="contact_error_access">You cannot do this now. Try again later.</string>
+
+    <string name="contacts_received">Received (%1$d)</string>
+    <string name="contacts_sent">Sent (%1$d)</string>
+    <string name="contacts_no_received">No requests received</string>
+    <string name="contacts_no_sent">No invitations sent</string>
+    <string name="contacts_reminded">Reminded</string>
+    <string name="contacts_accept">Accept</string>
+    <string name="contacts_deny">Decline</string>
+    <string name="contacts_ignore">Ignore</string>
+    <string name="contacts_remind">Remind</string>
+    <string name="contacts_cancel_invite">Cancel</string>
+
+    <string name="contact_not_found">This person is no longer a contact</string>
+    <string name="contact_edit_alias">Edit nickname</string>
+    <string name="contact_alias">Nickname (only you see it)</string>
+    <string name="contact_remove">Remove contact</string>
+    <string name="contact_remove_title">Remove %1$s?</string>
+    <string name="contact_remove_text">Folders that you share with each other are no longer shared.</string>
+    <string name="contact_removed">%1$s removed from contacts</string>
+    <string name="contact_shared_folders">Folders shared with you</string>
+    <string name="contact_no_shared_folders">This contact does not share folders with you.</string>
+    <string name="contact_verified_label">Verified</string>
+    <string name="contact_not_verified">Not verified</string>
+    <string name="contact_credentials_title">Verify credentials</string>
+    <string name="contact_credentials_text">Compare these codes with the codes that your contact sees in their app. If they are the same, nobody can read what you share with each other.</string>
+    <string name="contact_credentials_mine">Your credentials</string>
+    <string name="contact_mark_verified">Mark as verified</string>
+    <string name="contact_reset_verification">Reset verification</string>
+    <string name="contact_verified">Contact verified</string>
+    <string name="contact_verification_reset">Verification reset</string>
+
+    <string name="notifications_title">Notifications</string>
+    <string name="notifications_new">New</string>
+    <string name="notifications_earlier">Earlier</string>
+    <string name="notifications_empty">No notifications</string>
+    <string name="notifications_empty_hint">Contact requests and changes to shared folders show here.</string>
+</resources>

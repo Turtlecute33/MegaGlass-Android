@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sync -->
+    <string name="sync_info">Sync keeps a folder on this device and a cloud folder the same in both directions. It runs while MegaGlass is open or in the background.</string>
+    <string name="sync_add">Add sync</string>
+    <string name="sync_needs_access">To sync a folder, allow access to all files.</string>
+    <string name="sync_pick_cloud">Sync with this cloud folder</string>
+    <string name="sync_use_folder">Use this folder</string>
+    <string name="sync_confirm_title">Start sync</string>
+    <string name="sync_start">Start</string>
+    <string name="sync_empty_title">No syncs</string>
+    <string name="sync_empty_text">Add a sync to keep a folder on this device and a cloud folder the same.</string>
+    <string name="sync_stalled">Some items need your attention</string>
+    <string name="sync_stalled_title">Items that need attention</string>
+    <string name="sync_stalled_none">Nothing needs attention now.</string>
+    <string name="sync_up_to_date">Up to date</string>
+    <string name="sync_scanning">Scanning…</string>
+    <string name="sync_syncing">Syncing · %1$d up, %2$d down</string>
+    <string name="sync_paused">Paused</string>
+    <string name="sync_loading">Starting…</string>
+    <string name="sync_disabled">Stopped</string>
+    <string name="sync_pause">Pause</string>
+    <string name="sync_resume">Resume</string>
+    <string name="sync_open_cloud">Open cloud folder</string>
+    <string name="sync_remove">Remove sync</string>
+    <string name="sync_remove_title">Remove this sync?</string>
+    <string name="sync_remove_text">The files stay on this device and in your cloud. Only the sync stops.</string>
+
+    <!-- Device centre -->
+    <string name="device_this">This device</string>
+    <string name="device_unnamed">Unnamed device</string>
+    <string name="device_rename">Rename device</string>
+    <plurals name="device_items">
+        <item quantity="one">%d backup or sync</item>
+        <item quantity="other">%d backups and syncs</item>
+    </plurals>
+    <string name="device_up_to_date">Up to date</string>
+    <string name="device_syncing">Updating…</string>
+    <string name="device_syncing_percent">Updating · %1$d%%</string>
+    <string name="device_attention">Needs attention</string>
+    <string name="device_inactive">Inactive</string>
+    <string name="device_unknown">Unknown</string>
+    <string name="device_type_sync">Sync</string>
+    <string name="device_type_upload_sync">Upload sync</string>
+    <string name="device_type_download_sync">Download sync</string>
+    <string name="device_type_camera">Camera uploads</string>
+    <string name="device_type_media">Media uploads</string>
+    <string name="device_type_backup">Backup</string>
+    <string name="device_empty_title">No backups or syncs</string>
+    <string name="device_empty_text">Devices that back up or sync with your account show here.</string>
+    <string name="device_folder_missing">This folder is not in your cloud any more</string>
+</resources>

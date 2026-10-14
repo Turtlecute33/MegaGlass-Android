@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shared_title">Shared items</string>
+    <string name="shared_incoming">Incoming</string>
+    <string name="shared_outgoing">Outgoing</string>
+    <string name="shared_links">Links</string>
+    <string name="shared_empty_incoming">Nothing shared with you</string>
+    <string name="shared_empty_incoming_hint">Folders that your contacts share with you show here.</string>
+    <string name="shared_empty_outgoing">You do not share folders</string>
+    <string name="shared_empty_outgoing_hint">In Cloud drive, open the menu of a folder and select Share folder.</string>
+    <string name="shared_empty_links">No links</string>
+    <string name="shared_empty_links_hint">Files and folders that you share with a link show here.</string>
+
+    <string name="share_access_read">Read-only</string>
+    <string name="share_access_readwrite">Read and write</string>
+    <string name="share_access_full">Full access</string>
+    <string name="share_access_owner">Owner</string>
+    <string name="share_access_read_short">Read</string>
+    <string name="share_access_readwrite_short">Read and write</string>
+    <string name="share_access_full_short">Full</string>
+    <string name="share_access_read_help">People can see and download the files.</string>
+    <string name="share_access_readwrite_help">People can also add files and folders. They cannot delete them.</string>
+    <string name="share_access_full_help">People can also rename, move and delete everything in the folder.</string>
+    <string name="share_access_level">Access</string>
+    <string name="share_pending">Invitation pending</string>
+    <string name="share_not_verified">Not verified</string>
+    <string name="share_undecrypted">Folder not decrypted yet</string>
+    <plurals name="share_with_people">
+        <item quantity="one">Shared with %d person</item>
+        <item quantity="other">Shared with %d people</item>
+    </plurals>
+    <plurals name="share_people_access">
+        <item quantity="one">%d person has access</item>
+        <item quantity="other">%d people have access</item>
+    </plurals>
+    <plurals name="share_done">
+        <item quantity="one">Shared with %d person</item>
+        <item quantity="other">Shared with %d people</item>
+    </plurals>
+    <string name="share_folder_title">Share folder</string>
+    <string name="share_add_people">Add people</string>
+    <string name="share_remove_access">Remove access</string>
+    <string name="share_email_or_name">E-mail or contact name</string>
+    <string name="share_invite_new">Not a contact yet. We send an invitation.</string>
+    <string name="share_action">Share</string>
+    <string name="share_error_access">You cannot share this folder.</string>
+    <string name="share_error_args">This e-mail is not valid, or it is your own.</string>
+</resources>

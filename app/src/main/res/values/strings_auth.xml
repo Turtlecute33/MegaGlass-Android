@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auth_tagline">Your MEGA cloud, end-to-end encrypted.\nFast, private, and yours.</string>
+    <string name="auth_e2ee">Encrypted on this device before upload</string>
+    <string name="auth_login">Log in</string>
+    <string name="auth_create_account">Create account</string>
+    <string name="auth_login_title">Welcome back</string>
+    <string name="auth_login_subtitle">Log in to your MEGA account.</string>
+    <string name="auth_email">E-mail</string>
+    <string name="auth_password">Password</string>
+    <string name="auth_confirm_password">Confirm password</string>
+    <string name="auth_show_password">Show password</string>
+    <string name="auth_hide_password">Hide password</string>
+    <string name="auth_forgot">Forgot password?</string>
+    <string name="auth_2fa_title">Two-factor authentication</string>
+    <string name="auth_2fa_subtitle">Enter the 6-digit code from your authenticator app.</string>
+    <string name="auth_verify">Verify</string>
+    <string name="auth_signup_title">Create your account</string>
+    <string name="auth_signup_subtitle">Your password encrypts your data. MEGA cannot see it or reset it for you.</string>
+    <string name="auth_first_name">First name</string>
+    <string name="auth_last_name">Last name</string>
+    <string name="auth_password_mismatch">The passwords are not the same.</string>
+    <string name="auth_lose_password_warning">I understand that if I lose my password, I can lose my data unless I have my recovery key.</string>
+    <string name="auth_confirm_title">Confirm your e-mail</string>
+    <string name="auth_confirm_text">We sent a link to %1$s. Open it to activate your account, then log in here.</string>
+    <string name="auth_resend">Send the link again</string>
+    <string name="auth_forgot_title">Reset your password</string>
+    <string name="auth_forgot_subtitle">We will send a reset link to your e-mail. To keep your data, you need your recovery key.</string>
+    <string name="auth_send_link">Send reset link</string>
+    <string name="auth_reset_sent_title">Check your e-mail</string>
+    <string name="auth_reset_sent_text">We sent a reset link to %1$s. Open it on mega.nz and enter your recovery key.</string>
+    <string name="strength_very_weak">Very weak</string>
+    <string name="strength_weak">Weak</string>
+    <string name="strength_medium">Medium</string>
+    <string name="strength_good">Good</string>
+    <string name="strength_strong">Strong</string>
+</resources>

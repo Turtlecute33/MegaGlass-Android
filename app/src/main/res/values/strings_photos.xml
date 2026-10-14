@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="photos_timeline">Timeline</string>
+    <string name="photos_albums">Albums</string>
+    <string name="photos_today">Today</string>
+    <string name="photos_yesterday">Yesterday</string>
+    <string name="photos_filter_all">All</string>
+    <string name="photos_filter_photos">Photos</string>
+    <string name="photos_filter_videos">Videos</string>
+    <string name="photos_empty_title">No photos or videos yet</string>
+    <string name="photos_empty_text">Turn on camera uploads to back up the photos and videos of this phone.</string>
+    <string name="photos_add_to_album">Add to album</string>
+    <plurals name="photos_added">
+        <item quantity="one">%1$d item added to %2$s</item>
+        <item quantity="other">%1$d items added to %2$s</item>
+    </plurals>
+
+    <string name="album_new">New album</string>
+    <string name="album_favourites">Favourites</string>
+    <string name="album_gif">GIFs</string>
+    <string name="album_raw">RAW</string>
+    <string name="album_empty">This album is empty</string>
+    <string name="album_add_items">Add photos</string>
+    <string name="album_remove_items">Remove from album</string>
+    <string name="album_set_cover">Set as cover</string>
+    <string name="album_share_link">Share album link</string>
+    <string name="album_delete">Delete album</string>
+    <string name="album_delete_title">Delete this album?</string>
+    <string name="album_delete_text">The photos and videos stay in your cloud. Only the album is deleted.</string>
+
+    <string name="cu_title">Camera uploads</string>
+    <string name="cu_on">On</string>
+    <string name="cu_off">Off</string>
+    <string name="cu_turn_on">Turn on</string>
+    <string name="cu_default_folder">Camera uploads</string>
+    <string name="cu_card_off_title">Back up your photos</string>
+    <string name="cu_card_off_text">Upload new photos and videos from this phone automatically.</string>
+    <string name="cu_needs_permission">Camera uploads needs access to your photos and videos</string>
+    <string name="cu_partial_access">Camera uploads needs access to all photos and videos, not only selected ones.</string>
+    <string name="cu_permission_denied">Camera uploads cannot start without access to photos and videos.</string>
+    <string name="cu_scanning">Looking for new photos and videos…</string>
+    <string name="cu_progress">Uploading %1$d of %2$d</string>
+    <string name="cu_up_to_date">Camera uploads: up to date</string>
+    <string name="cu_last_run">Up to date · last check %1$s</string>
+    <string name="cu_upload_now">Upload now</string>
+    <string name="cu_error">Camera uploads stopped. It tries again later.</string>
+    <plurals name="cu_failed">
+        <item quantity="one">%d file did not upload. It tries again later.</item>
+        <item quantity="other">%d files did not upload. They try again later.</item>
+    </plurals>
+    <string name="cu_section_what">What to upload</string>
+    <string name="cu_videos">Include videos</string>
+    <string name="cu_keep_names">Keep file names</string>
+    <string name="cu_keep_names_on">Files keep their names from the camera</string>
+    <string name="cu_keep_names_off">Files get the date and time as name</string>
+    <string name="cu_section_when">When to upload</string>
+    <string name="cu_wifi_only">Wi-Fi only</string>
+    <string name="cu_wifi_only_text">Do not use mobile data</string>
+    <string name="cu_charging">Only while charging</string>
+    <string name="cu_section_where">Where to upload</string>
+    <string name="cu_destination">Destination folder</string>
+    <string name="cu_folder_default_hint">%1$s (created on the first upload)</string>
+    <string name="cu_use_folder">Use this folder</string>
+    <string name="cu_existing_title">Photos already on this phone</string>
+    <string name="cu_existing_all">Upload existing photos and videos</string>
+    <string name="cu_existing_new">Only new photos and videos</string>
+    <string name="cu_existing_since">Only media from %1$s</string>
+    <string name="cu_footer">Photos and videos from the camera folder (DCIM) are uploaded. They are encrypted on this phone before upload. Without the location permission, Android removes location data from photos before the upload.</string>
+    <string name="cu_channel">Camera uploads</string>
+    <string name="cu_notification_title">Camera uploads</string>
+</resources>

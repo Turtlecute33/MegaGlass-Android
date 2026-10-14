@@ -1,0 +1,14 @@
+Vendor/
+build/
+.gradle/
+.kotlin/
+local.properties
+*.iml
+.idea/
+.DS_Store
+/sdk/src/main/jniLibs/
+/sdk/src/main/java/nz/mega/sdk/
+/sdk/LICENSE-MEGA-SDK
+*.keystore
+*.jks
+keystore.properties

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="search_hint">Search in MEGA</string>
+    <string name="greeting_morning">Good morning</string>
+    <string name="greeting_afternoon">Good afternoon</string>
+    <string name="greeting_evening">Good evening</string>
+    <string name="favourites">Favourites</string>
+    <string name="documents">Documents</string>
+    <string name="audio">Audio</string>
+    <string name="videos">Videos</string>
+    <string name="images">Images</string>
+    <string name="recents">Recents</string>
+    <string name="no_recents">No recent activity</string>
+    <string name="no_recents_hint">Files that you or your contacts add or change appear here.</string>
+    <string name="today">Today</string>
+    <string name="yesterday">Yesterday</string>
+    <string name="and_n_more">and %1$d more</string>
+    <plurals name="recent_added">
+        <item quantity="one">%d file added</item>
+        <item quantity="other">%d files added</item>
+    </plurals>
+    <plurals name="recent_updated">
+        <item quantity="one">%d file updated</item>
+        <item quantity="other">%d files updated</item>
+    </plurals>
+    <string name="storage_almost_full">Your storage is almost full</string>
+    <string name="storage_full">Your storage is full</string>
+    <string name="storage_used_of">%1$s of %2$s used</string>
+    <string name="category_empty">Nothing here yet</string>
+    <string name="favourites_empty">No favourites yet. Add files and folders to favourites from their menu.</string>
+</resources>

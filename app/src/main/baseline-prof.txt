@@ -1,0 +1,6 @@
+# Ahead-of-time compile the app and the SDK bindings at install time (installed by
+# androidx.profileinstaller), so the first screens and scrolling do not run in the interpreter.
+HSPLapp/megaglass/android/**->**(**)**
+Lapp/megaglass/android/**;
+HSPLnz/mega/sdk/**->**(**)**
+Lnz/mega/sdk/**;

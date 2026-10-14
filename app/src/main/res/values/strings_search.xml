@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="clear">Clear</string>
+    <string name="filter_all">All</string>
+    <string name="filter_folders">Folders</string>
+    <string name="filter_pdf">PDF</string>
+    <string name="filter_archives">Archives</string>
+    <string name="modified">Modified</string>
+    <string name="date_any">Any time</string>
+    <string name="date_today">Today</string>
+    <string name="date_week">Last 7 days</string>
+    <string name="date_month">Last 30 days</string>
+    <string name="date_year">Last year</string>
+    <string name="this_folder">This folder</string>
+    <string name="search_start">Search your cloud</string>
+    <string name="search_start_hint">Type a name or choose a filter.</string>
+    <string name="no_results">No results</string>
+</resources>
