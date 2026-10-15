@@ -124,30 +124,33 @@ class NodeRepository(private val mega: Mega) {
     }
 
     suspend fun copy(handles: Collection<Long>, target: Long) = io {
-        val dest = require(target)
-        val selected = handles.distinct().map(::require)
+        copyNodes(handles.distinct().map(::require), require(target))
+    }
+
+    /** Copies [nodes] into [dest] without replacing an item there. Also public (link) nodes. */
+    suspend fun copyNodes(nodes: List<MegaNode>, dest: MegaNode) = io {
         val used = HashSet<String>()
-        // Keep reservations until the entire copy batch is submitted and confirmed.
-        for (node in selected) {
-            val name = availableName(node.name.orEmpty(), node.isFolder) { it in used || api.getChildNode(dest, it) != null }
-            used += name
-            api.await { copyNode(node, dest, name, it) }
+        // Every name is chosen before the first request: a copy in flight is not a child yet.
+        val planned = nodes.map { node ->
+            node to availableName(node.name.orEmpty(), node.isFolder) { it in used || api.getChildNode(dest, it) != null }.also { used += it }
         }
+        batched(planned) { (node, name) -> api.await { copyNode(node, dest, name, it) } }
     }
 
     suspend fun moveToRubbish(handles: Collection<Long>) = io {
         val dest = require(rubbishHandle)
-        val selected = handles.distinct().map(::require)
-        for (node in selected) {
-            if (api.getAccess(node) < MegaShare.ACCESS_OWNER) {
-                // Across share boundaries the SDK uses copy-delete, which can overwrite a file
-                // in the target. Preserve existing trash entries with a distinct target name.
-                val name = availableName(node.name.orEmpty(), node.isFolder) { api.getChildNode(dest, it) != null }
-                api.await { moveNode(node, dest, name, it) }
-            } else {
-                // An ordinary same-account move retains the node and permits duplicate names.
-                api.await { moveNode(node, dest, it) }
-            }
+        val used = HashSet<String>()
+        val planned = handles.distinct().map(::require).map { node ->
+            // Across share boundaries the SDK uses copy-delete, which can overwrite a file in the
+            // target. Preserve existing trash entries with a distinct target name. An ordinary
+            // same-account move (null) retains the node and permits duplicate names.
+            val name = if (api.getAccess(node) < MegaShare.ACCESS_OWNER) {
+                availableName(node.name.orEmpty(), node.isFolder) { it in used || api.getChildNode(dest, it) != null }.also { used += it }
+            } else null
+            node to name
+        }
+        batched(planned) { (node, name) ->
+            if (name != null) api.await { moveNode(node, dest, name, it) } else api.await { moveNode(node, dest, it) }
         }
     }
 
@@ -305,10 +308,12 @@ class NodeRepository(private val mega: Mega) {
     /** Runs [action] for every node concurrently; the SDK pipelines the requests. */
     private suspend fun forEach(handles: Collection<Long>, action: suspend (MegaNode) -> Unit) = io {
         // Validate the entire selection before any mutation; vanished nodes must not count as success.
-        val nodes = handles.distinct().map(::require)
-        coroutineScope {
-            for (batch in nodes.chunked(8)) batch.map { node -> async { action(node) } }.awaitAll()
-        }
+        batched(handles.distinct().map(::require), action)
+    }
+
+    /** Bounded concurrency: a large selection must not start thousands of requests at once. */
+    suspend fun <T> batched(items: List<T>, action: suspend (T) -> Unit) = coroutineScope {
+        for (batch in items.chunked(8)) batch.map { item -> async { action(item) } }.awaitAll()
         Unit
     }
 }

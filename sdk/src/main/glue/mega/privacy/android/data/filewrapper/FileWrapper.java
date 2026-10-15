@@ -21,6 +21,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -338,18 +339,45 @@ public final class FileWrapper {
             return null;
         }
         FileWrapper existing = parent.findChild(newName);
-        // SAF cannot atomically replace an existing document. Removing it before a fallible
-        // rename loses the user's file if the provider fails. Let the SDK report the collision.
-        if (existing != null) {
+        if (existing != null && documentId.equals(existing.documentId)) {
+            return this;
+        }
+        if (existing != null && (!overwrite || existing.folder)) {
             return null;
         }
         ContentResolver resolver = resolver();
         if (resolver == null) {
             return null;
         }
+        // SAF cannot replace a document in one step. Deleting the old one before a fallible
+        // rename loses the user's file, so it moves aside and comes back if the rename fails.
+        Uri aside = null;
+        if (existing != null) {
+            aside = renameDocument(resolver, existing.documentUri, ".megaglass-replace-" + UUID.randomUUID());
+            if (aside == null) {
+                return null;
+            }
+        }
+        Uri renamed = renameDocument(resolver, documentUri, newName);
+        if (renamed == null) {
+            if (aside != null && renameDocument(resolver, aside, newName) == null) {
+                Log.w(TAG, "renameOverwrite could not restore the replaced document");
+            }
+            return null;
+        }
+        if (aside != null) {
+            try {
+                DocumentsContract.deleteDocument(resolver, aside);
+            } catch (FileNotFoundException | RuntimeException e) {
+                warn("delete replaced document", e);
+            }
+        }
+        return fromContentUri(renamed.toString());
+    }
+
+    private static Uri renameDocument(ContentResolver resolver, Uri document, String newName) {
         try {
-            Uri renamed = DocumentsContract.renameDocument(resolver, documentUri, newName);
-            return renamed != null ? fromContentUri(renamed.toString()) : null;
+            return DocumentsContract.renameDocument(resolver, document, newName);
         } catch (FileNotFoundException | RuntimeException e) {
             warn("renameOverwrite", e);
             return null;

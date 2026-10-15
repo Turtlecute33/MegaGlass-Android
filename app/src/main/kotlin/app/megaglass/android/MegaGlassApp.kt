@@ -32,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
+import nz.mega.sdk.MegaEvent
 import java.io.File
 
 /** The app's objects, created once. Features get their dependencies from here. */
@@ -43,8 +44,11 @@ class AppGraph(val context: Context) {
     val files = LocalFiles(context)
     val images = MegaImages(context, mega)
     val nodes = NodeRepository(mega)
-    val transfers = TransferManager(mega, scope, listOf(File(context.cacheDir, "uploads"), File(context.cacheDir, "camera"), File(context.filesDir, "pending-uploads")))
-    val offline = OfflineStore(context, transfers, scope)
+    val transfers = TransferManager(
+        mega, scope,
+        listOf(File(context.cacheDir, "uploads"), File(context.cacheDir, "camera"), File(context.cacheDir, "edit"), File(context.filesDir, "pending-uploads")),
+    )
+    val offline = OfflineStore(context, transfers, scope, mega.events.filter { it.type == MegaEvent.EVENT_NODES_CURRENT })
     val session = Session(mega, SessionStore(context), settings, scope, onLoggedOut = ::clearUserData, onReady = { transfers.beginSession() })
     val messenger = Messenger()
     val opener = FileOpener(context, transfers, files, messenger, scope)
@@ -70,7 +74,6 @@ class AppGraph(val context: Context) {
         context.stopService(Intent(context, PlaybackService::class.java))
         StreamServer.releasePlayback()
         ContactDirectory.clearIfCreated()
-        transfers.clearHistory()
         folderSorts.clear()
         images.clear()
         offline.clear()

@@ -231,9 +231,13 @@ private fun Pager(list: List<MediaEntry>, start: Int, chrome: Boolean, onToggleC
 private fun ImagePage(entry: MediaEntry, onTap: () -> Unit) {
     val context = LocalContext.current
     val zoom = rememberZoomableImageState(rememberZoomableState(zoomSpec = ZoomSpec(maxZoomFactor = 8f)))
-    var original by remember(entry.key) { mutableStateOf(entry.file ?: PreviewCache.cached(entry)) }
+    var original by remember(entry.key) { mutableStateOf(entry.file) }
     var loading by remember(entry.key) { mutableStateOf(false) }
     var failed by remember(entry.key) { mutableStateOf(false) }
+    // The check reads the disk: not on the main thread while the user swipes.
+    LaunchedEffect(entry.key) {
+        if (original == null) withContext(Dispatchers.IO) { PreviewCache.cached(entry) }?.let { original = it }
+    }
     val zoomed = (zoom.zoomableState.zoomFraction ?: 0f) > 0.01f
     // The original downloads when the preview is not enough: the user zooms in, or there is no preview.
     val wantOriginal = original == null && !failed && entry.size in 1..MAX_ORIGINAL && (zoomed || !entry.hasPreview)

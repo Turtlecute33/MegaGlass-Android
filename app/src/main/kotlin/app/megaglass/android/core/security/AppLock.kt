@@ -44,20 +44,26 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
     var failures: Int = settings.current.lockFailures
         private set
 
-    /** Checks [passcode] and counts the wrong ones. */
+    /** Checks [passcode] on the lock screen and counts the wrong ones toward the wipe. */
     suspend fun verify(passcode: String): Boolean {
-        val ok = withContext(Dispatchers.Default) {
-            val stored = settings.current.passcodeHash ?: return@withContext true
-            catching {
-                val parts = stored.split(":")
-                if (parts.size != 2) return@catching false
-                val salt = Base64.decode(parts[0], Base64.NO_WRAP)
-                val hash = Base64.decode(parts[1], Base64.NO_WRAP)
-                salt.size == 16 && hash.size == 32 && MessageDigest.isEqual(hash, derive(passcode, salt))
-            }.getOrDefault(false)
-        }
+        val ok = matches(passcode)
         failures = settings.update { it.copy(lockFailures = if (ok) 0 else it.lockFailures + 1) }.lockFailures
         return ok
+    }
+
+    /**
+     * Checks [passcode] without counting: for an unlocked app (Settings), where a wrong entry
+     * must not move toward the wipe.
+     */
+    suspend fun matches(passcode: String): Boolean = withContext(Dispatchers.Default) {
+        val stored = settings.current.passcodeHash ?: return@withContext true
+        catching {
+            val parts = stored.split(":")
+            if (parts.size != 2) return@catching false
+            val salt = Base64.decode(parts[0], Base64.NO_WRAP)
+            val hash = Base64.decode(parts[1], Base64.NO_WRAP)
+            salt.size == 16 && hash.size == 32 && MessageDigest.isEqual(hash, derive(passcode, salt))
+        }.getOrDefault(false)
     }
 
     /** After an unlock that did not use the passcode (biometric). */

@@ -105,7 +105,10 @@ fun rememberUploader(parent: Long): Uploader {
         val f = photoPath?.let(::File)
         if (ok && f != null && f.length() > 0) {
             launchUpload { graph.transfers.upload(listOf(LocalSource(f.absolutePath, f.name, temporary = true)), target) }
-        } else f?.delete()
+        } else if (f != null) {
+            f.delete()
+            f.parentFile?.delete()
+        }
         photoPath = null
     }
 
@@ -136,10 +139,11 @@ fun rememberUploader(parent: Long): Uploader {
             pickFolder = { storage.ensure { folder.launch(null) } },
             photo = {
                 // A captured photo is the only original until its upload succeeds. Cache
-                // eviction and a second capture must not remove or replace it.
-                val dir = File(context.filesDir, "pending-uploads").apply { mkdirs() }
+                // eviction and a second capture must not remove or replace it. A folder for each
+                // capture keeps the file name (the cloud name) clean.
+                val dir = File(context.filesDir, "pending-uploads/" + java.util.UUID.randomUUID()).apply { mkdirs() }
                 val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
-                val f = File.createTempFile("IMG_${stamp}_", ".jpg", dir)
+                val f = File(dir, "IMG_$stamp.jpg")
                 photoPath = f.absolutePath
                 camera.launch(graph.files.shareUri(f))
             },

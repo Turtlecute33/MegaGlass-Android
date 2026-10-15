@@ -201,6 +201,14 @@ internal class CuPrefs(context: Context) {
         get() = prefs.getLong("marker", 0)
         set(value) = prefs.edit().putLong("marker", value).apply()
 
+    /**
+     * Media ("dateAdded:id") in the rescan window that is uploaded or skipped already; null
+     * before the first run that records it.
+     */
+    var handled: Set<String>?
+        get() = prefs.getStringSet("handled", null)?.toSet()
+        set(value) = prefs.edit().putStringSet("handled", value).apply()
+
     /** Time (ms) of the last complete run. */
     var lastRun: Long
         get() = prefs.getLong("last_run", 0)

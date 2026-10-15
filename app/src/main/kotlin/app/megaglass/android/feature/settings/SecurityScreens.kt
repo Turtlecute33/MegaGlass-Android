@@ -204,8 +204,10 @@ fun SecuritySettingsScreen() {
             keyboardType = KeyboardType.NumberPassword,
             onConfirm = { pin ->
                 scope.launch {
-                    if (graph.lock.verify(pin)) graph.lock.setPasscode(null)
-                    else graph.messenger.show(resources.getString(R.string.security_wrong_passcode))
+                    catching {
+                        if (graph.lock.matches(pin)) graph.lock.setPasscode(null)
+                        else graph.messenger.show(resources.getString(R.string.security_wrong_passcode))
+                    }.onFailure { graph.messenger.show(context.errorText(it)) }
                 }
             },
             onDismiss = { disablePasscode = false },

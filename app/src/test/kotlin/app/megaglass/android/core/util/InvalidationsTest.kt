@@ -18,7 +18,7 @@ class InvalidationsTest {
         val owner = Job()
         val scope = CoroutineScope(coroutineContext + owner)
         val flow = MutableSharedFlow<Int>(extraBufferCapacity = 1)
-        val emit = invalidationEmitter(scope, flow) { -1 }
+        val emit = invalidationEmitter(scope, flow) { _, _ -> -1 }
         val gate = CompletableDeferred<Unit>()
         val refreshed = CompletableDeferred<Unit>()
         val received = mutableListOf<Int>()
@@ -37,6 +37,34 @@ class InvalidationsTest {
             gate.complete(Unit)
             withTimeout(2_000) { refreshed.await() }
             assertTrue(received.contains(-1))
+        } finally {
+            collector.cancelAndJoin()
+            owner.cancelAndJoin()
+        }
+    }
+
+    @Test fun theFullRefreshKeepsDetailsOfDroppedValues() = runBlocking {
+        val owner = Job()
+        val scope = CoroutineScope(coroutineContext + owner)
+        val flow = MutableSharedFlow<Set<Int>>(extraBufferCapacity = 1)
+        val emit = invalidationEmitter(scope, flow) { merged, dropped -> merged.orEmpty() + dropped + -1 }
+        val gate = CompletableDeferred<Unit>()
+        val refreshed = CompletableDeferred<Set<Int>>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+            flow.collect {
+                if (1 in it) gate.await()
+                if (-1 in it) refreshed.complete(it)
+            }
+        }
+        try {
+            emit(setOf(1))
+            yield()
+            emit(setOf(2))
+            emit(setOf(3))
+            emit(setOf(4))
+            gate.complete(Unit)
+            val refresh = withTimeout(2_000) { refreshed.await() }
+            assertTrue(refresh.containsAll(setOf(3, 4)))
         } finally {
             collector.cancelAndJoin()
             owner.cancelAndJoin()

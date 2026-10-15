@@ -98,6 +98,8 @@ class TextEditorModel : ViewModel() {
     var text by mutableStateOf<String?>(null)
     var canEdit by mutableStateOf(false)
     var parent = nz.mega.sdk.MegaApiJava.INVALID_HANDLE
+    /** Each save makes a new node; the old one becomes a version. */
+    var handle = nz.mega.sdk.MegaApiJava.INVALID_HANDLE
     val editorState = TextFieldState()
     var original by mutableStateOf("")
     var saving by mutableStateOf(false)
@@ -109,7 +111,12 @@ fun TextEditorScreen(route: TextEditor) {
     val resources = LocalResources.current
     val graph = MegaGlassApp.graph
     val nav = LocalNavigator.current
-    val m = viewModel { TextEditorModel().apply { title = route.localPath?.let { File(it).name }.orEmpty() } }
+    val m = viewModel {
+        TextEditorModel().apply {
+            title = route.localPath?.let { File(it).name }.orEmpty()
+            handle = route.handle
+        }
+    }
     var title by m::title
     var text by m::text
     var canEdit by m::canEdit
@@ -156,6 +163,8 @@ fun TextEditorScreen(route: TextEditor) {
         val content = editorState.text.toString()
         val savedTitle = title
         val savedParent = parent
+        val savedHandle = m.handle
+        if (graph.transfers.state.value.uploadsPaused) graph.messenger.show(resources.getString(R.string.editor_waiting_paused))
         // The save outlives the screen; edits become clean only after the SDK confirms success.
         graph.scope.launch(Dispatchers.Main) {
             val saveJob = currentCoroutineContext().job
@@ -168,7 +177,7 @@ fun TextEditorScreen(route: TextEditor) {
                     withContext(Dispatchers.IO) {
                         val api = graph.mega.api
                         val destination = api.getNodeByHandle(savedParent) ?: throw java.io.IOException("The destination folder is no longer available")
-                        if (api.getChildNode(destination, savedTitle)?.handle != route.handle) {
+                        if (api.getChildNode(destination, savedTitle)?.handle != savedHandle) {
                             throw java.io.IOException("This file changed or moved. Reopen it before saving.")
                         }
                     }
@@ -179,9 +188,11 @@ fun TextEditorScreen(route: TextEditor) {
                         val done = async(start = CoroutineStart.UNDISPATCHED) {
                             graph.transfers.completed.first { it.purpose == Purpose.EDIT && it.localPath == file.absolutePath }
                         }
-                        graph.transfers.upload(listOf(LocalSource(file.absolutePath, savedTitle, temporary = false)), savedParent, Purpose.EDIT, startFirst = true)
+                        // Temporary: a failed copy stays for Retry in Transfers and is removed when that succeeds.
+                        graph.transfers.upload(listOf(LocalSource(file.absolutePath, savedTitle, temporary = true)), savedParent, Purpose.EDIT, startFirst = true)
                         val item = done.await()
                         if (item.status != TransferStatus.COMPLETED) throw java.io.IOException(item.error ?: "Save failed")
+                        if (item.nodeHandle != nz.mega.sdk.MegaApiJava.INVALID_HANDLE) m.handle = item.nodeHandle
                     }
                     original = content
                     dirty = editorState.text.toString() != content
@@ -206,6 +217,7 @@ fun TextEditorScreen(route: TextEditor) {
                         Text(
                             stringResource(
                                 when {
+                                    saving -> R.string.editor_saving
                                     dirty -> R.string.editor_unsaved
                                     canEdit -> R.string.editor_editable
                                     else -> R.string.editor_read_only

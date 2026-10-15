@@ -10,6 +10,7 @@ import app.megaglass.android.core.transfers.TransferStatus
 import app.megaglass.android.core.util.FileType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,7 +41,13 @@ data class OfflineEntry(
  * app-private storage that other apps cannot read. The folder name is the node handle, so the
  * index is the folder list and no database is needed.
  */
-class OfflineStore(context: Context, private val transfers: TransferManager, scope: CoroutineScope) {
+class OfflineStore(
+    context: Context,
+    private val transfers: TransferManager,
+    scope: CoroutineScope,
+    /** Emits when the SDK has resumed the transfers of an earlier process (the node tree is current). */
+    transfersResumed: Flow<Any>,
+) {
 
     private val root = File(context.filesDir, "offline").apply { mkdirs() }
 
@@ -53,24 +60,90 @@ class OfflineStore(context: Context, private val transfers: TransferManager, sco
     val handles: StateFlow<Set<Long>> = _handles.asStateFlow()
 
     init {
-        scope.launch(Dispatchers.IO) { refresh() }
+        scope.launch(Dispatchers.IO) {
+            operations.withLock {
+                catching { index.recover() }
+                refresh()
+            }
+        }
         scope.launch(Dispatchers.IO) {
             transfers.completed.collect { item ->
                 if (item.purpose != Purpose.OFFLINE) return@collect
-                val parts = item.appData.split(':')
-                val handle = parts.getOrNull(1)?.toLongOrNull() ?: return@collect
-                val id = parts.getOrNull(2) ?: return@collect
+                val (handle, id) = parse(item.appData) ?: return@collect
+                // Only the top-level transfer of the node proves that the whole download finished.
+                if (item.nodeHandle != handle) return@collect
                 operations.withLock {
-                    if (pending[handle] != id) return@withLock
-                    pending.remove(handle)
-                    if (item.status == TransferStatus.COMPLETED) {
-                        catching { index.commit(id, MegaApiJava.handleToBase64(handle)) }
+                    if (pending[handle] == id) pending.remove(handle)
+                    // A download that the SDK resumed after a restart is not in [pending]. The
+                    // staging key shows that it was not removed since it started.
+                    val key = MegaApiJava.handleToBase64(handle)
+                    if (item.status == TransferStatus.COMPLETED && index.stagedKey(id) == key) {
+                        catching { index.commit(id, key) }
                             .onFailure { transfers.onError?.invoke(it.message ?: "Cannot save offline copy") }
                     }
                     index.discard(id)
                     refresh()
                 }
             }
+        }
+        scope.launch(Dispatchers.IO) {
+            transfersResumed.collect { catching { reconcile() } }
+        }
+    }
+
+    /** "offline:<handle>:<id>" */
+    private fun parse(appData: String): Pair<Long, String>? {
+        val parts = appData.split(':')
+        val handle = parts.getOrNull(1)?.toLongOrNull() ?: return null
+        val id = parts.getOrNull(2)?.takeIf(OfflineFiles::isSafeId) ?: return null
+        return handle to id
+    }
+
+    /**
+     * After a restart the SDK resumes the files of interrupted downloads, but not their folder
+     * transfers. A resumed single-file download continues. A folder downloads again, because
+     * its files cannot prove that the folder is complete. Staging that no download uses goes.
+     */
+    private suspend fun reconcile() = operations.withLock {
+        val used = HashSet(pending.values)
+        val restart = LinkedHashSet<Long>()
+        for (t in transfers.queuedDownloads()) {
+            if (t.purpose != Purpose.OFFLINE) continue
+            val (handle, id) = parse(t.appData) ?: continue
+            if (id in used) continue
+            when {
+                index.stagedKey(id) != MegaApiJava.handleToBase64(handle) -> transfers.cancel(t.tag)
+                t.nodeHandle == handle && !t.isFolder -> {
+                    pending.putIfAbsent(handle, id)
+                    used += id
+                }
+                else -> {
+                    transfers.cancel(t.tag)
+                    restart += handle
+                }
+            }
+        }
+        for (id in index.stagedIds()) {
+            if (id in used) continue
+            index.stagedKey(id)?.let { restart += MegaApiJava.base64ToHandle(it) }
+            index.discard(id)
+        }
+        for (h in restart) {
+            if (h !in pending && h !in _handles.value) catching { start(h) }
+        }
+        refresh()
+    }
+
+    /** Call with [operations] held. */
+    private suspend fun start(handle: Long) {
+        val id = UUID.randomUUID().toString()
+        pending[handle] = id
+        try {
+            transfers.download(listOf(handle), index.stage(id, MegaApiJava.handleToBase64(handle)), "${Purpose.OFFLINE}:$handle:$id")
+        } catch (e: Exception) {
+            pending.remove(handle)
+            index.discard(id)
+            throw e
         }
     }
 
@@ -83,15 +156,7 @@ class OfflineStore(context: Context, private val transfers: TransferManager, sco
         operations.withLock {
             for (h in handles.distinct()) {
                 if (h in _handles.value || h in pending) continue
-                val id = UUID.randomUUID().toString()
-                pending[h] = id
-                try {
-                    transfers.download(listOf(h), index.stage(id), "${Purpose.OFFLINE}:$h:$id")
-                } catch (e: Exception) {
-                    pending.remove(h)
-                    index.discard(id)
-                    throw e
-                }
+                start(h)
             }
         }
     }
@@ -100,10 +165,12 @@ class OfflineStore(context: Context, private val transfers: TransferManager, sco
         operations.withLock {
             handles.forEach { h ->
                 // Invalidate the completion first: a late SDK finish cannot re-create the copy.
-                pending.remove(h)?.let { id ->
-                    transfers.cancelPurpose("${Purpose.OFFLINE}:$h:$id")
-                    index.discard(id)
-                }
+                // This includes downloads that the SDK resumed after a restart.
+                val key = MegaApiJava.handleToBase64(h)
+                pending.remove(h)
+                transfers.cancelPurposePrefix("${Purpose.OFFLINE}:$h:")
+                index.stagedIds().filter { index.stagedKey(it) == key }.forEach(index::discard)
+                index.removePrevious(key)
                 if (!dirFor(h).deleteRecursively()) throw java.io.IOException("Cannot remove offline copy")
             }
             refresh()
@@ -143,7 +210,7 @@ class OfflineStore(context: Context, private val transfers: TransferManager, sco
 
     suspend fun clear() = withContext(Dispatchers.IO) {
         operations.withLock {
-            pending.forEach { (h, id) -> transfers.cancelPurpose("${Purpose.OFFLINE}:$h:$id") }
+            transfers.cancelPurposePrefix("${Purpose.OFFLINE}:")
             pending.clear()
             if (!root.deleteRecursively()) throw java.io.IOException("Cannot clear offline copies")
             root.ensureDirectory()

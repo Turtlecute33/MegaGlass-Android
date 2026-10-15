@@ -365,25 +365,21 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
         withContext(Dispatchers.IO) {
             check(accepting) { "The session has ended" }
             dir.ensureDirectory()
-            val items = MegaDownloadItemList.createInstance()
             val path = dir.absolutePath + File.separator
             val nodes = handles.distinct().map { h -> api.getNodeByHandle(h) ?: throw MegaException(MegaError.API_ENOENT, "Item not found") }
-            for (node in nodes) {
-                val h = node.handle
-                val data = if (purpose == Purpose.OFFLINE) "${Purpose.OFFLINE}:$h" else purpose
-                items.add(node, path, null, data, startFirst)
-            }
-            if (items.size() == 0) return@withContext
+            if (nodes.isEmpty()) return@withContext
+            fun appData(node: MegaNode) = if (purpose == Purpose.OFFLINE) "${Purpose.OFFLINE}:${node.handle}" else purpose
             val token = MegaCancelToken.createInstance()
             if (nodes.size == 1) {
                 val node = nodes.single()
-                val data = if (purpose == Purpose.OFFLINE) "${Purpose.OFFLINE}:${node.handle}" else purpose
                 // A batch folder's appData belongs to every file, and its unnamed container has
                 // no appData. A single-node transfer reports completion for the whole folder.
-                api.startDownload(node, path, localFileName(node.name ?: "file"), data, startFirst, token,
+                api.startDownload(node, path, localFileName(node.name ?: "file"), appData(node), startFirst, token,
                     MegaTransfer.COLLISION_CHECK_FINGERPRINT, MegaTransfer.COLLISION_RESOLUTION_NEW_WITH_N,
                     cancellationListener(token))
             } else {
+                val items = MegaDownloadItemList.createInstance()
+                for (node in nodes) items.add(node, path, null, appData(node), startFirst)
                 api.startDownloadBatch(items, token,
                     MegaTransfer.COLLISION_CHECK_FINGERPRINT, MegaTransfer.COLLISION_RESOLUTION_NEW_WITH_N,
                     cancellationListener(token))
@@ -437,7 +433,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
                 val requested = localFileName(s.name)
                 // A Save in the text editor explicitly replaces a file. Other uploads preserve
                 // existing names even if the account has file versioning disabled.
-                val name = if (purpose == Purpose.EDIT) requested else availableName(requested, File(s.path).isDirectory) { candidate ->
+                val name = if (Purpose.of(purpose) == Purpose.EDIT) requested else availableName(requested, File(s.path).isDirectory) { candidate ->
                     api.getChildNode(node, candidate) != null || synchronized(lock) { parent to candidate in reservedNames }
                 }
                 val reservation = parent to name
@@ -497,12 +493,16 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
         synchronized(lock) { records.filterValues { it.item.direction == Direction.UPLOAD && it.item.purpose == purpose }.keys.toList() }.forEach(::cancel)
     }
 
-    fun cancelPurpose(appData: String) {
-        synchronized(lock) { records.filterValues { it.item.appData == appData }.keys.toList() }.forEach(::cancel)
+    fun cancelPurposePrefix(prefix: String) {
+        synchronized(lock) { records.filterValues { it.item.appData.startsWith(prefix) }.keys.toList() }.forEach(::cancel)
     }
 
     /** Local paths of the uploads in the queue. */
     fun uploadingPaths(): Set<String> = api.getTransfers(MegaTransfer.TYPE_UPLOAD)?.mapNotNullTo(HashSet()) { it.path }.orEmpty()
+
+    /** The file downloads in the SDK queue, also those resumed from an earlier process. */
+    fun queuedDownloads(): List<TransferItem> =
+        api.getTransfers(MegaTransfer.TYPE_DOWNLOAD)?.map { it.toItem(key(api, it.tag)) }.orEmpty()
 
     fun cancelAll() {
         synchronized(lock) { (records.keys + batches).toList() }.forEach(::cancel)

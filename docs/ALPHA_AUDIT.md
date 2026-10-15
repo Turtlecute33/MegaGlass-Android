@@ -131,10 +131,13 @@ and checked before builds. A fresh checkout must run both SDK scripts as documen
   Cancellation stops observation as documented; it cannot undo an already authorized remote
   operation. Partial failures are surfaced rather than reported as complete success.
 - Offline `.pending` copies are never advertised as verified after process death. Older copies
-  without metadata are labelled unverified and can be downloaded again. Existing replacements
-  are preserved under `.previous-*` for recovery. Interrupted directory reconstruction and SDK
-  cached-transfer restoration need live account/process-kill tests before claiming seamless
-  folder resumption. Local offline clearing/logout intentionally removes offline data.
+  without metadata are labelled unverified and can be downloaded again. A replacement moves
+  the existing copy to `.previous-*` until the new copy is in place, then deletes it; startup
+  restores a copy that an interrupted commit left there. When the node tree is current, the
+  app adopts SDK-resumed single-file downloads (their staging records the node) and downloads
+  interrupted folders again, because resumed child files cannot prove a folder complete.
+  This needs live account/process-kill tests. Local offline clearing/logout intentionally
+  removes offline data.
 - Failed captured originals persist under private `files/pending-uploads`, outside cache
   eviction. Ordinary logout retains them; the explicit passcode wipe removes them. Failed
   copied-upload sources remain retriable while present. Transfer history is bounded and not a

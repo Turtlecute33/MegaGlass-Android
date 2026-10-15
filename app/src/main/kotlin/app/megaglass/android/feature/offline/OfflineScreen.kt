@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.storage.OfflineEntry
+import app.megaglass.android.core.storage.availableName
 import app.megaglass.android.core.util.FileType
 import app.megaglass.android.core.util.Format
 import app.megaglass.android.ui.components.BackButton
@@ -115,7 +116,7 @@ fun OfflineScreen(path: String?) {
                                         val ok = withContext(Dispatchers.IO) {
                                             catching {
                                                 val dir = graph.files.downloadDir(graph.settings.current)
-                                                entry.file.copyRecursively(freeFile(dir, entry.name, entry.isFolder))
+                                                entry.file.copyRecursively(File(dir, availableName(entry.name, entry.isFolder) { File(dir, it).exists() }))
                                             }.getOrDefault(false)
                                         }
                                         graph.messenger.show(graph.context.getString(if (ok) R.string.saved_to_downloads else R.string.error_title))
@@ -198,11 +199,3 @@ private fun OfflineRow(
     ) { Text(entry.name, maxLines = 1, overflow = TextOverflow.MiddleEllipsis) }
 }
 
-/** [name] in [dir], or "name (1).ext", "name (2).ext"... when it exists: a save never replaces a file. */
-private fun freeFile(dir: File, name: String, isFolder: Boolean): File {
-    val dot = if (isFolder) name.length else name.lastIndexOf('.').takeIf { it > 0 } ?: name.length
-    var file = File(dir, name)
-    var n = 1
-    while (file.exists()) file = File(dir, name.substring(0, dot) + " (${n++})" + name.substring(dot))
-    return file
-}

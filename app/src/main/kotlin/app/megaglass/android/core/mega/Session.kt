@@ -12,6 +12,8 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -22,10 +24,10 @@ import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.withTimeout
 import nz.mega.sdk.MegaError
 import nz.mega.sdk.MegaEvent
 import nz.mega.sdk.MegaTransfer
+import java.util.concurrent.atomic.AtomicLong
 
 sealed interface SessionState {
     /** Reading the saved session. */
@@ -106,12 +108,16 @@ class Session(
                 }
                 catching {
                     _state.value = SessionState.Loading(SessionState.Stage.LOGIN, null)
-                    val resumed = withTimeoutOrNull(LOGIN_TIMEOUT_MS) {
-                        api.await { fastLogin(saved, it) }
+                    try {
+                        val sent = withTimeoutOrNull(LOGIN_TIMEOUT_MS) { api.await { fastLogin(saved, it) } }
+                        if (sent == null) throw MegaException(MegaError.API_EAGAIN, TIMED_OUT)
                         fetchNodes()
-                        true
+                    } catch (e: Exception) {
+                        // A timed-out request continues in the SDK, and Retry would send a second
+                        // login over it. A local logout stops it and keeps the saved session.
+                        if (e !is CancellationException) abortLogin()
+                        throw e
                     }
-                    if (resumed != true) throw MegaException(MegaError.API_EAGAIN, "Connection timed out. Try again.")
                 }.onFailure { e ->
                     // Without a network the saved session stays: the SDK can still open the local cache.
                     if (e is MegaException && (e.code == MegaError.API_ESID || e.code == MegaError.API_ENOENT)) {
@@ -128,40 +134,65 @@ class Session(
     /** Throws [TwoFactorRequired] when a code is needed; call again with [pin]. */
     suspend fun login(email: String, password: String, pin: String? = null) = scope.async(Dispatchers.IO, start = CoroutineStart.LAZY) {
         lifecycle.withLock {
-            withTimeout(LOGIN_TIMEOUT_MS) {
-                check(_state.value == SessionState.LoggedOut) { "Another session operation is in progress" }
-                _state.value = SessionState.Loading(SessionState.Stage.LOGIN, null)
-                try {
+            check(_state.value == SessionState.LoggedOut) { "Another session operation is in progress" }
+            _state.value = SessionState.Loading(SessionState.Stage.LOGIN, null)
+            try {
+                val sent = withTimeoutOrNull(LOGIN_TIMEOUT_MS) {
                     if (pin == null) {
                         api.await { login(email.trim(), password, it) }
                     } else {
                         api.await { multiFactorAuthLogin(email.trim(), password, pin, it) }
                     }
-                } catch (e: Exception) {
-                    if (_state.value != SessionState.Closing) _state.value = SessionState.LoggedOut
-                    if (e is MegaException && e.code == MegaError.API_EMFAREQUIRED) throw TwoFactorRequired()
-                    throw e
                 }
-                try {
-                    fetchNodes()
-                } catch (e: Throwable) {
-                    // Back to the login screen with the error, not a spinner without a way out.
-                    withContext(NonCancellable) { withTimeoutOrNull(LOGOUT_TIMEOUT_MS) { catching { api.await { localLogout(it) } } } }
-                    if (_state.value != SessionState.Closing) _state.value = SessionState.LoggedOut
-                    throw e
+                if (sent == null) {
+                    // The SDK request continues; without this a late success logs in behind the login screen.
+                    abortLogin()
+                    throw MegaException(MegaError.API_EAGAIN, TIMED_OUT)
                 }
+            } catch (e: Exception) {
+                if (_state.value != SessionState.Closing) _state.value = SessionState.LoggedOut
+                if (e is MegaException && e.code == MegaError.API_EMFAREQUIRED) throw TwoFactorRequired()
+                throw e
+            }
+            try {
+                fetchNodes()
+            } catch (e: Throwable) {
+                // Back to the login screen with the error, not a spinner without a way out.
+                abortLogin()
+                if (_state.value != SessionState.Closing) _state.value = SessionState.LoggedOut
+                throw e
             }
         }
     }.also { authJob = it; it.start() }.await()
 
+    private suspend fun abortLogin() {
+        withContext(NonCancellable) { withTimeoutOrNull(LOGOUT_TIMEOUT_MS) { catching { api.await { localLogout(it) } } } }
+    }
+
+    /**
+     * Large accounts can load for minutes, so only a load without progress for [FETCH_STALL_MS]
+     * times out (for example no network and no local cache).
+     */
     private suspend fun fetchNodes() {
         _state.value = SessionState.Loading(SessionState.Stage.FETCH_NODES, null)
-        api.await(onUpdate = { r ->
-            val total = r.totalBytes
-            if (total > 0) {
-                _state.value = SessionState.Loading(SessionState.Stage.FETCH_NODES, r.transferredBytes.toFloat() / total)
+        val progressAt = AtomicLong(System.nanoTime())
+        coroutineScope {
+            val watchdog = launch {
+                while (System.nanoTime() - progressAt.get() < FETCH_STALL_MS * 1_000_000) delay(1_000)
+                throw MegaException(MegaError.API_EAGAIN, TIMED_OUT)
             }
-        }) { fetchNodes(it) }
+            try {
+                api.await(onUpdate = { r ->
+                    progressAt.set(System.nanoTime())
+                    val total = r.totalBytes
+                    if (total > 0) {
+                        _state.value = SessionState.Loading(SessionState.Stage.FETCH_NODES, r.transferredBytes.toFloat() / total)
+                    }
+                }) { fetchNodes(it) }
+            } finally {
+                watchdog.cancel()
+            }
+        }
         api.dumpSession()?.let { withContext(Dispatchers.IO) { store.save(it) } }
         applyTransferSettings(settings.current)
         onReady()
@@ -222,5 +253,7 @@ class Session(
     private companion object {
         const val LOGOUT_TIMEOUT_MS = 15_000L
         const val LOGIN_TIMEOUT_MS = 90_000L
+        const val FETCH_STALL_MS = 180_000L
+        const val TIMED_OUT = "Connection timed out. Try again."
     }
 }

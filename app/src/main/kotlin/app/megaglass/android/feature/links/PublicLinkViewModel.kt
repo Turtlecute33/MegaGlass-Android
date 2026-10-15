@@ -341,26 +341,17 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
                 is LinkUi.FolderLink -> {
                     val nodes = withContext(Dispatchers.IO) { folderTargets().map { folderApi.authorizeNode(it)
                         ?: throw MegaException(MegaError.API_EACCESS, "Cannot import this linked item") } }
-                    copyLinkedNodes(nodes, parent)
+                    graph.nodes.copyNodes(nodes, parent)
                     clearSelection()
                 }
                 is LinkUi.AlbumLink -> {
                     val nodes = ui.items.mapNotNull { albumNodes[it.id] }
-                    copyLinkedNodes(nodes, parent)
+                    graph.nodes.copyNodes(nodes, parent)
                 }
                 else -> return@catching
             }
             graph.messenger.show(res.getString(R.string.link_imported))
         }.onFailure { graph.messenger.show(importError(it)) }
-    }
-
-    private suspend fun copyLinkedNodes(nodes: List<MegaNode>, parent: MegaNode) = withContext(Dispatchers.IO) {
-        val used = HashSet<String>()
-        for (node in nodes) {
-            val name = availableName(node.name.orEmpty(), node.isFolder) { it in used || api.getChildNode(parent, it) != null }
-            used += name
-            api.await { copyNode(node, parent, name, it) }
-        }
     }
 
     private fun importError(e: Throwable): String = when ((e as? MegaException)?.code) {
@@ -411,9 +402,7 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
                 continue
             }
             val name = safeName(current.name.orEmpty().ifBlank { "Folder" })
-            var sub = File(parent, name)
-            var suffix = 1
-            while (sub.exists()) sub = File(parent, "$name (${suffix++})")
+            val sub = File(parent, availableName(name, folder = true) { File(parent, it).exists() })
             if (!sub.canonicalPath.startsWith(parent.canonicalPath + File.separator)) throw java.io.IOException("Invalid linked folder path")
             sub.ensureDirectory()
             folderApi.getChildren(current).forEach { queue.add(it to sub) }

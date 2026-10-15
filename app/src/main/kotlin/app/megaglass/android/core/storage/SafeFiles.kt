@@ -72,9 +72,11 @@ object VerifiedFiles {
         return File(file.parentFile, ".verified-$key")
     }
 
-    fun contains(file: File, size: Long): Boolean =
-        file.isFile && file.length() == size && marker(file).isFile &&
-            runCatching { marker(file).readText() == "$size:${file.lastModified()}" }.getOrDefault(false)
+    fun contains(file: File, size: Long): Boolean {
+        if (!file.isFile || file.length() != size) return false
+        val marker = marker(file)
+        return marker.isFile && runCatching { marker.readText() == "$size:${file.lastModified()}" }.getOrDefault(false)
+    }
 
     fun forget(file: File) { marker(file).delete() }
 

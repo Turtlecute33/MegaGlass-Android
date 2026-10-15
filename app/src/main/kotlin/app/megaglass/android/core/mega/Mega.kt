@@ -102,7 +102,9 @@ class Mega(context: Context) {
 
     private val _nodes = MutableSharedFlow<NodeChange>(extraBufferCapacity = 64)
     val nodes: SharedFlow<NodeChange> = _nodes
-    private val emitNodes = invalidationEmitter(callbackScope, _nodes) { NodeChange(emptySet(), emptySet(), all = true) }
+    private val emitNodes = invalidationEmitter(callbackScope, _nodes) { merged, dropped ->
+        NodeChange(emptySet(), emptySet(), all = true, imagesChanged = merged?.imagesChanged.orEmpty() + dropped.imagesChanged)
+    }
 
     private val _account = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
     val account: SharedFlow<Unit> = _account
@@ -110,7 +112,7 @@ class Mega(context: Context) {
     private val _users = MutableSharedFlow<List<Long>>(extraBufferCapacity = 16)
     /** Handles of users whose data changed (contacts or the own user). */
     val users: SharedFlow<List<Long>> = _users
-    private val emitUsers = invalidationEmitter(callbackScope, _users) { emptyList() }
+    private val emitUsers = invalidationEmitter(callbackScope, _users) { _, _ -> emptyList() }
 
     private val _alerts = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
     val alerts: SharedFlow<Unit> = _alerts

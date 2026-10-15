@@ -21,6 +21,8 @@
     <string name="editor_read_only">Read only</string>
     <string name="editor_editable">Tap to edit</string>
     <string name="editor_unsaved">Unsaved changes</string>
+    <string name="editor_saving">Saving…</string>
+    <string name="editor_waiting_paused">Uploads are paused. The file saves when you resume them.</string>
     <string name="editor_saved">%1$s saved. The previous content is kept as a version.</string>
     <string name="editor_discard_title">Save your changes?</string>
     <string name="editor_discard_text">If you leave now, your changes are lost.</string>
