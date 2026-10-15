@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="offline_unverified">Unverified copy · tap to download again</string>
     <string name="offline_title">Offline</string>
     <string name="offline_size">%1$s on this device</string>
     <string name="offline_empty">Nothing saved offline</string>

@@ -59,6 +59,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -167,6 +169,8 @@ fun VideoPlayerScreen(route: VideoPlayer) {
 
     val player = remember {
         ExoPlayer.Builder(context)
+            // Takes audio focus: background audio and other apps pause while the video plays.
+            .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
             .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(20_000, 120_000, 1_500, 3_000).build())
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)

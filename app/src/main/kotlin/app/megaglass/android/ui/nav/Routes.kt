@@ -29,10 +29,11 @@ sealed interface MediaSource {
 @Serializable data object Home : Route
 /** A cloud folder. [ROOT] is Cloud drive. Also used for incoming share folders. */
 @Serializable data class Folder(val handle: Long = ROOT) : Route
+@Serializable data object Menu : Route
+
 @Serializable data object Photos : Route
 /** Shared items; [tab] 0 incoming, 1 outgoing, 2 links. */
 @Serializable data class Shared(val tab: Int = 0) : Route
-@Serializable data object Menu : Route
 
 // Cloud
 @Serializable data class Rubbish(val handle: Long = ROOT) : Route
@@ -102,5 +103,5 @@ sealed interface MediaSource {
 const val ROOT = -1L
 
 enum class Tab(val root: Route) {
-    HOME(Home), DRIVE(Folder()), PHOTOS(Photos), SHARED(Shared()), MENU(Menu)
+    HOME(Home), DRIVE(Folder()), MENU(Menu)
 }

@@ -3,7 +3,10 @@
 <paths>
     <cache-path name="open" path="open/" />
     <cache-path name="camera" path="camera/" />
+    <cache-path name="preview" path="preview/" />
+    <cache-path name="links" path="links/" />
     <files-path name="offline" path="offline/" />
+    <files-path name="pending_uploads" path="pending-uploads/" />
     <external-files-path name="downloads" path="." />
     <external-path name="storage" path="." />
 </paths>

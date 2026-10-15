@@ -5,7 +5,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -28,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,13 +35,20 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.mega.SessionState
+import app.megaglass.android.core.storage.StartPage
 import app.megaglass.android.feature.auth.AuthScreen
 import app.megaglass.android.feature.drive.UploadDestinationDialog
 import app.megaglass.android.feature.lock.LockScreen
@@ -52,6 +59,7 @@ import app.megaglass.android.ui.nav.MainScaffold
 import app.megaglass.android.ui.nav.Folder
 import app.megaglass.android.ui.nav.PublicLink
 import app.megaglass.android.ui.nav.SettingsAbout
+import app.megaglass.android.ui.nav.Tab
 import app.megaglass.android.ui.nav.Transfers
 import app.megaglass.android.ui.theme.MegaGlassTheme
 import kotlinx.coroutines.Dispatchers
@@ -92,8 +100,32 @@ fun AppRoot(incoming: MutableStateFlow<IncomingAction?>) {
                         else -> ReadyContent(incoming)
                     }
                 }
-                AnimatedVisibility(locked && graph.lock.isEnabled, enter = fadeIn(), exit = fadeOut()) {
-                    LockScreen()
+                if (locked && graph.lock.isEnabled) {
+                    // Covers the app at once (no fade), so that its content does not show for a frame.
+                    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
+                    // The lock is a window of its own, above the dialogs and sheets that are open.
+                    Dialog(
+                        onDismissRequest = {},
+                        properties = DialogProperties(
+                            dismissOnBackPress = false,
+                            dismissOnClickOutside = false,
+                            usePlatformDefaultWidth = false,
+                            decorFitsSystemWindows = false,
+                        ),
+                    ) {
+                        // The dialog window has system bars of its own: keep their icons readable.
+                        val view = LocalView.current
+                        val light = MaterialTheme.colorScheme.surface.luminance() > 0.5f
+                        SideEffect {
+                            (view.parent as? DialogWindowProvider)?.window?.let { w ->
+                                WindowCompat.getInsetsController(w, view).apply {
+                                    isAppearanceLightStatusBars = light
+                                    isAppearanceLightNavigationBars = light
+                                }
+                            }
+                        }
+                        LockScreen()
+                    }
                 }
             }
         }
@@ -102,6 +134,7 @@ fun AppRoot(incoming: MutableStateFlow<IncomingAction?>) {
 
 private fun SessionState.screenKey() = when (this) {
     SessionState.Starting -> "starting"
+    SessionState.Closing -> "starting"
     SessionState.LoggedOut -> "out"
     is SessionState.Loading -> "loading"
     is SessionState.Blocked -> "blocked"
@@ -112,8 +145,17 @@ private fun SessionState.screenKey() = when (this) {
 @Composable
 private fun ReadyContent(incoming: MutableStateFlow<IncomingAction?>) {
     val graph = MegaGlassApp.graph
-    val navigator = remember { AppNavigator(graph) }
+    // The start page applies when the app opens (or after a login), not when the setting changes.
+    val navigator = remember {
+        val start = when (graph.settings.current.startPage) {
+            StartPage.HOME -> Tab.HOME
+            StartPage.DRIVE -> Tab.DRIVE
+            StartPage.ME -> Tab.MENU
+        }
+        AppNavigator(graph, start)
+    }
     val action by incoming.collectAsStateWithLifecycle()
+    val locked by graph.lock.locked.collectAsStateWithLifecycle()
     var uploadUris by remember { mutableStateOf<List<Uri>?>(null) }
 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
@@ -139,7 +181,8 @@ private fun ReadyContent(incoming: MutableStateFlow<IncomingAction?>) {
 
     CompositionLocalProvider(LocalNavigator provides navigator) {
         MainScaffold(navigator)
-        uploadUris?.let { uris ->
+        // Files shared from another app wait for the unlock: a dialog would show above the lock.
+        uploadUris?.takeUnless { locked && graph.lock.isEnabled }?.let { uris ->
             UploadDestinationDialog(uris = uris, onDismiss = { uploadUris = null })
         }
     }

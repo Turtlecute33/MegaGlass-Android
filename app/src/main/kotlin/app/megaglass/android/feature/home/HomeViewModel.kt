@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.home
 
+import app.megaglass.android.core.util.catching
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.megaglass.android.MegaGlassApp
@@ -58,19 +60,19 @@ class HomeViewModel : ViewModel() {
     }
 
     private suspend fun loadRecents() {
-        runCatching { graph.nodes.recents(showHidden = graph.settings.current.showHidden) }
+        catching { graph.nodes.recents(showHidden = graph.settings.current.showHidden) }
             .onSuccess { r -> _state.update { it.copy(recents = r) } }
             .onFailure { _state.update { s -> s.copy(recents = s.recents ?: emptyList()) } }
     }
 
     private fun loadName() = viewModelScope.launch {
-        runCatching {
+        catching {
             withContext(Dispatchers.IO) { api.await { getUserAttribute(MegaApiJava.USER_ATTR_FIRSTNAME, it) }.text }
         }.onSuccess { name -> _state.update { it.copy(firstName = name.orEmpty()) } }
     }
 
     private fun loadStorage() = viewModelScope.launch {
-        runCatching {
+        catching {
             withContext(Dispatchers.IO) { api.await { getSpecificAccountDetails(true, false, false, it) }.megaAccountDetails }
         }.onSuccess { d ->
             if (d != null) _state.update { it.copy(storageUsed = d.storageUsed, storageMax = d.storageMax) }

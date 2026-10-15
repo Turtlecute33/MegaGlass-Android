@@ -1,19 +1,24 @@
 package app.megaglass.android.feature.drive
 
+import app.megaglass.android.core.util.catching
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.core.mega.Crumb
 import app.megaglass.android.core.mega.NodeItem
+import app.megaglass.android.core.storage.FolderSorts
+import app.megaglass.android.core.storage.SortOrder
 import app.megaglass.android.ui.nav.ROOT
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.distinctUntilChangedBy
-import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import nz.mega.sdk.MegaShare
@@ -30,6 +35,7 @@ data class FolderState(
     val selection: Set<Long> = emptySet(),
     val access: Int = MegaShare.ACCESS_OWNER,
     val isRoot: Boolean = true,
+    val sortOrder: SortOrder = FolderSorts.DEFAULT,
 ) {
     val canWrite get() = access >= MegaShare.ACCESS_READWRITE
     val selectedItems get() = items.orEmpty().filter { it.handle in selection }
@@ -52,13 +58,22 @@ class FolderViewModel(private val mode: DriveMode, requested: Long) : ViewModel(
     }
 
     init {
-        load()
+        // The first value loads the folder; later values come from a sort or "show hidden" change.
+        viewModelScope.launch {
+            combine(graph.folderSorts.flow(handle), graph.settings.state.map { it.showHidden }.distinctUntilChanged()) { order, _ -> order }
+                .collect { order ->
+                    _state.update { it.copy(sortOrder = order) }
+                    load()
+                }
+        }
         viewModelScope.launch {
             nodes.changes.filter { it.touches(handle) }.debounce(150).collect { load() }
         }
-        viewModelScope.launch {
-            graph.settings.state.distinctUntilChangedBy { it.sortOrder to it.showHidden }.drop(1).collect { load() }
-        }
+    }
+
+    /** Sorts this folder; the order stays for this folder only. */
+    fun sort(order: SortOrder) {
+        graph.scope.launch { graph.folderSorts.set(handle, order) }
     }
 
     fun load(refresh: Boolean = false) {
@@ -66,12 +81,14 @@ class FolderViewModel(private val mode: DriveMode, requested: Long) : ViewModel(
         if (refresh) _state.update { it.copy(refreshing = true) }
         loadJob = viewModelScope.launch {
             val s = graph.settings.current
-            runCatching {
-                val items = nodes.children(handle, s.sortOrder, s.showHidden)
+            val order = _state.value.sortOrder
+            catching {
+                val items = nodes.children(handle, order, s.showHidden)
                 val path = nodes.path(handle)
                 val self = nodes.item(handle)
                 Triple(items, path, self)
             }.onSuccess { (items, path, self) ->
+                val handles = items.mapTo(HashSet()) { it.handle }
                 val isRoot = handle == nodes.rootHandle || handle == nodes.rubbishHandle || handle == nodes.vaultHandle
                 _state.update { st ->
                     st.copy(
@@ -84,7 +101,7 @@ class FolderViewModel(private val mode: DriveMode, requested: Long) : ViewModel(
                         isRoot = isRoot,
                         access = if (mode == DriveMode.BACKUPS) MegaShare.ACCESS_READ else self?.access ?: MegaShare.ACCESS_OWNER,
                         // Drop selected items that disappeared.
-                        selection = st.selection.filterTo(HashSet()) { h -> items.any { it.handle == h } },
+                        selection = st.selection.intersect(handles),
                     )
                 }
             }.onFailure { e ->
@@ -102,7 +119,7 @@ class FolderViewModel(private val mode: DriveMode, requested: Long) : ViewModel(
     fun clearSelection() = _state.update { it.copy(selection = emptySet()) }
 
     fun emptyRubbish() = viewModelScope.launch {
-        runCatching { nodes.emptyRubbish() }.onFailure { graph.messenger.show(it.message ?: "") }
+        catching { nodes.emptyRubbish() }.onFailure { graph.messenger.show(it.message ?: "") }
     }
 
     val rootHandle get() = handle

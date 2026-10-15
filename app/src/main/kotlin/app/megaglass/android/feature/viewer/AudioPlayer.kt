@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.viewer
 
+import app.megaglass.android.core.util.catching
+
 import android.content.ComponentName
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -37,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,11 +81,14 @@ fun AudioPlayerScreen(route: AudioPlayer) {
     val nav = LocalNavigator.current
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Saveable: the controller connects again each time the screen comes back (another tab, a
+    // viewer on top). Only the first start picks the track; later the playback stays as it is.
+    var started by rememberSaveable { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
-        future.addListener({ controller = runCatching { future.get() }.getOrNull() }, ContextCompat.getMainExecutor(context))
+        future.addListener({ controller = catching { future.get() }.getOrNull() }, ContextCompat.getMainExecutor(context))
         onDispose {
             controller = null
             MediaController.releaseFuture(future)
@@ -96,15 +102,17 @@ fun AudioPlayerScreen(route: AudioPlayer) {
 
     LaunchedEffect(controller) {
         val c = controller ?: return@LaunchedEffect
+        if (started) return@LaunchedEffect
         val existing = (0 until c.mediaItemCount).firstOrNull { c.getMediaItemAt(it).mediaId == requestedId }
         if (existing != null) {
             // The queue is already playing (the screen opened again): only move to the item.
             if (c.currentMediaItemIndex != existing) c.seekTo(existing, 0)
             c.play()
+            started = true
             return@LaunchedEffect
         }
         val source = if (route.localPath != null && route.source !is MediaSource.Local) MediaSource.Local(route.localPath) else route.source
-        val (list, index) = runCatching { loadEntries(source, route.handle, setOf(FileType.AUDIO)) }.getOrDefault(emptyList<MediaEntry>() to 0)
+        val (list, index) = catching { loadEntries(source, route.handle, setOf(FileType.AUDIO)) }.getOrDefault(emptyList<MediaEntry>() to 0)
         if (list.isEmpty()) {
             error = emptyText
             return@LaunchedEffect
@@ -118,7 +126,7 @@ fun AudioPlayerScreen(route: AudioPlayer) {
                 val art = if (e.hasThumbnail) {
                     val image = NodeImage(e.handle, folderLink = e.folderLink)
                     val file = graph.images.file(image).takeIf { it.length() > 0 }
-                        ?: if (i == index) runCatching { graph.images.load(image) }.getOrNull() else null
+                        ?: if (i == index) catching { graph.images.load(image) }.getOrNull() else null
                     file?.let(Uri::fromFile)
                 } else null
                 MediaItem.Builder()
@@ -142,6 +150,7 @@ fun AudioPlayerScreen(route: AudioPlayer) {
         c.setMediaItems(items, index.coerceIn(0, (items.size - 1).coerceAtLeast(0)), 0)
         c.prepare()
         c.play()
+        started = true
     }
 
     Scaffold(

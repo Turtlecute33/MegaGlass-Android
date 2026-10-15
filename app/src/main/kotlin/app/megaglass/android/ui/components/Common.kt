@@ -1,5 +1,10 @@
 package app.megaglass.android.ui.components
 
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
+import android.content.Context
+import android.os.PersistableBundle
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -243,4 +248,11 @@ fun UsageBar(fraction: Float, modifier: Modifier = Modifier, height: Dp = 12.dp)
         gapSize = 4.dp,
         drawStopIndicator = {},
     )
+}
+
+/** Copies a secret (a link with its key, a recovery key); Android 13+ hides it in the clipboard preview. */
+fun copySensitive(context: Context, text: String) {
+    val clip = ClipData.newPlainText("MEGA", text)
+    clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
+    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
 }

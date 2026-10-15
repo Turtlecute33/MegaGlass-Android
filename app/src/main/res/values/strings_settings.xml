@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="lock_cleanup_failed">Local data could not be removed. The app will stay locked. Try again.</string>
+    <string name="lock_check_failed">The passcode could not be checked. Free some device storage and try again.</string>
     <!-- Settings index -->
     <string name="settings_general">General</string>
     <string name="settings_privacy">Privacy and account</string>
     <string name="settings_appearance">Appearance</string>
-    <string name="settings_appearance_summary">Theme, colours, hidden items</string>
+    <string name="settings_appearance_summary">Theme, start page, colours, hidden items</string>
+    <string name="settings_start_page">Open the app on</string>
     <string name="settings_camera_uploads">Camera uploads</string>
     <string name="settings_camera_uploads_summary">Back up photos and videos automatically</string>
     <string name="settings_transfers">Transfers</string>

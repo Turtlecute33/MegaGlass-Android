@@ -1,7 +1,7 @@
 package app.megaglass.android.feature.drive
 
-import android.content.ClipData
-import android.content.ClipboardManager
+import app.megaglass.android.core.util.catching
+
 import android.content.Context
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
@@ -63,6 +63,7 @@ import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.NodeThumbnail
 import app.megaglass.android.ui.components.StorageAccess
 import app.megaglass.android.ui.components.TextInputDialog
+import app.megaglass.android.ui.components.copySensitive
 import app.megaglass.android.ui.components.invalidNameError
 import app.megaglass.android.ui.components.labelColor
 import app.megaglass.android.ui.components.rememberStorageAccess
@@ -131,7 +132,7 @@ fun actionsFor(item: NodeItem, context: NodeContext, versions: Int, api: MegaApi
     list += NodeAction.COPY
     if (!item.isFolder && versions > 1) list += NodeAction.VERSIONS
     if (own) list += if (item.isSensitive) NodeAction.UNHIDE else NodeAction.HIDE
-    if (item.isInShare && api.getNodeByHandle(item.handle)?.let { api.getParentNode(it) == null } == true) {
+    if (item.isInShare && item.parentHandle == MegaApiJava.INVALID_HANDLE) {
         list += NodeAction.LEAVE_SHARE
     }
     if (own || full) list += NodeAction.RUBBISH
@@ -167,11 +168,15 @@ class NodeActionsState internal constructor(
     fun openMenu(item: NodeItem) {
         sheetItem = item
         sheetVersions = 0
-        if (!item.isFolder) scope.launch { sheetVersions = nodes.versionCount(item.handle) }
+        if (!item.isFolder) scope.launch {
+            catching { nodes.versionCount(item.handle) }.onSuccess { versions ->
+                if (sheetItem?.handle == item.handle) sheetVersions = versions
+            }.onFailure { messenger.show(it.message ?: str(R.string.error_title)) }
+        }
     }
 
     private fun launch(block: suspend () -> Unit) = scope.launch {
-        runCatching { block() }.onFailure { messenger.show(it.message ?: str(R.string.error_title)) }
+        catching { block() }.onFailure { messenger.show(it.message ?: str(R.string.error_title)) }
     }
 
     fun run(action: NodeAction, items: List<NodeItem>) {
@@ -235,8 +240,19 @@ class NodeActionsState internal constructor(
         val parents = items.associate { it.handle to it.parentHandle }
         nodes.moveToRubbish(parents.keys)
         onDone()
-        messenger.show(appContext.resources.getQuantityString(R.plurals.moved_to_rubbish, items.size, items.size), str(R.string.undo)) {
-            scope.launch { parents.entries.groupBy({ it.value }, { it.key }).forEach { (p, h) -> runCatching { nodes.move(h, p) } } }
+        val text = appContext.resources.getQuantityString(R.plurals.moved_to_rubbish, items.size, items.size)
+        // From an incoming share the SDK copies the items to the Rubbish bin and deletes the
+        // originals, so the handles change and an undo cannot find them.
+        if (context == NodeContext.INCOMING) {
+            messenger.show(text)
+            return@launch
+        }
+        messenger.show(text, str(R.string.undo)) {
+            // App scope: the snackbar can outlive this screen.
+            graph.scope.launch {
+                catching { parents.entries.groupBy({ it.value }, { it.key }).forEach { (p, h) -> nodes.move(h, p) } }
+                    .onFailure { messenger.show(it.message ?: str(R.string.error_title)) }
+            }
         }
     }
 
@@ -265,7 +281,7 @@ class NodeActionsState internal constructor(
     internal fun rename(item: NodeItem, name: String) = launch { nodes.rename(item.handle, name) }
 
     internal fun copyText(text: String) {
-        appContext.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("MEGA link", text))
+        copySensitive(appContext, text)
         messenger.show(str(R.string.copied))
     }
 
@@ -352,7 +368,7 @@ private fun NodeSheet(item: NodeItem, state: NodeActionsState, onDismiss: () -> 
             }
             if (item.access >= MegaShare.ACCESS_OWNER && state.context != NodeContext.RUBBISH && state.context != NodeContext.BACKUPS) {
                 LabelRow(item.label) { label ->
-                    scope.launch { runCatching { graph.nodes.setLabel(listOf(item.handle), label) } }
+                    scope.launch { catching { graph.nodes.setLabel(listOf(item.handle), label) } }
                     onDismiss()
                 }
             }
@@ -413,7 +429,7 @@ private fun LinkDialog(item: NodeItem, state: NodeActionsState, onDismiss: () ->
     var error by remember { mutableStateOf<String?>(null) }
     var separateKey by remember { mutableStateOf(false) }
     LaunchedEffect(item.handle) {
-        runCatching { graph.nodes.exportLink(item.handle) }
+        catching { graph.nodes.exportLink(item.handle) }
             .onSuccess { link = it }
             .onFailure { error = it.message }
     }

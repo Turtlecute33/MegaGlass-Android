@@ -51,7 +51,7 @@ object Format {
     /** Remaining time for a transfer: "2 min", "45 s". */
     fun eta(remainingBytes: Long, bytesPerSecond: Long): String {
         if (bytesPerSecond <= 0) return ""
-        val s = remainingBytes / bytesPerSecond
+        val s = remainingBytes.coerceAtLeast(0) / bytesPerSecond
         return when {
             s < 60 -> "$s s"
             s < 3600 -> "${s / 60} min"
@@ -59,5 +59,5 @@ object Format {
         }
     }
 
-    fun percent(part: Long, total: Long): Int = if (total <= 0) 0 else ((part * 100) / total).toInt().coerceIn(0, 100)
+    fun percent(part: Long, total: Long): Int = if (total <= 0) 0 else (part.toDouble() / total * 100).toInt().coerceIn(0, 100)
 }

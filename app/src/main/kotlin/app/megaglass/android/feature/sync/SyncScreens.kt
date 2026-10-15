@@ -40,6 +40,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,6 +75,7 @@ fun SyncsScreen(vm: SyncViewModel = viewModel()) {
     val graph = MegaGlassApp.graph
     val nav = LocalNavigator.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     val state by vm.state.collectAsStateWithLifecycle()
     val storage = rememberStorageAccess()
     var step by remember { mutableStateOf<AddStep?>(null) }
@@ -84,10 +86,10 @@ fun SyncsScreen(vm: SyncViewModel = viewModel()) {
     val pickLocal = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         val path = graph.files.realPath(uri)
-        if (path == null) graph.messenger.show(context.getString(R.string.sync_needs_access))
+        if (path == null) graph.messenger.show(resources.getString(R.string.sync_needs_access))
         else step = AddStep.PickCloud(path)
     }
-    val startAdd = { storage.ensure { if (storage.granted) pickLocal.launch(null) else graph.messenger.show(context.getString(R.string.sync_needs_access)) } }
+    val startAdd = { storage.ensure { if (storage.granted) pickLocal.launch(null) else graph.messenger.show(resources.getString(R.string.sync_needs_access)) } }
 
     val syncs = state.syncs
     SettingsScaffold(

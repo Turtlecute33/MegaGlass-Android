@@ -1,13 +1,13 @@
 package app.megaglass.android.feature.settings
 
+import app.megaglass.android.ui.components.rememberPasswordStrength
+
+import app.megaglass.android.core.util.catching
+
 import android.content.ActivityNotFoundException
-import android.content.ClipData
-import android.content.ClipDescription
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.PersistableBundle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -56,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -82,6 +82,7 @@ import app.megaglass.android.ui.components.EmptyState
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.LoadingBox
 import app.megaglass.android.ui.components.TextInputDialog
+import app.megaglass.android.ui.components.copySensitive
 import app.megaglass.android.ui.nav.ChangeEmail
 import app.megaglass.android.ui.nav.ChangePassword
 import app.megaglass.android.ui.nav.LocalNavigator
@@ -120,6 +121,7 @@ fun SecuritySettingsScreen() {
     val graph = MegaGlassApp.graph
     val nav = LocalNavigator.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var twoFactor by remember { mutableStateOf<Boolean?>(null) }
@@ -203,7 +205,7 @@ fun SecuritySettingsScreen() {
             onConfirm = { pin ->
                 scope.launch {
                     if (graph.lock.verify(pin)) graph.lock.setPasscode(null)
-                    else graph.messenger.show(context.getString(R.string.security_wrong_passcode))
+                    else graph.messenger.show(resources.getString(R.string.security_wrong_passcode))
                 }
             },
             onDismiss = { disablePasscode = false },
@@ -217,7 +219,7 @@ fun SecuritySettingsScreen() {
             confirm = stringResource(R.string.security_turn_off),
             onCode = { pin ->
                 scope.launch {
-                    runCatching { withContext(Dispatchers.IO) { graph.mega.api.await { multiFactorAuthDisable(pin, it) } } }
+                    catching { withContext(Dispatchers.IO) { graph.mega.api.await { multiFactorAuthDisable(pin, it) } } }
                         .onSuccess { twoFactor = false }
                         .onFailure { graph.messenger.show(context.errorText(it)) }
                 }
@@ -261,6 +263,7 @@ private data class SessionUi(
 fun SessionsScreen() {
     val graph = MegaGlassApp.graph
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var sessions by remember { mutableStateOf<List<SessionUi>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -269,7 +272,7 @@ fun SessionsScreen() {
     var kill by remember { mutableStateOf<SessionUi?>(null) }
 
     LaunchedEffect(reload) {
-        runCatching {
+        catching {
             withContext(Dispatchers.IO) {
                 val details = graph.mega.api.await { getExtendedAccountDetails(true, false, false, it) }.megaAccountDetails
                 (0 until details.numSessions).map { details.getSession(it) }
@@ -284,8 +287,8 @@ fun SessionsScreen() {
     }
 
     fun close(handle: Long) = scope.launch {
-        runCatching { withContext(Dispatchers.IO) { graph.mega.api.await { killSession(handle, it) } } }
-            .onSuccess { graph.messenger.show(context.getString(R.string.security_session_closed)) }
+        catching { withContext(Dispatchers.IO) { graph.mega.api.await { killSession(handle, it) } } }
+            .onSuccess { graph.messenger.show(resources.getString(R.string.security_session_closed)) }
             .onFailure { graph.messenger.show(context.errorText(it)) }
         reload++
     }
@@ -374,6 +377,7 @@ fun ChangePasswordScreen() {
     val api = graph.mega.api
     val nav = LocalNavigator.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var old by remember { mutableStateOf("") }
     var new by remember { mutableStateOf("") }
@@ -381,21 +385,21 @@ fun ChangePasswordScreen() {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var askCode by remember { mutableStateOf(false) }
-    val strength = remember(new) { if (new.isEmpty()) -1 else api.getPasswordStrength(new) }
+    val strength = rememberPasswordStrength(new, api)
     val mismatch = confirm.isNotEmpty() && confirm != new
     val valid = old.isNotEmpty() && strength >= MegaApiJava.PASSWORD_STRENGTH_WEAK && new == confirm && new != old
 
     fun change(pin: String?) {
         busy = true
         scope.launch {
-            runCatching {
+            catching {
                 withContext(Dispatchers.IO) {
                     if (pin == null) api.await { changePassword(old, new, it) }
                     else api.await { multiFactorAuthChangePassword(old, new, pin, it) }
                 }
             }.onSuccess {
-                graph.messenger.show(context.getString(R.string.security_password_changed))
-                nav.back()
+                graph.messenger.show(resources.getString(R.string.security_password_changed))
+                nav.backFrom(ChangePassword)
             }.onFailure { error = context.errorText(it) }
             busy = false
         }
@@ -407,7 +411,7 @@ fun ChangePasswordScreen() {
         scope.launch {
             val correct = withContext(Dispatchers.IO) { api.checkPassword(old) }
             if (!correct) {
-                error = context.getString(R.string.security_wrong_password)
+                error = resources.getString(R.string.security_wrong_password)
                 busy = false
                 return@launch
             }
@@ -452,6 +456,7 @@ fun ChangeEmailScreen() {
     val graph = MegaGlassApp.graph
     val api = graph.mega.api
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var email by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -466,7 +471,7 @@ fun ChangeEmailScreen() {
         error = null
         scope.launch {
             val target = email.trim()
-            runCatching {
+            catching {
                 withContext(Dispatchers.IO) {
                     if (pin == null) api.await { changeEmail(target, it) } else api.await { multiFactorAuthChangeEmail(target, pin, it) }
                 }
@@ -532,6 +537,7 @@ fun TwoFactorSetupScreen() {
     val api = graph.mega.api
     val nav = LocalNavigator.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var step by remember { mutableStateOf(TwoFactorStep.INTRO) }
     var secret by remember { mutableStateOf<String?>(null) }
@@ -545,7 +551,7 @@ fun TwoFactorSetupScreen() {
         busy = true
         error = null
         scope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.await { multiFactorAuthGetCode(it) }.text } }
+            catching { withContext(Dispatchers.IO) { api.await { multiFactorAuthGetCode(it) }.text } }
                 .onSuccess { secret = it; step = TwoFactorStep.SECRET }
                 .onFailure { error = context.errorText(it) }
             busy = false
@@ -557,7 +563,7 @@ fun TwoFactorSetupScreen() {
         busy = true
         error = null
         scope.launch {
-            runCatching { withContext(Dispatchers.IO) { api.await { multiFactorAuthEnable(pin, it) } } }
+            catching { withContext(Dispatchers.IO) { api.await { multiFactorAuthEnable(pin, it) } } }
                 .onSuccess {
                     secret = null
                     step = TwoFactorStep.DONE
@@ -588,14 +594,13 @@ fun TwoFactorSetupScreen() {
                         Text(stringResource(R.string.security_2fa_step1), style = MaterialTheme.typography.titleMedium)
                         Gap(12)
                         Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = MaterialTheme.shapes.large) {
-                            SelectionContainer {
-                                Text(
-                                    groupSecret(key),
-                                    style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
-                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                    textAlign = TextAlign.Center,
-                                )
-                            }
+                            // Not selectable: a system copy would skip the sensitive flag of the Copy button.
+                            Text(
+                                groupSecret(key),
+                                style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                textAlign = TextAlign.Center,
+                            )
                         }
                         Gap(12)
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -607,7 +612,7 @@ fun TwoFactorSetupScreen() {
                                 try {
                                     context.startActivity(Intent(Intent.ACTION_VIEW, uri))
                                 } catch (_: ActivityNotFoundException) {
-                                    graph.messenger.show(context.getString(R.string.security_no_authenticator))
+                                    graph.messenger.show(resources.getString(R.string.security_no_authenticator))
                                 }
                             }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.security_open_authenticator)) }
                         }
@@ -648,18 +653,12 @@ private fun Hero(icon: Int) {
     }
 }
 
-/** Copies a secret; Android 13+ hides it in the clipboard preview. */
-private fun copySensitive(context: Context, text: String) {
-    val clip = ClipData.newPlainText("MEGA", text)
-    clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
-    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
-}
-
 @Composable
 fun RecoveryKeyScreen() {
     val graph = MegaGlassApp.graph
     val api = graph.mega.api
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var password by remember { mutableStateOf("") }
     var key by remember { mutableStateOf<String?>(null) }
@@ -670,13 +669,13 @@ fun RecoveryKeyScreen() {
         val k = key
         if (uri == null || k == null) return@rememberLauncherForActivityResult
         scope.launch {
-            runCatching {
+            catching {
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(k.toByteArray()) } ?: error("No output")
                 }
             }.onSuccess {
                 markExported()
-                graph.messenger.show(context.getString(R.string.security_key_saved))
+                graph.messenger.show(resources.getString(R.string.security_key_saved))
             }.onFailure { graph.messenger.show(context.errorText(it)) }
         }
     }
@@ -697,7 +696,7 @@ fun RecoveryKeyScreen() {
                 error = null
                 scope.launch {
                     val exported = withContext(Dispatchers.IO) { if (api.checkPassword(password)) api.exportMasterKey() else null }
-                    if (exported == null) error = context.getString(R.string.security_wrong_password)
+                    if (exported == null) error = resources.getString(R.string.security_wrong_password)
                     else {
                         key = exported
                         password = ""
@@ -709,21 +708,20 @@ fun RecoveryKeyScreen() {
             NoticeCard(R.drawable.ic_warning, stringResource(R.string.security_key_warning), Modifier.padding(top = 8.dp))
             Gap(24)
             Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = MaterialTheme.shapes.large) {
-                SelectionContainer {
-                    Text(
-                        groupSecret(k),
-                        style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
-                        modifier = Modifier.fillMaxWidth().padding(20.dp),
-                        textAlign = TextAlign.Center,
-                    )
-                }
+                // Not selectable: a system copy would skip the sensitive flag of the Copy button.
+                Text(
+                    groupSecret(k),
+                    style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    textAlign = TextAlign.Center,
+                )
             }
             Gap(24)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = {
                     copySensitive(context, k)
                     scope.launch { markExported() }
-                    graph.messenger.show(context.getString(R.string.copied))
+                    graph.messenger.show(resources.getString(R.string.copied))
                 }, modifier = Modifier.weight(1f).height(52.dp)) {
                     Ic(R.drawable.ic_content_copy, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
@@ -742,7 +740,7 @@ fun RecoveryKeyScreen() {
 
 /** Tells MEGA that the user has a copy of the recovery key, so it stops the reminders. */
 private suspend fun markExported() {
-    runCatching { withContext(Dispatchers.IO) { MegaGlassApp.graph.mega.api.await { masterKeyExported(it) } } }
+    catching { withContext(Dispatchers.IO) { MegaGlassApp.graph.mega.api.await { masterKeyExported(it) } } }
 }
 
 private enum class PasscodeStep { ENTER, CONFIRM }
@@ -752,6 +750,7 @@ fun PasscodeSetupScreen() {
     val graph = MegaGlassApp.graph
     val nav = LocalNavigator.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var length by remember { mutableIntStateOf(graph.settings.current.passcodeLength.takeIf { it == 4 || it == 6 } ?: 4) }
     var step by remember { mutableStateOf(PasscodeStep.ENTER) }
@@ -768,17 +767,18 @@ fun PasscodeSetupScreen() {
             }
             PasscodeStep.CONFIRM -> {
                 if (value == first) {
-                    scope.launch {
+                    // App scope: the passcode is saved also when the screen closes meanwhile.
+                    graph.scope.launch(Dispatchers.Main) {
                         graph.lock.setPasscode(value)
-                        graph.messenger.show(context.getString(R.string.security_passcode_set))
-                        nav.back()
+                        graph.messenger.show(resources.getString(R.string.security_passcode_set))
+                        nav.backFrom(PasscodeSetup)
                     }
                 } else {
                     shake++
                     code = ""
                     first = ""
                     step = PasscodeStep.ENTER
-                    graph.messenger.show(context.getString(R.string.security_passcode_mismatch))
+                    graph.messenger.show(resources.getString(R.string.security_passcode_mismatch))
                 }
             }
         }

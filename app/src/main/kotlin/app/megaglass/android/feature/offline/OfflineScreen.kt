@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.offline
 
+import app.megaglass.android.core.util.catching
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -100,7 +102,10 @@ fun OfflineScreen(path: String?) {
                         OfflineRow(
                             entry = entry,
                             onClick = {
-                                if (entry.isFolder) nav.navigate(OfflineFolder(entry.file.absolutePath)) else nav.openLocal(entry.file)
+                                if (!entry.verified) scope.launch {
+                                    catching { graph.offline.makeAvailable(listOf(entry.handle)) }
+                                        .onFailure { graph.messenger.show(it.message ?: graph.context.getString(R.string.error_title)) }
+                                } else if (entry.isFolder) nav.navigate(OfflineFolder(entry.file.absolutePath)) else nav.openLocal(entry.file)
                             },
                             onOpenWith = { graph.opener.view(entry.file) },
                             onSend = { graph.opener.send(listOf(entry.file)) },
@@ -108,9 +113,9 @@ fun OfflineScreen(path: String?) {
                                 storage.ensure {
                                     scope.launch {
                                         val ok = withContext(Dispatchers.IO) {
-                                            runCatching {
+                                            catching {
                                                 val dir = graph.files.downloadDir(graph.settings.current)
-                                                entry.file.copyRecursively(File(dir, entry.name), overwrite = true)
+                                                entry.file.copyRecursively(freeFile(dir, entry.name, entry.isFolder))
                                             }.getOrDefault(false)
                                         }
                                         graph.messenger.show(graph.context.getString(if (ok) R.string.saved_to_downloads else R.string.error_title))
@@ -153,7 +158,7 @@ private fun OfflineRow(
         onClick = onClick,
         modifier = modifier,
         leadingContent = {
-            if (entry.type == FileType.IMAGE) {
+            if (entry.verified && entry.type == FileType.IMAGE) {
                 AsyncImage(
                     model = entry.file,
                     contentDescription = null,
@@ -164,12 +169,13 @@ private fun OfflineRow(
                 FileTypeIcon(entry.type, size = 44.dp, override = if (entry.isFolder) R.drawable.ic_folder_fill else null)
             }
         },
-        supportingContent = { Text(Format.size(entry.size) + " · " + Format.date(entry.modified / 1000), maxLines = 1) },
+        supportingContent = { Text(if (entry.verified) Format.size(entry.size) + " · " + Format.date(entry.modified / 1000)
+            else stringResource(R.string.offline_unverified), maxLines = 1) },
         trailingContent = {
             Box {
                 IconAction(R.drawable.ic_more_vert, stringResource(R.string.more), { menu = true })
                 DropdownMenu(menu, onDismissRequest = { menu = false }) {
-                    if (!entry.isFolder) {
+                    if (entry.verified && !entry.isFolder) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.action_open_with)) }, leadingIcon = { Ic(R.drawable.ic_open_in_new) },
                             onClick = { menu = false; onOpenWith() })
                         DropdownMenuItem(text = { Text(stringResource(R.string.action_send)) }, leadingIcon = { Ic(R.drawable.ic_share) },
@@ -190,4 +196,13 @@ private fun OfflineRow(
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     ) { Text(entry.name, maxLines = 1, overflow = TextOverflow.MiddleEllipsis) }
+}
+
+/** [name] in [dir], or "name (1).ext", "name (2).ext"... when it exists: a save never replaces a file. */
+private fun freeFile(dir: File, name: String, isFolder: Boolean): File {
+    val dot = if (isFolder) name.length else name.lastIndexOf('.').takeIf { it > 0 } ?: name.length
+    var file = File(dir, name)
+    var n = 1
+    while (file.exists()) file = File(dir, name.substring(0, dot) + " (${n++})" + name.substring(dot))
+    return file
 }

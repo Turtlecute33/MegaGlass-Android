@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.drive
 
+import app.megaglass.android.core.util.catching
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -64,8 +66,9 @@ class NodeQueryViewModel(private val query: suspend () -> List<NodeItem>) : View
     }
 
     private suspend fun load() {
-        val items = runCatching { query() }.getOrDefault(emptyList())
-        _state.update { s -> s.copy(items = items, selection = s.selection.filterTo(HashSet()) { h -> items.any { it.handle == h } }) }
+        val items = catching { query() }.getOrDefault(emptyList())
+        val handles = items.mapTo(HashSet()) { it.handle }
+        _state.update { s -> s.copy(items = items, selection = s.selection.intersect(handles)) }
     }
 
     fun toggle(item: NodeItem) = _state.update {

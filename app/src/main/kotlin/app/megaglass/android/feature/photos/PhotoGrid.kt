@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -93,15 +94,16 @@ fun Modifier.pinchToChangeColumns(columns: () -> Int, onChange: (Int) -> Unit): 
 
 @Composable
 fun dayLabel(day: LocalDate): String {
+    val locale = LocalConfiguration.current.locales[0]
     val today = LocalDate.now()
     return when (day) {
         today -> stringResource(R.string.photos_today)
         today.minusDays(1) -> stringResource(R.string.photos_yesterday)
         else -> {
             val skeleton = if (day.year == today.year) "EEEMMMd" else "EEEMMMdyyyy"
-            val pattern = DateFormat.getBestDateTimePattern(Locale.getDefault(), skeleton)
+            val pattern = DateFormat.getBestDateTimePattern(locale, skeleton)
             val date = Date.from(day.atStartOfDay(ZoneId.systemDefault()).toInstant())
-            java.text.SimpleDateFormat(pattern, Locale.getDefault()).format(date)
+            java.text.SimpleDateFormat(pattern, locale).format(date)
         }
     }
 }

@@ -12,6 +12,7 @@ import app.megaglass.android.AppGraph
 import app.megaglass.android.core.mega.NodeItem
 import app.megaglass.android.core.util.FileType
 import app.megaglass.android.core.util.isEditableText
+import app.megaglass.android.core.util.catching
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -22,26 +23,24 @@ data class StackEntry(val tab: Tab, val route: Route, val id: Long)
 /**
  * Back stacks, one per tab. NavDisplay gets all of them flattened, in the order the tabs were
  * last used, with the current tab last: so the entries (and their ViewModels) of other tabs stay
- * alive, and Back from the root of a tab returns to the previous tab.
+ * alive, and Back from the root of a tab returns to the previous tab. The app opens on
+ * [startTab] (a setting); Back at its root closes the app.
  */
 @Stable
-class AppNavigator(private val graph: AppGraph) {
+class AppNavigator(private val graph: AppGraph, val startTab: Tab) {
 
     private val stacks = LinkedHashMap<Tab, SnapshotStateList<StackEntry>>()
     private var nextId = 0L
 
-    var currentTab by mutableStateOf(Tab.HOME)
+    var currentTab by mutableStateOf(startTab)
         private set
 
     val backStack = mutableStateListOf<StackEntry>()
 
     val currentRoute: Route get() = backStack.lastOrNull()?.route ?: Home
 
-    /** True when the current tab shows its root screen. */
-    val isAtTabRoot: Boolean get() = backStack.count { it.tab == currentTab } <= 1
-
     init {
-        stacks[Tab.HOME] = mutableStateListOf(entry(Tab.HOME, Home))
+        stacks[startTab] = mutableStateListOf(entry(startTab, startTab.root))
         rebuild()
     }
 
@@ -88,14 +87,19 @@ class AppNavigator(private val graph: AppGraph) {
             rebuild()
             return true
         }
-        if (currentTab != Tab.HOME) {
+        if (currentTab != startTab) {
             stacks.remove(currentTab)
-            if (Tab.HOME !in stacks) stacks[Tab.HOME] = mutableStateListOf(entry(Tab.HOME, Home))
+            if (startTab !in stacks) stacks[startTab] = mutableStateListOf(entry(startTab, startTab.root))
             currentTab = stacks.keys.last()
             rebuild()
             return true
         }
         return false
+    }
+
+    /** Back, only while [route] is on top: for a result that arrives after the user may have left the screen. */
+    fun backFrom(route: Route) {
+        if (currentRoute == route) back()
     }
 
     /** Selecting the current tab again goes back to its root. */
@@ -123,7 +127,10 @@ class AppNavigator(private val graph: AppGraph) {
             item.type == FileType.AUDIO -> navigate(AudioPlayer(item.handle, source))
             item.type == FileType.PDF -> navigate(PdfViewer(item.handle, folderLink = folderLink))
             item.type.isEditableText() && item.size <= TEXT_EDITOR_LIMIT -> navigate(TextEditor(item.handle, folderLink = folderLink))
-            else -> graph.scope.launch { graph.opener.open(item.handle, item.name, item.size, folderLink) }
+            else -> graph.scope.launch {
+                catching { graph.opener.open(item.handle, item.name, item.size, folderLink) }
+                    .onFailure { graph.messenger.show(it.message ?: "Cannot open file") }
+            }
         }
     }
 

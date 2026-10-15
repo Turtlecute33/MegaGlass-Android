@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.drive
 
+import app.megaglass.android.core.util.catching
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -131,7 +133,7 @@ private fun DriveFolder(mode: DriveMode, handle: Long) {
                             if (mode != DriveMode.RUBBISH) {
                                 IconAction(R.drawable.ic_search, stringResource(R.string.search), { nav.navigate(Search(vm.rootHandle)) })
                             }
-                            ViewOptionsActions()
+                            ViewOptionsActions(folderSort = state.sortOrder, onFolderSort = vm::sort)
                             if (mode == DriveMode.RUBBISH && !state.items.isNullOrEmpty()) {
                                 IconAction(R.drawable.ic_delete_forever, stringResource(R.string.empty_rubbish), { confirmEmpty = true })
                             }
@@ -266,14 +268,14 @@ private fun DriveFolder(mode: DriveMode, handle: Long) {
 
     if (newFolder) {
         val invalid = stringResource(R.string.invalid_name)
-        val scope = androidx.compose.runtime.rememberCoroutineScope()
         TextInputDialog(
             title = stringResource(R.string.new_folder),
             label = stringResource(R.string.name),
             confirmLabel = stringResource(R.string.create),
             onConfirm = { name ->
-                scope.launch {
-                    runCatching { graph.nodes.createFolder(vm.rootHandle, name) }
+                // App scope: the dialog closes at once, which would cancel a scope of its own.
+                graph.scope.launch {
+                    catching { graph.nodes.createFolder(vm.rootHandle, name) }
                         .onFailure { graph.messenger.show(it.message ?: "") }
                 }
             },

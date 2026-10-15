@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.drive
 
+import app.megaglass.android.core.util.catching
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -183,7 +185,7 @@ fun FolderPickerDialog(
             confirmLabel = stringResource(R.string.create),
             onConfirm = { name ->
                 scope.launch {
-                    runCatching { graph.nodes.createFolder(target, name) }
+                    catching { graph.nodes.createFolder(target, name) }
                         .onSuccess { h -> graph.nodes.item(h)?.let { stack = stack + it } ?: reload++ }
                         .onFailure { graph.messenger.show(it.message ?: "") }
                 }

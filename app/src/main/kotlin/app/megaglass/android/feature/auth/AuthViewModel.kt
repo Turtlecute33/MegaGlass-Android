@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import nz.mega.sdk.MegaError
 
 enum class AuthStep { WELCOME, LOGIN, TWO_FACTOR, SIGNUP, CONFIRM_EMAIL, FORGOT, RESET_SENT }
@@ -24,7 +26,6 @@ data class AuthState(
 class AuthViewModel : ViewModel() {
 
     private val session = MegaGlassApp.graph.session
-    private val api = MegaGlassApp.graph.mega.api
 
     private val _state = MutableStateFlow(AuthState())
     val state: StateFlow<AuthState> = _state.asStateFlow()
@@ -36,6 +37,7 @@ class AuthViewModel : ViewModel() {
     fun go(step: AuthStep) = _state.update { it.copy(step = step, error = null) }
 
     fun back(): Boolean {
+        if (_state.value.busy) return true
         val s = _state.value
         val target = when (s.step) {
             AuthStep.WELCOME -> return false
@@ -77,23 +79,28 @@ class AuthViewModel : ViewModel() {
         _state.update { it.copy(step = AuthStep.RESET_SENT, email = email) }
     }
 
-    /** 0 very weak .. 4 strong (MegaApiJava.PASSWORD_STRENGTH_*). */
-    fun strength(password: String): Int = if (password.isEmpty()) -1 else api.getPasswordStrength(password)
-
     private fun run(block: suspend () -> Unit) {
         if (_state.value.busy) return
         _state.update { it.copy(busy = true, error = null) }
         viewModelScope.launch {
             try {
                 block()
+            } catch (_: TimeoutCancellationException) {
+                _state.update { it.copy(error = "Connection timed out. Try again.") }
             } catch (e: MegaException) {
                 _state.update { it.copy(error = message(e)) }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _state.update { it.copy(error = e.message) }
             } finally {
                 _state.update { it.copy(busy = false) }
             }
         }
+    }
+
+    override fun onCleared() {
+        pendingPassword = null
+        pendingName = ""
     }
 
     private fun message(e: MegaException): String = when (e.code) {

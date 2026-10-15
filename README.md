@@ -22,6 +22,10 @@ reuse them.
 - `patches/mega-sdk-android-request-size.patch`: the SDK limits each transfer request to 2 MB on
   Android. The patch scales the limit with device RAM (up to 16 MB, the desktop value), which
   reduces per-request overhead on fast connections.
+- `patches/mega-sdk-java-factory-ownership.patch`: marks allocating JNI factories and album
+  getters as owning their native results so Java can release them safely.
+- `scripts/ports/`: pinned native dependency updates, with upstream provenance and licenses.
+  The native build records versions and a binary digest; Gradle rejects mismatched artifacts.
 - The app sets 8 parallel connections per direction (SDK mobile default: 4 down, 3 up). This is
   the "Fast transfers" setting.
 - Crypto++ and OpenSSL are built with the ARMv8 AES, PMULL and SHA instructions; they are
@@ -41,3 +45,19 @@ reuse them.
 - `app/src/main/kotlin/app/megaglass/android/ui`: theme, shared components, navigation.
 - `app/src/main/kotlin/app/megaglass/android/feature`: one package per feature.
 - `scripts/fetch-icons.py`: regenerates the Material Symbols drawables.
+
+## Validation
+
+After building the native SDK, run JVM regressions, lint and both application builds:
+
+```sh
+./gradlew :app:testDebugUnitTest :app:lintDebug :sdk:lintDebug \
+  :app:assembleDebug :app:assembleRelease
+```
+
+With an Android 15 or later arm64 emulator connected, run
+`./gradlew :app:connectedDebugAndroidTest`. These tests use isolated fixture data and do not
+require a MEGA account. Authenticated workflows still require a dedicated test account.
+
+See the [alpha audit](docs/ALPHA_AUDIT.md) for implemented fixes and remaining test gaps, and
+the [validation record](docs/ALPHA_AUDIT_VALIDATION.md) for measured results and artifact hashes.

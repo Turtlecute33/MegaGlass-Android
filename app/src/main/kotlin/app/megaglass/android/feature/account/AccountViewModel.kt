@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.account
 
+import app.megaglass.android.core.util.catching
+
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.StringRes
@@ -12,6 +14,7 @@ import app.megaglass.android.core.mega.await
 import app.megaglass.android.core.mega.awaitResult
 import app.megaglass.android.core.media.UserAvatar
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -98,7 +101,7 @@ class AccountViewModel : ViewModel() {
         }
         viewModelScope.launch {
             graph.mega.users
-                .filter { handles -> api.myUserHandleBinary in handles }
+                .filter { handles -> handles.isEmpty() || api.myUserHandleBinary in handles }
                 .debounce(300)
                 .collect {
                     invalidateAvatar()
@@ -127,7 +130,7 @@ class AccountViewModel : ViewModel() {
     }
 
     private suspend fun loadDetails() {
-        runCatching {
+        catching {
             withContext(Dispatchers.IO) {
                 val details = api.await { getAccountDetails(it) }.megaAccountDetails
                 val root = api.rootNode?.handle ?: MegaApiJava.INVALID_HANDLE
@@ -144,7 +147,7 @@ class AccountViewModel : ViewModel() {
                     transferMax = details.transferMax,
                 )
                 val achievements = if (api.isAchievementsEnabled) {
-                    runCatching { api.await { getAccountAchievements(it) }.megaAchievementsDetails }.getOrNull()
+                    catching { api.await { getAccountAchievements(it) }.megaAchievementsDetails }.getOrNull()
                 } else null
                 AccountUpdate(
                     proLevel = details.proLevel,
@@ -232,6 +235,7 @@ class AccountViewModel : ViewModel() {
             try {
                 block()
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 graph.messenger.show(e.message ?: graph.context.getString(R.string.error_title))
             } finally {
                 _busy.value = false

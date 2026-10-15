@@ -5,12 +5,17 @@ import android.content.Context
 import androidx.lifecycle.ProcessLifecycleOwner
 import app.megaglass.android.core.FileOpener
 import app.megaglass.android.core.camera.CameraUploads
+import app.megaglass.android.feature.contacts.ContactDirectory
+import app.megaglass.android.feature.viewer.StreamServer
+import app.megaglass.android.feature.viewer.PlaybackService
+import android.content.Intent
 import app.megaglass.android.core.Messenger
 import app.megaglass.android.core.mega.Mega
 import app.megaglass.android.core.security.AppLock
 import app.megaglass.android.core.mega.NodeRepository
 import app.megaglass.android.core.mega.Session
 import app.megaglass.android.core.media.MegaImages
+import app.megaglass.android.core.storage.FolderSorts
 import app.megaglass.android.core.storage.LocalFiles
 import app.megaglass.android.core.storage.OfflineStore
 import app.megaglass.android.core.storage.SessionStore
@@ -34,18 +39,21 @@ class AppGraph(val context: Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val mega = Mega(context)
     val settings = Settings(context, scope)
+    val folderSorts = FolderSorts(context)
     val files = LocalFiles(context)
     val images = MegaImages(context, mega)
     val nodes = NodeRepository(mega)
-    val transfers = TransferManager(mega, scope)
+    val transfers = TransferManager(mega, scope, listOf(File(context.cacheDir, "uploads"), File(context.cacheDir, "camera"), File(context.filesDir, "pending-uploads")))
     val offline = OfflineStore(context, transfers, scope)
-    val session = Session(mega, SessionStore(context), settings, scope, onLoggedOut = ::clearUserData)
+    val session = Session(mega, SessionStore(context), settings, scope, onLoggedOut = ::clearUserData, onReady = { transfers.beginSession() })
     val messenger = Messenger()
     val opener = FileOpener(context, transfers, files, messenger, scope)
     val lock = AppLock(settings)
 
     init {
         transfers.onActive = { TransferJobService.schedule(context) }
+        transfers.onError = { messenger.show(it) }
+        transfers.retryOffline = { offline.makeAvailable(listOf(it)) }
         CameraUploads.install(this)
         scope.launch(Dispatchers.IO) { files.cleanUploadTemp() }
         // Thumbnails of changed files are stale.
@@ -55,12 +63,24 @@ class AppGraph(val context: Context) {
     }
 
     private suspend fun clearUserData() {
+        settings.update { it.copy(cameraUploads = false, cuSince = 0) }
+        CameraUploads.cancel(context)
+        transfers.endSession()
+        opener.clear()
+        context.stopService(Intent(context, PlaybackService::class.java))
+        StreamServer.releasePlayback()
+        ContactDirectory.clearIfCreated()
         transfers.clearHistory()
+        folderSorts.clear()
         images.clear()
         offline.clear()
         files.openDir.deleteRecursively()
         File(context.cacheDir, "preview").deleteRecursively()
-        settings.update { it.copy(cameraUploads = false, cuSince = 0) }
+        File(context.cacheDir, "links").deleteRecursively()
+        File(context.cacheDir, "edit").deleteRecursively()
+        File(context.cacheDir, "uploads").deleteRecursively()
+        File(context.cacheDir, "avatar").deleteRecursively()
+        coil3.SingletonImageLoader.get(context).memoryCache?.clear()
     }
 }
 

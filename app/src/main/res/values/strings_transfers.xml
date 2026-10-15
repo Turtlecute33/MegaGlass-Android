@@ -17,6 +17,7 @@
     <string name="no_active_transfers">No active transfers</string>
     <string name="no_finished_transfers">No finished transfers</string>
     <string name="file_moved_or_deleted">The file was moved or deleted</string>
+    <string name="retry_not_possible">This transfer cannot start again. Start it again from its file or folder.</string>
     <string name="transfer_over_quota">Transfer quota exceeded. Transfers continue when the quota is available again.</string>
     <string name="n_transfers">%1$d active</string>
     <string name="status_queued">Queued</string>

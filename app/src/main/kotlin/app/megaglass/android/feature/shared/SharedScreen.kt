@@ -48,6 +48,7 @@ import app.megaglass.android.feature.drive.NodeContext
 import app.megaglass.android.feature.drive.SelectionToolbar
 import app.megaglass.android.feature.drive.ViewOptionsActions
 import app.megaglass.android.feature.drive.rememberNodeActions
+import app.megaglass.android.ui.components.BackButton
 import app.megaglass.android.ui.components.EmptyState
 import app.megaglass.android.ui.components.IconAction
 import app.megaglass.android.ui.components.LoadingBox
@@ -102,6 +103,7 @@ fun SharedScreen(route: Shared) {
                 } else {
                     MediumFlexibleTopAppBar(
                         title = { Text(stringResource(R.string.shared_title)) },
+                        navigationIcon = { BackButton { nav.back() } },
                         actions = { ViewOptionsActions() },
                         scrollBehavior = scroll,
                     )

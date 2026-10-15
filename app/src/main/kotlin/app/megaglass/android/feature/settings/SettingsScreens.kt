@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.settings
 
+import app.megaglass.android.core.util.catching
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -37,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -50,6 +53,7 @@ import app.megaglass.android.R
 import app.megaglass.android.core.mega.await
 import app.megaglass.android.core.mega.awaitResult
 import app.megaglass.android.core.storage.AppSettings
+import app.megaglass.android.core.storage.StartPage
 import app.megaglass.android.core.storage.ThemeMode
 import app.megaglass.android.core.util.Format
 import app.megaglass.android.ui.components.ConfirmDialog
@@ -151,6 +155,18 @@ fun AppearanceSettingsScreen() {
                 onSelect = { mode -> updateSettings { it.copy(themeMode = mode) } },
             )
         }
+        item(key = "start") {
+            SectionHeader(stringResource(R.string.settings_start_page))
+            ConnectedChoice(
+                options = listOf(
+                    Triple(R.drawable.ic_home, R.string.tab_home, StartPage.HOME),
+                    Triple(R.drawable.ic_cloud, R.string.tab_drive, StartPage.DRIVE),
+                    Triple(R.drawable.ic_account_circle, R.string.tab_menu, StartPage.ME),
+                ),
+                selected = settings.startPage,
+                onSelect = { page -> updateSettings { it.copy(startPage = page) } },
+            )
+        }
         settingsGroup(displayTitle, display)
         item(key = "columns") {
             SectionHeader(stringResource(R.string.settings_photo_columns))
@@ -205,6 +221,7 @@ fun TransferSettingsScreen() {
     val graph = MegaGlassApp.graph
     val api = graph.mega.api
     val context = LocalContext.current
+    val resources = LocalResources.current
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val storage = rememberStorageAccess()
     val scope = rememberCoroutineScope()
@@ -231,7 +248,7 @@ fun TransferSettingsScreen() {
         uri ?: return@rememberLauncherForActivityResult
         val path = graph.files.realPath(uri)
         if (path == null || !File(path).canWrite()) {
-            graph.messenger.show(context.getString(R.string.settings_location_failed))
+            graph.messenger.show(resources.getString(R.string.settings_location_failed))
         } else {
             updateSettings { it.copy(downloadDir = path) }
         }
@@ -265,7 +282,7 @@ fun TransferSettingsScreen() {
         ) { on ->
             versioning = on
             scope.launch {
-                runCatching { withContext(Dispatchers.IO) { api.await { setFileVersionsOption(!on, it) } } }
+                catching { withContext(Dispatchers.IO) { api.await { setFileVersionsOption(!on, it) } } }
                     .onFailure { versioning = !on; graph.messenger.show(it.message.orEmpty()) }
             }
         },
@@ -273,7 +290,7 @@ fun TransferSettingsScreen() {
             R.drawable.ic_auto_delete,
             stringResource(R.string.settings_rubbish_clean),
             summary = purgeDays?.let { d ->
-                if (d == 0) context.getString(R.string.settings_rubbish_clean_off)
+                if (d == 0) resources.getString(R.string.settings_rubbish_clean_off)
                 else context.resources.getQuantityString(R.plurals.settings_days, d, d)
             } ?: stringResource(R.string.settings_rubbish_clean_summary),
         ) { choosePurge = true },
@@ -315,9 +332,9 @@ fun TransferSettingsScreen() {
             onSelect = { i ->
                 val days = options[i]
                 scope.launch {
-                    runCatching { withContext(Dispatchers.IO) { api.await { setRubbishBinAutopurgePeriod(days, it) } } }
+                    catching { withContext(Dispatchers.IO) { api.await { setRubbishBinAutopurgePeriod(days, it) } } }
                         .onSuccess { purgeDays = days }
-                        .onFailure { graph.messenger.show(context.getString(R.string.settings_rubbish_clean_pro)) }
+                        .onFailure { graph.messenger.show(resources.getString(R.string.settings_rubbish_clean_pro)) }
                 }
             },
             onDismiss = { choosePurge = false },
@@ -339,10 +356,12 @@ fun StorageSettingsScreen() {
 
     LaunchedEffect(reload) {
         withContext(Dispatchers.IO) {
-            cacheSize = graph.images.sizeOnDisk() + graph.files.openDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+            cacheSize = graph.images.sizeOnDisk() + listOf("open", "preview", "links").sumOf { name ->
+                File(graph.context.cacheDir, name).walkTopDown().filter { it.isFile }.sumOf { it.length() }
+            }
             offlineSize = graph.offline.sizeOnDisk()
         }
-        versionsSize = runCatching {
+        versionsSize = catching {
             withContext(Dispatchers.IO) { api.await { getSpecificAccountDetails(true, false, false, it) }.megaAccountDetails.versionStorageUsed }
         }.getOrDefault(-1)
     }
@@ -380,12 +399,15 @@ fun StorageSettingsScreen() {
             icon = action.icon,
             onConfirm = {
                 scope.launch {
-                    runCatching {
+                    catching {
                         when (action) {
                             StorageAction.CACHE -> withContext(Dispatchers.IO) {
                                 graph.images.clear()
                                 // Files in "open" can be in use by the app that is viewing them; they are copies only.
-                                if (transfers.isIdle) graph.files.openDir.deleteRecursively()
+                                if (graph.transfers.state.value.isIdle) {
+                                    listOf("open", "preview", "links").forEach { File(graph.context.cacheDir, it).deleteRecursively() }
+                                }
+                                coil3.SingletonImageLoader.get(graph.context).memoryCache?.clear()
                             }
                             StorageAction.OFFLINE -> graph.offline.clear()
                             StorageAction.VERSIONS -> graph.nodes.removeAllVersions()
@@ -410,6 +432,7 @@ fun AboutScreen() {
     val graph = MegaGlassApp.graph
     var licence by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val resources = LocalResources.current
     val sdkVersion = remember { graph.mega.api.version.orEmpty() }
     val versionRows = listOf(
         SettingRow.Info(R.drawable.ic_info, stringResource(R.string.about_app_version), BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")"),

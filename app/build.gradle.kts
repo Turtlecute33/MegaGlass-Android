@@ -24,8 +24,9 @@ android {
         applicationId = "app.megaglass.android"
         minSdk = 35
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = 2
+        versionName = "0.1.1"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -45,7 +46,9 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            // Without a release key, produce an unsigned artifact instead of silently using
+            // the publicly reproducible debug identity.
+            signingConfig = signingConfigs.findByName("release")
         }
         debug {
             applicationIdSuffix = ".debug"
@@ -68,7 +71,7 @@ android {
         resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
     }
 
-    lint { abortOnError = false }
+    lint { abortOnError = true }
 }
 
 kotlin {
@@ -90,6 +93,9 @@ composeCompiler {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("junit:junit:4.13.2")
     implementation(project(":sdk"))
 
     implementation(libs.kotlinx.coroutines.android)

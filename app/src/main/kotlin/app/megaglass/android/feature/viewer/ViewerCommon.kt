@@ -1,24 +1,35 @@
 package app.megaglass.android.feature.viewer
 
+import app.megaglass.android.core.util.catching
+
 import androidx.compose.runtime.Immutable
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.core.mega.MegaException
 import app.megaglass.android.core.mega.NodeItem
 import app.megaglass.android.core.mega.toItem
+import app.megaglass.android.core.storage.SortOrder
+import app.megaglass.android.core.storage.localFileName
+import app.megaglass.android.core.storage.VerifiedFiles
+import app.megaglass.android.core.storage.ensureDirectory
+import app.megaglass.android.core.storage.replaceFile
 import app.megaglass.android.core.transfers.Purpose
 import app.megaglass.android.core.transfers.TransferStatus
 import app.megaglass.android.core.util.FileType
 import app.megaglass.android.feature.photos.MediaFilter
 import app.megaglass.android.feature.photos.PhotosRepository
 import app.megaglass.android.ui.nav.MediaSource
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import nz.mega.sdk.MegaApiJava
 import nz.mega.sdk.MegaError
 import nz.mega.sdk.MegaTransfer
@@ -27,6 +38,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
+import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -83,8 +95,10 @@ suspend fun loadEntries(source: MediaSource, handle: Long, types: Set<FileType>)
         val graph = MegaGlassApp.graph
         val settings = graph.settings.current
         val list: List<MediaEntry> = when (source) {
-            is MediaSource.Folder -> children(graph.mega.api, source.parent, types, settings.showHidden, folderLink = false)
-            is MediaSource.FolderLink -> children(graph.mega.folderApi, source.parent, types, true, folderLink = true)
+            // The same order as the folder list, so that swiping follows it.
+            is MediaSource.Folder ->
+                children(graph.mega.api, source.parent, graph.folderSorts.order(source.parent), types, settings.showHidden, folderLink = false)
+            is MediaSource.FolderLink -> children(graph.mega.folderApi, source.parent, settings.sortOrder, types, true, folderLink = true)
             MediaSource.Timeline -> PhotosRepository.timeline(MediaFilter.ALL, settings.showHidden)
                 .filter { it.node.type in types }.map { it.node.toEntry(false) }
             is MediaSource.Album -> {
@@ -117,10 +131,9 @@ suspend fun loadEntries(source: MediaSource, handle: Long, types: Set<FileType>)
         list to index
     }
 
-private fun children(api: MegaApiJava, parent: Long, types: Set<FileType>, showHidden: Boolean, folderLink: Boolean): List<MediaEntry> {
+private fun children(api: MegaApiJava, parent: Long, order: SortOrder, types: Set<FileType>, showHidden: Boolean, folderLink: Boolean): List<MediaEntry> {
     val node = api.getNodeByHandle(parent) ?: return emptyList()
-    val order = MegaGlassApp.graph.settings.current.sortOrder.sdkOrder
-    return api.getChildren(node, order)
+    return api.getChildren(node, order.sdkOrder)
         .asSequence()
         .filter { it.isFile && (showHidden || !it.isMarkedSensitive) && FileType.of(it.name ?: "") in types }
         .map { it.toItem(api, withCounts = false).toEntry(folderLink) }
@@ -136,18 +149,28 @@ object PreviewCache {
 
     private val root get() = File(MegaGlassApp.graph.context.cacheDir, "preview")
 
-    fun file(handle: Long, name: String): File =
-        File(File(root, MegaApiJava.handleToBase64(handle)), name.replace('/', '_'))
+    private val locks = Array(64) { Mutex() }
+
+    fun file(handle: Long, name: String, folderLink: Boolean = false): File =
+        File(File(File(root, if (folderLink) "links" else "account"), MegaApiJava.handleToBase64(handle)), localFileName(name))
 
     /** Returns the cached file when it is complete. */
-    fun cached(entry: MediaEntry): File? = file(entry.handle, entry.name).takeIf { it.length() == entry.size && entry.size > 0 }
+    fun cached(entry: MediaEntry): File? = file(entry.handle, entry.name, entry.folderLink).takeIf { VerifiedFiles.contains(it, entry.size) }
 
     /** Downloads the node unless it is cached. [onProgress] gets 0..1. */
     suspend fun fetch(handle: Long, name: String, size: Long, folderLink: Boolean, onProgress: (Float) -> Unit = {}): File {
-        val target = file(handle, name)
-        if (target.length() == size && size > 0) return target
-        target.parentFile?.mkdirs()
-        return if (folderLink) stream(handle, target, size, onProgress) else transfer(handle, target, onProgress)
+        val target = file(handle, name, folderLink)
+        return locks[(target.absolutePath.hashCode() and Int.MAX_VALUE) % locks.size].withLock {
+            withContext(Dispatchers.IO) {
+                if (VerifiedFiles.contains(target, size)) return@withContext target
+                target.parentFile!!.ensureDirectory()
+                VerifiedFiles.forget(target)
+                val downloaded = if (folderLink) stream(handle, target, size, onProgress) else transfer(handle, target, onProgress)
+                if (downloaded.length() != size) throw IOException("Downloaded file is incomplete")
+                VerifiedFiles.mark(downloaded)
+                downloaded
+            }
+        }
     }
 
     private suspend fun transfer(handle: Long, target: File, onProgress: (Float) -> Unit): File = coroutineScope {
@@ -158,13 +181,18 @@ object PreviewCache {
             transfers.completed.first { it.localPath == path && it.purpose == Purpose.PREVIEW }
         }
         val progress = async(start = CoroutineStart.UNDISPATCHED) {
-            transfers.state.collect { s -> s.active.firstOrNull { it.localPath == path }?.let { onProgress(it.progress) } }
+            transfers.state.collect { s -> s.viewerProgress[path]?.let(onProgress) }
         }
         try {
             transfers.downloadTo(handle, target, Purpose.PREVIEW)
             val item = done.await()
             if (item.status != TransferStatus.COMPLETED) throw IOException(item.error ?: "Download failed")
             target
+        } catch (e: CancellationException) {
+            // The viewer closed: stop the download, so that it does not continue unseen and an
+            // open of the same file again does not collide with it.
+            withContext(NonCancellable + Dispatchers.IO) { transfers.cancelDownloadTo(path) }
+            throw e
         } finally {
             progress.cancel()
             done.cancel()
@@ -175,11 +203,11 @@ object PreviewCache {
     private suspend fun stream(handle: Long, target: File, size: Long, onProgress: (Float) -> Unit): File = withContext(Dispatchers.IO) {
         val api = MegaGlassApp.graph.mega.folderApi
         val node = api.getNodeByHandle(handle) ?: throw MegaException(MegaError.API_ENOENT, "Item not found")
-        val tmp = File(target.parentFile, target.name + ".part")
+        val tmp = File.createTempFile("preview", ".part", target.parentFile)
         val out = FileOutputStream(tmp)
         val cancelled = CompletableDeferred<Unit>()
         try {
-            suspendCancellableCoroutine { cont ->
+            if (node.size > 0) suspendCancellableCoroutine { cont ->
                 // A failing write stops the streaming transfer.
                 val guarded = object : OutputStream() {
                     override fun write(b: Int) = write(byteArrayOf(b.toByte()))
@@ -208,10 +236,11 @@ object PreviewCache {
                 cont.invokeOnCancellation { cancelled.complete(Unit) }
             }
             out.close()
-            if (!tmp.renameTo(target)) throw IOException("Cannot write cache")
+            if (tmp.length() != node.size) throw IOException("Downloaded file is incomplete")
+            replaceFile(tmp, target)
             target
         } finally {
-            runCatching { out.close() }
+            catching { out.close() }
             tmp.delete()
         }
     }
@@ -224,6 +253,8 @@ object PreviewCache {
 object StreamServer {
     private val refs = HashMap<MegaApiJava, Int>()
     private val playbackHolds = HashSet<MegaApiJava>()
+    /** Releases run here: a stop waits for open connections and the server thread, which must not block the main thread. */
+    private val releaser = Executors.newSingleThreadExecutor()
 
     @Synchronized
     fun acquire(api: MegaApiJava): Boolean {
@@ -239,8 +270,12 @@ object StreamServer {
         return true
     }
 
-    @Synchronized
     fun release(api: MegaApiJava) {
+        releaser.execute { releaseNow(api) }
+    }
+
+    @Synchronized
+    private fun releaseNow(api: MegaApiJava) {
         val n = (refs[api] ?: 1) - 1
         if (n <= 0) {
             refs.remove(api)
@@ -259,10 +294,13 @@ object StreamServer {
         return true
     }
 
-    @Synchronized
     fun releasePlayback() {
-        playbackHolds.forEach(::release)
-        playbackHolds.clear()
+        releaser.execute {
+            synchronized(this) {
+                playbackHolds.forEach(::releaseNow)
+                playbackHolds.clear()
+            }
+        }
     }
 
     fun link(api: MegaApiJava, handle: Long): String? = api.getNodeByHandle(handle)?.let(api::httpServerGetLocalLink)

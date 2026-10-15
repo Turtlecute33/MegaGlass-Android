@@ -1,5 +1,7 @@
 package app.megaglass.android.core.transfers
 
+import app.megaglass.android.core.util.catching
+
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -80,7 +82,7 @@ class TransferJobService : JobService() {
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .setEstimatedNetworkBytes(JobInfo.NETWORK_BYTES_UNKNOWN.toLong(), JobInfo.NETWORK_BYTES_UNKNOWN.toLong())
                 .build()
-            runCatching { scheduler.schedule(job) }
+            catching { scheduler.schedule(job) }
         }
     }
 }
@@ -127,7 +129,9 @@ class TransferNotifications(private val context: Context) {
         if (Build.VERSION.SDK_INT >= 36) {
             builder.setStyle(Notification.ProgressStyle().setProgress(percent).setStyledByProgress(true))
             builder.setShortCriticalText("$percent%")
-            builder.setRequestPromotedOngoing(true)
+            if (Build.VERSION.SDK_INT_FULL >= Build.VERSION_CODES_FULL.BAKLAVA_1) {
+                builder.setRequestPromotedOngoing(true)
+            }
         } else {
             builder.setProgress(100, percent, state.totalBytes <= 0)
         }

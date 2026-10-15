@@ -1,15 +1,21 @@
 package app.megaglass.android.core
 
+import app.megaglass.android.core.util.catching
+
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import app.megaglass.android.R
 import app.megaglass.android.core.storage.LocalFiles
+import app.megaglass.android.core.storage.localFileName
+import app.megaglass.android.core.storage.VerifiedFiles
 import app.megaglass.android.core.transfers.Purpose
 import app.megaglass.android.core.transfers.TransferManager
 import app.megaglass.android.core.transfers.TransferStatus
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -54,13 +60,18 @@ class FileOpener(
             transfers.completed.collect { item ->
                 when (item.purpose) {
                     Purpose.OPEN -> {
+                        if (item.nodeHandle !in _preparing.value) return@collect
                         _preparing.update { it - item.nodeHandle }
-                        if (item.status == TransferStatus.COMPLETED) view(File(item.localPath))
+                        if (item.status == TransferStatus.COMPLETED) withContext(Dispatchers.Main) { view(File(item.localPath)) }
                         else if (item.status == TransferStatus.FAILED) messenger.show(item.error ?: context.getString(R.string.error_title))
                     }
                     Purpose.SHARE -> {
                         _preparing.update { it - item.nodeHandle }
-                        if (item.status == TransferStatus.COMPLETED) collectShare(item.appData, File(item.localPath))
+                        if (item.status == TransferStatus.COMPLETED) withContext(Dispatchers.Main) { collectShare(item.appData, File(item.localPath)) }
+                        else {
+                            synchronized(shareBatch) { shareBatch.remove(item.appData) }
+                            messenger.show(item.error ?: context.getString(R.string.error_title))
+                        }
                     }
                 }
             }
@@ -68,35 +79,48 @@ class FileOpener(
     }
 
     private fun cacheFile(handle: Long, name: String) =
-        File(File(files.openDir, MegaApiJava.handleToBase64(handle)), name)
+        File(File(files.openDir, MegaApiJava.handleToBase64(handle)), localFileName(name))
 
     /** Opens a cloud file in another app. */
     suspend fun open(handle: Long, name: String, size: Long, folderLink: Boolean = false) {
+        if (handle in _preparing.value) return
         val target = cacheFile(handle, name)
-        if (target.exists() && target.length() == size) {
-            view(target)
+        if (withContext(Dispatchers.IO) { VerifiedFiles.contains(target, size) }) {
+            withContext(Dispatchers.Main) { view(target) }
             return
         }
         _preparing.update { it + handle }
-        transfers.downloadTo(handle, target, Purpose.OPEN, folderLink)
+        try {
+            transfers.downloadTo(handle, target, Purpose.OPEN, folderLink)
+        } catch (e: Exception) {
+            _preparing.update { it - handle }
+            throw e
+        }
     }
 
     /** Shares cloud files (as files, not links) with another app. */
     suspend fun share(items: List<Triple<Long, String, Long>>) {
+        if (items.any { it.first in _preparing.value }) throw java.io.IOException("A selected file is already being prepared")
         val batch = Purpose.SHARE + ":" + System.nanoTime()
         val ready = mutableListOf<File>()
         val pending = mutableListOf<Pair<Long, File>>()
-        for ((handle, name, size) in items) {
+        for ((handle, name, size) in items.distinctBy { it.first }) {
             val target = cacheFile(handle, name)
-            if (target.exists() && target.length() == size) ready += target else pending += handle to target
+            if (withContext(Dispatchers.IO) { VerifiedFiles.contains(target, size) }) ready += target else pending += handle to target
         }
         if (pending.isEmpty()) {
-            send(ready)
+            withContext(Dispatchers.Main) { send(ready) }
             return
         }
         synchronized(shareBatch) { shareBatch[batch] = (ready.map { it.absolutePath } + pending.map { "?" + it.second.absolutePath }).toMutableSet() }
         _preparing.update { it + pending.map { p -> p.first } }
-        pending.forEach { (handle, target) -> transfers.downloadTo(handle, target, batch) }
+        try {
+            pending.forEach { (handle, target) -> transfers.downloadTo(handle, target, batch) }
+        } catch (e: Exception) {
+            synchronized(shareBatch) { shareBatch.remove(batch) }
+            _preparing.update { it - pending.map { p -> p.first }.toSet() }
+            throw e
+        }
     }
 
     private fun collectShare(appData: String, file: File) {
@@ -114,7 +138,11 @@ class FileOpener(
 
     /** Opens a local file in another app. */
     fun view(file: File) {
-        val uri = files.shareUri(file)
+        // FileProvider only serves the folders in file_paths.xml (for example not a memory card).
+        val uri = catching { files.shareUri(file) }.getOrElse {
+            messenger.show(context.getString(R.string.no_app_to_open))
+            return
+        }
         val intent = Intent(Intent.ACTION_VIEW)
             .setDataAndType(uri, files.mimeType(file))
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -127,7 +155,10 @@ class FileOpener(
 
     fun send(list: List<File>) {
         if (list.isEmpty()) return
-        val uris = ArrayList(list.map(files::shareUri))
+        val uris = catching { ArrayList(list.map(files::shareUri)) }.getOrElse {
+            messenger.show(context.getString(R.string.error_title))
+            return
+        }
         val intent = if (uris.size == 1) {
             Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris[0]).setType(files.mimeType(list[0]))
         } else {
@@ -135,12 +166,25 @@ class FileOpener(
         }
         intent.clipData = ClipData.newRawUri(null, uris[0]).apply { uris.drop(1).forEach { addItem(ClipData.Item(it)) } }
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        context.startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            context.startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: ActivityNotFoundException) {
+            messenger.show(context.getString(R.string.no_app_to_open))
+        }
     }
 
     /** Shares a text (a link). */
     fun shareText(text: String) {
         val intent = Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_TEXT, text).setType("text/plain")
-        context.startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            context.startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: ActivityNotFoundException) {
+            messenger.show(context.getString(R.string.no_app_to_open))
+        }
+    }
+
+    fun clear() {
+        _preparing.value = emptySet()
+        synchronized(shareBatch) { shareBatch.clear() }
     }
 }

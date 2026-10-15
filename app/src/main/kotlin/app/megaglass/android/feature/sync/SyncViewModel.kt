@@ -1,10 +1,13 @@
 package app.megaglass.android.feature.sync
 
+import app.megaglass.android.core.util.catching
+
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.core.mega.await
+import app.megaglass.android.core.mega.keepAlive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -77,7 +80,7 @@ class SyncViewModel : ViewModel() {
     fun load() = viewModelScope.launch {
         val (items, stalled) = withContext(Dispatchers.IO) {
             val list = api.syncs
-            (0 until list.size()).map { list.get(it).toItem() } to api.isSyncStalled
+            list.keepAlive { (0 until it.size()).map { i -> it.get(i).toItem() } } to api.isSyncStalled
         }
         _state.update { it.copy(syncs = items, stalled = stalled) }
     }
@@ -101,19 +104,29 @@ class SyncViewModel : ViewModel() {
         )
     }
 
-    fun pause(item: SyncItem) = act { api.pauseSync(item.backupId) }
+    private val busy = mutableSetOf<Long>()
 
-    fun resume(item: SyncItem) = act { api.resumeSync(item.backupId) }
+    fun pause(item: SyncItem) = act(item) { api.await { graph.mega.api.setSyncState(item.backupId, MegaSync.SyncRunningState.RUNSTATE_SUSPENDED, it) } }
 
-    fun remove(item: SyncItem) = act { api.removeSync(item.backupId) }
+    fun resume(item: SyncItem) = act(item) { api.await { graph.mega.api.setSyncState(item.backupId, MegaSync.SyncRunningState.RUNSTATE_RUNNING, it) } }
 
-    private fun act(block: () -> Unit) = viewModelScope.launch {
-        withContext(Dispatchers.IO) { block() }
-        load()
+    fun remove(item: SyncItem) = act(item) { api.await { graph.mega.api.removeSync(item.backupId, it) } }
+
+    private fun act(item: SyncItem, block: suspend () -> Unit) {
+        if (!busy.add(item.backupId)) return
+        viewModelScope.launch {
+            try {
+                catching { withContext(Dispatchers.IO) { block() } }
+                    .onFailure { graph.messenger.show(it.message ?: "Sync operation failed") }
+                load()
+            } finally {
+                busy.remove(item.backupId)
+            }
+        }
     }
 
     /** Adds a two-way sync between a local folder and a cloud folder. Returns an error text or null. */
-    suspend fun add(localPath: String, remoteHandle: Long, name: String): String? = runCatching {
+    suspend fun add(localPath: String, remoteHandle: Long, name: String): String? = catching {
         withContext(Dispatchers.IO) {
             api.await { syncFolder(MegaSync.SyncType.TYPE_TWOWAY, localPath, name, remoteHandle, null, it) }
         }
@@ -121,15 +134,18 @@ class SyncViewModel : ViewModel() {
 
     /** Items that the sync cannot resolve alone (name clashes, permissions, ...). */
     suspend fun stalls(): List<StallItem> = withContext(Dispatchers.IO) {
-        val list = runCatching { api.await { requestMegaSyncStallList(it) }.megaSyncStallList }.getOrNull()
+        val request = catching { api.await { requestMegaSyncStallList(it) } }.getOrNull()
             ?: return@withContext emptyList()
-        (0 until list.size()).map { i ->
-            val s = list.get(i)
-            StallItem(
-                reason = stallReason(s.reason()),
-                localPath = if (s.pathCount(false) > 0) s.path(false, 0).orEmpty() else "",
-                cloudPath = if (s.pathCount(true) > 0) s.path(true, 0).orEmpty() else "",
-            )
+        request.keepAlive { r ->
+            val list = r.megaSyncStallList ?: return@keepAlive emptyList()
+            (0 until list.size()).map { i ->
+                val s = list.get(i)
+                StallItem(
+                    reason = stallReason(s.reason()),
+                    localPath = if (s.pathCount(false) > 0) s.path(false, 0).orEmpty() else "",
+                    cloudPath = if (s.pathCount(true) > 0) s.path(true, 0).orEmpty() else "",
+                )
+            }
         }
     }
 

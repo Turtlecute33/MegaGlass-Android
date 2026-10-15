@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.links
 
+import app.megaglass.android.core.util.catching
+
 import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
@@ -10,11 +12,19 @@ import app.megaglass.android.core.mega.MegaException
 import app.megaglass.android.core.mega.NodeItem
 import app.megaglass.android.core.mega.await
 import app.megaglass.android.core.mega.awaitResult
+import app.megaglass.android.core.mega.keepAlive
+import app.megaglass.android.core.mega.sortedFor
 import app.megaglass.android.core.mega.toItem
+import app.megaglass.android.core.storage.localFileName
+import app.megaglass.android.core.storage.VerifiedFiles
+import app.megaglass.android.core.storage.ensureDirectory
+import app.megaglass.android.core.storage.availableName
 import app.megaglass.android.core.transfers.Purpose
 import app.megaglass.android.core.transfers.TransferStatus
 import app.megaglass.android.core.util.FileType
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -31,6 +41,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import nz.mega.sdk.MegaApiJava
 import nz.mega.sdk.MegaDownloadItemList
 import nz.mega.sdk.MegaError
@@ -97,16 +108,30 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
     private var usedFolderApi = false
     private var inAlbumPreview = false
     private val imageLocks = HashMap<Long, Mutex>()
+    private var openJob: Job? = null
+    private var childrenJob: Job? = null
+    private var folderOwner: Long? = null
+    private var albumOwner: Long? = null
 
     /** The link with its key, for import. */
     val resolvedUrl: String get() = link.url
 
     init {
         open()
+        viewModelScope.launch {
+            graph.mega.folderOwner.collect { owner ->
+                if (folderOwner != null && folderOwner != owner) {
+                    openJob?.cancel()
+                    childrenJob?.cancel()
+                    fail("Another folder link is open. Reopen this link to continue.", R.drawable.ic_link_off)
+                }
+            }
+        }
     }
 
     private fun open() {
-        viewModelScope.launch {
+        openJob?.cancel()
+        openJob = viewModelScope.launch {
             _ui.value = LinkUi.Loading
             when (val l = link) {
                 is MegaLink.Protected -> _ui.value = LinkUi.NeedPassword(wrong = false)
@@ -118,7 +143,9 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
 
     fun submitPassword(password: String) = viewModelScope.launch {
         _ui.value = LinkUi.Loading
-        val (code, request) = api.awaitResult { decryptPasswordProtectedLink(link.url, password, it) }
+        val result = catching { api.awaitResult { decryptPasswordProtectedLink(link.url, password, it) } }
+            .getOrElse { handle(it); return@launch }
+        val (code, request) = result
         if (code != MegaError.API_OK || request.text.isNullOrBlank()) {
             _ui.value = LinkUi.NeedPassword(wrong = true)
             return@launch
@@ -150,7 +177,7 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
     }
 
     private suspend fun load(l: MegaLink) {
-        runCatching {
+        catching {
             when (l) {
                 is MegaLink.File -> loadFile(l)
                 is MegaLink.Folder -> loadFolder(l)
@@ -175,9 +202,14 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
         _ui.value = LinkUi.FileLink(node.toPublicItem(node.handle))
     }
 
-    private suspend fun loadFolder(l: MegaLink.Folder) {
+    private suspend fun loadFolder(l: MegaLink.Folder) = graph.mega.folderSessionLock.withLock {
         usedFolderApi = true
-        if (folderApi.isLoggedIn != 0) runCatching { folderApi.await { logout(it) } }
+        folderOwner = graph.mega.folderOwner.value + 1
+        graph.mega.folderOwner.value = folderOwner!!
+        if (folderApi.isLoggedIn != 0) {
+            val closed = withTimeoutOrNull(15_000L) { folderApi.await { localLogout(it) }; true }
+            if (closed != true) throw java.io.IOException("Could not close the previous folder link")
+        }
         _ui.value = LinkUi.Fetching(null)
         folderApi.await { loginToFolder(l.url, it) }
         folderApi.await(onUpdate = { r ->
@@ -186,7 +218,7 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
         val root = withContext(Dispatchers.IO) { folderApi.rootNode }
         if (root == null || !root.isNodeKeyDecrypted) {
             _ui.value = LinkUi.NeedKey(wrong = true)
-            return
+            return@withLock
         }
         // Start in the sub-folder of the link, or in the folder that holds the linked file.
         val start = withContext(Dispatchers.IO) {
@@ -207,24 +239,27 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
         loadChildren()
     }
 
-    private suspend fun loadAlbum(l: MegaLink.Album) {
+    private suspend fun loadAlbum(l: MegaLink.Album) = graph.mega.publicSetLock.withLock {
+        albumOwner = ++graph.mega.publicSetOwner
         val request = api.await { fetchPublicSet(l.url, it) }
         inAlbumPreview = true
-        val set = request.megaSet
-        val elements = request.megaSetElementList
-        val ids = (0 until (elements?.size() ?: 0L)).map { elements!!.get(it).id() }
+        // The set and its elements belong to the request: read them before it can be collected.
+        val (setName, ids) = request.keepAlive { r ->
+            val elements = r.megaSetElementList
+            r.megaSet?.name().orEmpty() to (0 until (elements?.size() ?: 0L)).map { elements!!.get(it).id() }
+        }
         val gate = Semaphore(6)
         val nodes = coroutineScope {
             ids.map { eid ->
                 async {
                     gate.withPermit {
-                        runCatching { api.await { getPreviewElementNode(eid, it) }.publicMegaNode }.getOrNull()?.let { eid to it }
+                        catching { api.await { getPreviewElementNode(eid, it) }.publicMegaNode }.getOrNull()?.let { eid to it }
                     }
                 }
             }.awaitAll().filterNotNull()
         }
         nodes.forEach { (eid, node) -> albumNodes[eid] = node }
-        _ui.value = LinkUi.AlbumLink(set?.name().orEmpty(), nodes.map { (eid, node) -> node.toPublicItem(eid) })
+        _ui.value = LinkUi.AlbumLink(setName, nodes.map { (eid, node) -> node.toPublicItem(eid) })
     }
 
     private fun MegaNode.toPublicItem(id: Long) = PublicItem(
@@ -240,14 +275,17 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
 
     fun currentParent(): Long? = _folder.value.stack.lastOrNull()?.handle ?: folderApi.rootNode?.handle
 
-    private fun loadChildren() = viewModelScope.launch {
+    private fun loadChildren() {
+        childrenJob?.cancel()
+        childrenJob = viewModelScope.launch {
         val parentHandle = currentParent() ?: return@launch
         val order = graph.settings.current.sortOrder
         val items = withContext(Dispatchers.IO) {
             val parent = folderApi.getNodeByHandle(parentHandle) ?: return@withContext emptyList()
-            folderApi.getChildren(parent, order.sdkOrder).map { it.toItem(folderApi) }
+            folderApi.getChildren(parent, order.sdkOrder).map { it.toItem(folderApi) }.sortedFor(order)
         }
-        _folder.update { it.copy(items = items, selection = emptySet()) }
+        if (currentParent() == parentHandle) _folder.update { it.copy(items = items, selection = emptySet()) }
+        }
     }
 
     fun enter(item: NodeItem) {
@@ -278,6 +316,7 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
 
     /** Selected items, or the open folder when nothing is selected. */
     private fun folderTargets(): List<MegaNode> {
+        check(folderOwner == graph.mega.folderOwner.value) { "Reopen this folder link before continuing" }
         val selection = _folder.value.selection
         return if (selection.isEmpty()) {
             listOfNotNull(currentParent()?.let { folderApi.getNodeByHandle(it) })
@@ -289,23 +328,39 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
     // Actions
 
     fun importTo(target: Long) = viewModelScope.launch {
-        runCatching {
-            val parent = withContext(Dispatchers.IO) { api.getNodeByHandle(target) } ?: return@runCatching
+        catching {
+            val parent = withContext(Dispatchers.IO) { api.getNodeByHandle(target) }
+                ?: throw MegaException(MegaError.API_ENOENT, "The destination folder is no longer available")
             when (val ui = _ui.value) {
-                is LinkUi.FileLink -> api.await { importFileLink(link.url, parent, it) }
+                is LinkUi.FileLink -> {
+                    if (withContext(Dispatchers.IO) { api.getChildNode(parent, ui.item.name) } != null) {
+                        throw MegaException(MegaError.API_EEXIST, "The destination already contains an item named ${ui.item.name}")
+                    }
+                    api.await { importFileLink(link.url, parent, it) }
+                }
                 is LinkUi.FolderLink -> {
-                    val nodes = withContext(Dispatchers.IO) { folderTargets().mapNotNull { folderApi.authorizeNode(it) } }
-                    coroutineScope { nodes.map { n -> async { api.await { copyNode(n, parent, it) } } }.awaitAll() }
+                    val nodes = withContext(Dispatchers.IO) { folderTargets().map { folderApi.authorizeNode(it)
+                        ?: throw MegaException(MegaError.API_EACCESS, "Cannot import this linked item") } }
+                    copyLinkedNodes(nodes, parent)
                     clearSelection()
                 }
                 is LinkUi.AlbumLink -> {
                     val nodes = ui.items.mapNotNull { albumNodes[it.id] }
-                    coroutineScope { nodes.map { n -> async { api.await { copyNode(n, parent, it) } } }.awaitAll() }
+                    copyLinkedNodes(nodes, parent)
                 }
-                else -> return@runCatching
+                else -> return@catching
             }
             graph.messenger.show(res.getString(R.string.link_imported))
         }.onFailure { graph.messenger.show(importError(it)) }
+    }
+
+    private suspend fun copyLinkedNodes(nodes: List<MegaNode>, parent: MegaNode) = withContext(Dispatchers.IO) {
+        val used = HashSet<String>()
+        for (node in nodes) {
+            val name = availableName(node.name.orEmpty(), node.isFolder) { it in used || api.getChildNode(parent, it) != null }
+            used += name
+            api.await { copyNode(node, parent, name, it) }
+        }
     }
 
     private fun importError(e: Throwable): String = when ((e as? MegaException)?.code) {
@@ -314,7 +369,7 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
     }
 
     /** Downloads into the download folder. The main SDK instance runs it, so it shows in Transfers. */
-    fun download() = viewModelScope.launch {
+    fun download() = viewModelScope.launch { catching {
         val dir = graph.files.downloadDir(graph.settings.current)
         val count = withContext(Dispatchers.IO) {
             val items = MegaDownloadItemList.createInstance()
@@ -342,25 +397,37 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
             clearSelection()
             graph.messenger.show(res.getQuantityString(R.plurals.download_started, count, count))
         }
-    }
+    }.onFailure { graph.messenger.show(it.message ?: res.getString(R.string.error_title)) } }
 
     /** Adds the files under [node] with their folder structure; each file is authorized for the main instance. */
     private fun addTree(node: MegaNode, dir: File, out: MegaDownloadItemList) {
-        if (node.isFile) {
-            folderApi.authorizeNode(node)?.let { out.add(it, dir.absolutePath + File.separator, null, Purpose.DOWNLOAD) }
-            return
+        val queue = java.util.ArrayDeque<Pair<MegaNode, File>>()
+        queue.add(node to dir)
+        while (queue.isNotEmpty()) {
+            val (current, parent) = queue.removeFirst()
+            if (current.isFile) {
+                val authorized = folderApi.authorizeNode(current) ?: throw java.io.IOException("Cannot access linked file")
+                out.add(authorized, parent.absolutePath + File.separator, null, Purpose.DOWNLOAD)
+                continue
+            }
+            val name = safeName(current.name.orEmpty().ifBlank { "Folder" })
+            var sub = File(parent, name)
+            var suffix = 1
+            while (sub.exists()) sub = File(parent, "$name (${suffix++})")
+            if (!sub.canonicalPath.startsWith(parent.canonicalPath + File.separator)) throw java.io.IOException("Invalid linked folder path")
+            sub.ensureDirectory()
+            folderApi.getChildren(current).forEach { queue.add(it to sub) }
         }
-        val sub = File(dir, safeName(node.name.orEmpty().ifBlank { "Folder" })).apply { mkdirs() }
-        folderApi.getChildren(node).forEach { addTree(it, sub, out) }
     }
 
-    private fun safeName(name: String) = name.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+    private fun safeName(name: String) = localFileName(name).replace(Regex("[:*?\"<>|]"), "_")
 
     /**
      * Downloads a file into the cache and emits it on [openLocal], for viewers that read local files.
      * [id] is the node handle (file and folder links) or the element id (albums).
      */
     fun openCached(id: Long, purpose: String = Purpose.PREVIEW) = viewModelScope.launch {
+        if (id in _preparing.value) return@launch
         val node = when (_ui.value) {
             is LinkUi.FileLink -> fileNode
             is LinkUi.AlbumLink -> albumNodes[id]
@@ -368,35 +435,31 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
             else -> null
         } ?: return@launch
         val dir = File(if (purpose == Purpose.OPEN) graph.files.openDir else cacheDir, MegaApiJava.handleToBase64(node.handle))
-        val target = File(dir, node.name.orEmpty())
-        if (target.exists() && target.length() == node.size) {
+        val target = File(dir, localFileName(node.name.orEmpty()))
+        if (withContext(Dispatchers.IO) { VerifiedFiles.contains(target, node.size) }) {
             if (purpose == Purpose.OPEN) graph.opener.view(target) else _openLocal.tryEmit(target)
             return@launch
         }
         dir.mkdirs()
         _preparing.update { it + id }
-        val done = launch {
-            val item = graph.transfers.completed.first { t ->
-                val f = File(t.localPath)
-                f.name == target.name && f.parentFile?.name == dir.name
-            }
+        val done = launch(start = CoroutineStart.UNDISPATCHED) {
+            val item = graph.transfers.completed.first { t -> t.localPath == target.absolutePath && t.purpose == purpose }
             _preparing.update { it - id }
             if (item.status == TransferStatus.COMPLETED) {
                 // FileOpener opens OPEN downloads by itself.
-                if (purpose != Purpose.OPEN) _openLocal.tryEmit(target)
+            if (purpose == Purpose.OPEN) graph.opener.view(target) else _openLocal.tryEmit(target)
             } else {
                 graph.messenger.show(item.error ?: res.getString(R.string.error_title))
             }
         }
-        val started = withContext(Dispatchers.IO) {
-            runCatching {
-                api.startDownload(
-                    node, dir.absolutePath + File.separator, target.name, purpose, true, null,
-                    MegaTransfer.COLLISION_CHECK_ASSUMEDIFFERENT, MegaTransfer.COLLISION_RESOLUTION_OVERWRITE,
-                )
-            }.isSuccess
+        try {
+            graph.transfers.downloadPublicNodeTo(node, target, purpose)
+        } catch (e: Exception) {
+            done.cancel()
+            _preparing.update { it - id }
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            graph.messenger.show(e.message ?: res.getString(R.string.error_title))
         }
-        if (started) graph.transfers.onActive?.invoke() else { done.cancel(); _preparing.update { it - id } }
     }
 
     /** Thumbnail (or preview when [large]) of a file or album element, cached on disk. */
@@ -413,7 +476,7 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
         return lock.withLock {
             if (file.length() > 0) return@withLock file
             val tmp = File(cacheDir, file.name + ".part")
-            val ok = runCatching {
+            val ok = catching {
                 if (usePreview) api.await { getPreview(node, tmp.absolutePath, it) }
                 else api.await { getThumbnail(node, tmp.absolutePath, it) }
             }.isSuccess
@@ -422,8 +485,18 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
     }
 
     override fun onCleared() {
-        if (usedFolderApi) graph.scope.launch { runCatching { folderApi.await { logout(it) } } }
-        if (inAlbumPreview) runCatching { api.stopPublicSetPreview() }
+        if (usedFolderApi) graph.scope.launch {
+            graph.mega.folderSessionLock.withLock {
+                if (folderOwner == graph.mega.folderOwner.value) {
+                    withTimeoutOrNull(15_000L) { catching { folderApi.await { localLogout(it) } } }
+                }
+            }
+        }
+        if (inAlbumPreview) graph.scope.launch {
+            graph.mega.publicSetLock.withLock {
+                if (albumOwner == graph.mega.publicSetOwner) catching { api.stopPublicSetPreview() }
+            }
+        }
     }
 
     companion object {

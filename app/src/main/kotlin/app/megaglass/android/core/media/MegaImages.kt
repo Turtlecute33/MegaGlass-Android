@@ -3,6 +3,9 @@ package app.megaglass.android.core.media
 import android.content.Context
 import app.megaglass.android.core.mega.Mega
 import app.megaglass.android.core.mega.await
+import app.megaglass.android.core.storage.ensureDirectory
+import app.megaglass.android.core.storage.privateCacheKey
+import app.megaglass.android.core.storage.trimImageCache
 import coil3.ImageLoader
 import coil3.decode.DataSource
 import coil3.decode.ImageSource
@@ -17,6 +20,7 @@ import okio.FileSystem
 import okio.Path.Companion.toOkioPath
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicLong
 
 /** Coil data: the thumbnail (200 px) or preview (1000 px) of a node. */
 data class NodeImage(val handle: Long, val preview: Boolean = false, val folderLink: Boolean = false)
@@ -29,6 +33,8 @@ data class UserAvatar(val user: String, val version: Int = 0)
  * The SDK downloads and decrypts the file attribute; Coil decodes it and keeps the bitmap in memory.
  */
 class MegaImages(context: Context, private val mega: Mega) {
+    private val generation = AtomicLong()
+    private val writes = AtomicLong()
 
     private val root = File(context.cacheDir, "images")
     private val thumbs = File(root, "thumbs").apply { mkdirs() }
@@ -38,34 +44,44 @@ class MegaImages(context: Context, private val mega: Mega) {
     fun file(image: NodeImage): File =
         File(if (image.preview) previews else thumbs, MegaApiJava.handleToBase64(image.handle) + ".jpg")
 
-    fun file(avatar: UserAvatar): File = File(avatars, avatar.user.hashCode().toUInt().toString(16) + ".jpg")
+    fun file(avatar: UserAvatar): File = File(avatars, privateCacheKey(avatar.user) + ".jpg")
 
     suspend fun load(image: NodeImage): File = withContext(Dispatchers.IO) {
+        val epoch = generation.get()
         val target = file(image)
-        if (target.length() > 0) return@withContext target
+        if (target.length() > 0) { target.setLastModified(System.currentTimeMillis()); return@withContext target }
+        target.parentFile!!.ensureDirectory()
         val api = if (image.folderLink) mega.folderApi else mega.api
         val node = api.getNodeByHandle(image.handle) ?: throw IOException("Node not found")
         val tmp = File.createTempFile("img", ".part", target.parentFile)
         try {
             if (image.preview) api.await { getPreview(node, tmp.absolutePath, it) }
             else api.await { getThumbnail(node, tmp.absolutePath, it) }
+            if (epoch != generation.get()) throw IOException("Image cache was cleared")
             if (!tmp.renameTo(target)) throw IOException("Cannot write image cache")
+            target.setLastModified(System.currentTimeMillis())
         } finally {
             tmp.delete()
         }
+        trim()
         target
     }
 
     suspend fun load(avatar: UserAvatar): File = withContext(Dispatchers.IO) {
+        val epoch = generation.get()
         val target = file(avatar)
-        if (target.length() > 0) return@withContext target
+        if (target.length() > 0) { target.setLastModified(System.currentTimeMillis()); return@withContext target }
+        target.parentFile!!.ensureDirectory()
         val tmp = File.createTempFile("avatar", ".part", target.parentFile)
         try {
             mega.api.await { getUserAvatar(avatar.user, tmp.absolutePath, it) }
+            if (epoch != generation.get()) throw IOException("Image cache was cleared")
             if (!tmp.renameTo(target)) throw IOException("Cannot write image cache")
+            target.setLastModified(System.currentTimeMillis())
         } finally {
             tmp.delete()
         }
+        trim()
         target
     }
 
@@ -81,11 +97,16 @@ class MegaImages(context: Context, private val mega: Mega) {
     }
 
     fun clear() {
+        generation.incrementAndGet()
         root.deleteRecursively()
         thumbs.mkdirs(); previews.mkdirs(); avatars.mkdirs()
     }
 
     fun sizeOnDisk(): Long = root.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+
+    private fun trim() {
+        if (writes.incrementAndGet() % 64 == 0L) trimImageCache(root, 256L * 1024 * 1024)
+    }
 
     private fun result(file: File): FetchResult = SourceFetchResult(
         source = ImageSource(file.toOkioPath(), FileSystem.SYSTEM),

@@ -49,9 +49,11 @@ import app.megaglass.android.ui.nav.DeviceCentre
 import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.nav.Notifications
 import app.megaglass.android.ui.nav.Offline
+import app.megaglass.android.ui.nav.Photos
 import app.megaglass.android.ui.nav.Rubbish
 import app.megaglass.android.ui.nav.Settings
 import app.megaglass.android.ui.nav.SettingsAbout
+import app.megaglass.android.ui.nav.Shared
 import app.megaglass.android.ui.nav.Syncs
 import app.megaglass.android.ui.nav.Transfers
 import kotlinx.coroutines.Dispatchers
@@ -86,6 +88,8 @@ fun MenuScreen(vm: AccountViewModel = viewModel()) {
 
     val active = transfers.active.size
     val filesRows = listOf(
+        SettingRow.Link(R.drawable.ic_photo_library, stringResource(R.string.tab_photos)) { nav.navigate(Photos) },
+        SettingRow.Link(R.drawable.ic_folder_shared, stringResource(R.string.shared_title)) { nav.navigate(Shared()) },
         SettingRow.Link(
             R.drawable.ic_swap_vert,
             stringResource(R.string.menu_transfers),

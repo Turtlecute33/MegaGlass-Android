@@ -1,5 +1,7 @@
 package app.megaglass.android.core.security
 
+import app.megaglass.android.core.util.catching
+
 import android.os.SystemClock
 import android.util.Base64
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -38,10 +40,29 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
         if (SystemClock.elapsedRealtime() - backgroundSince >= s.lockTimeout * 1000L) _locked.value = true
     }
 
-    suspend fun verify(passcode: String): Boolean = withContext(Dispatchers.Default) {
-        val stored = settings.current.passcodeHash ?: return@withContext true
-        val (salt, hash) = stored.split(":").map { Base64.decode(it, Base64.NO_WRAP) }
-        MessageDigest.isEqual(hash, derive(passcode, salt))
+    /** Wrong passcodes in a row, also across app restarts. */
+    var failures: Int = settings.current.lockFailures
+        private set
+
+    /** Checks [passcode] and counts the wrong ones. */
+    suspend fun verify(passcode: String): Boolean {
+        val ok = withContext(Dispatchers.Default) {
+            val stored = settings.current.passcodeHash ?: return@withContext true
+            catching {
+                val parts = stored.split(":")
+                if (parts.size != 2) return@catching false
+                val salt = Base64.decode(parts[0], Base64.NO_WRAP)
+                val hash = Base64.decode(parts[1], Base64.NO_WRAP)
+                salt.size == 16 && hash.size == 32 && MessageDigest.isEqual(hash, derive(passcode, salt))
+            }.getOrDefault(false)
+        }
+        failures = settings.update { it.copy(lockFailures = if (ok) 0 else it.lockFailures + 1) }.lockFailures
+        return ok
+    }
+
+    /** After an unlock that did not use the passcode (biometric). */
+    suspend fun resetFailures() {
+        failures = settings.update { it.copy(lockFailures = 0) }.lockFailures
     }
 
     fun unlock() {
@@ -56,11 +77,13 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
                 Base64.encodeToString(salt, Base64.NO_WRAP) + ":" + Base64.encodeToString(derive(it, salt), Base64.NO_WRAP)
             }
         }
+        failures = 0
         settings.update {
             it.copy(
                 passcodeHash = value,
                 passcodeLength = passcode?.length ?: it.passcodeLength,
                 biometricUnlock = if (value == null) false else it.biometricUnlock,
+                lockFailures = 0,
             )
         }
         _locked.value = false
@@ -68,6 +91,10 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
 
     private fun derive(passcode: String, salt: ByteArray): ByteArray {
         val spec = PBEKeySpec(passcode.toCharArray(), salt, 120_000, 256)
-        return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+        return try {
+            SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+        } finally {
+            spec.clearPassword()
+        }
     }
 }

@@ -1,7 +1,7 @@
 package app.megaglass.android.feature.photos
 
-import android.content.ClipData
-import android.content.ClipboardManager
+import app.megaglass.android.core.util.catching
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -68,6 +68,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -91,6 +92,7 @@ import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.IconAction
 import app.megaglass.android.ui.components.LoadingBox
 import app.megaglass.android.ui.components.TextInputDialog
+import app.megaglass.android.ui.components.copySensitive
 import app.megaglass.android.ui.nav.Album
 import app.megaglass.android.ui.nav.AppNavigator
 import app.megaglass.android.ui.nav.CameraUploadsSettings
@@ -136,6 +138,7 @@ fun PhotosScreen() {
                 Column {
                     TopAppBar(
                         title = { Text(stringResource(R.string.tab_photos)) },
+                        navigationIcon = { BackButton { nav.back() } },
                         actions = {
                             IconAction(R.drawable.ic_photo_camera, stringResource(R.string.cu_title), { nav.navigate(CameraUploadsSettings) })
                         },
@@ -277,6 +280,7 @@ private fun FilterRow(filter: MediaFilter, onFilter: (MediaFilter) -> Unit) {
 fun CameraUploadsCard(onOpen: () -> Unit, modifier: Modifier = Modifier) {
     val status by CameraUploads.status.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val resources = LocalResources.current
     val graph = MegaGlassApp.graph
     val s = status
     if (s is CuStatus.Idle) {
@@ -449,7 +453,7 @@ fun AlbumScreen(route: Album) {
     var picking by remember { mutableStateOf(false) }
     var link by remember { mutableStateOf<String?>(null) }
     BackHandler(enabled = selecting) { vm.clearSelection() }
-    LaunchedEffect(state.deleted) { if (state.deleted) nav.back() }
+    LaunchedEffect(state.deleted) { if (state.deleted) nav.backFrom(route) }
 
     val sections = remember(state.entries) { PhotosViewModel.group(state.media, MediaFilter.ALL) }
     val user = !state.isSystem
@@ -598,7 +602,7 @@ private fun MediaPickerSheet(exclude: Set<Long>, onPick: (Set<Long>) -> Unit, on
     var sections by remember { mutableStateOf<List<DaySection>?>(null) }
     var selection by remember { mutableStateOf(emptySet<Long>()) }
     LaunchedEffect(Unit) {
-        val all = runCatching { PhotosRepository.timeline(MediaFilter.ALL, graph.settings.current.showHidden) }.getOrDefault(emptyList())
+        val all = catching { PhotosRepository.timeline(MediaFilter.ALL, graph.settings.current.showHidden) }.getOrDefault(emptyList())
         sections = PhotosViewModel.group(all.filter { it.handle !in exclude }, MediaFilter.ALL)
     }
     val toggle = { m: MediaItem -> selection = if (m.handle in selection) selection - m.handle else selection + m.handle }
@@ -645,6 +649,7 @@ private fun MediaPickerSheet(exclude: Set<Long>, onPick: (Set<Long>) -> Unit, on
 @Composable
 private fun AlbumLinkDialog(link: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val graph = MegaGlassApp.graph
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -661,8 +666,8 @@ private fun AlbumLinkDialog(link: String, onDismiss: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { graph.opener.shareText(link) }) { Text(stringResource(R.string.action_send)) }
                 Button(onClick = {
-                    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("MEGA link", link))
-                    graph.messenger.show(context.getString(R.string.copied))
+                    copySensitive(context, link)
+                    graph.messenger.show(resources.getString(R.string.copied))
                 }) { Text(stringResource(R.string.copy_link)) }
             }
         },

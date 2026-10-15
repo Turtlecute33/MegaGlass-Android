@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.photos
 
+import app.megaglass.android.core.util.catching
+
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -53,15 +55,16 @@ class PhotosViewModel : ViewModel() {
     fun load() {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            runCatching { PhotosRepository.timeline(MediaFilter.ALL, graph.settings.current.showHidden) }
+            catching { PhotosRepository.timeline(MediaFilter.ALL, graph.settings.current.showHidden) }
                 .onSuccess { all ->
                     val sections = withContext(Dispatchers.Default) { group(all, _state.value.filter) }
+                    val handles = all.mapTo(HashSet()) { it.handle }
                     _state.update { st ->
                         st.copy(
                             all = all,
                             sections = sections,
                             error = null,
-                            selection = st.selection.filterTo(HashSet()) { h -> all.any { it.handle == h } },
+                            selection = st.selection.filterTo(HashSet()) { it in handles },
                         )
                     }
                     loadAlbums()
@@ -72,7 +75,7 @@ class PhotosViewModel : ViewModel() {
 
     private suspend fun loadAlbums() {
         val all = _state.value.all ?: return
-        val user = runCatching { PhotosRepository.userAlbums() }.getOrDefault(emptyList())
+        val user = catching { PhotosRepository.userAlbums() }.getOrDefault(emptyList())
         _state.update { it.copy(albums = PhotosRepository.systemAlbums(all) + user) }
     }
 
@@ -98,7 +101,7 @@ class PhotosViewModel : ViewModel() {
     fun clearSelection() = _state.update { it.copy(selection = emptySet()) }
 
     fun createAlbum(name: String, withSelection: Boolean, onCreated: (Long) -> Unit) = viewModelScope.launch {
-        runCatching {
+        catching {
             val id = PhotosRepository.createAlbum(name)
             if (withSelection) PhotosRepository.addToAlbum(id, _state.value.selection)
             id
@@ -110,7 +113,7 @@ class PhotosViewModel : ViewModel() {
 
     fun addSelectionTo(albumId: Long, done: (Int) -> Unit) = viewModelScope.launch {
         val handles = _state.value.selection
-        runCatching { PhotosRepository.addToAlbum(albumId, handles) }
+        catching { PhotosRepository.addToAlbum(albumId, handles) }
             .onSuccess {
                 clearSelection()
                 done(handles.size)
@@ -180,14 +183,15 @@ class AlbumViewModel(private val id: Long, private val systemName: String) : Vie
                 _state.update { it.copy(deleted = true, entries = emptyList()) }
                 return@launch
             }
-            val entries = runCatching { PhotosRepository.albumEntries(id, showHidden) }.getOrDefault(emptyList())
+            val entries = catching { PhotosRepository.albumEntries(id, showHidden) }.getOrDefault(emptyList())
             val exported = withContext(Dispatchers.IO) { graph.mega.api.isExportedSet(id) }
+            val handles = entries.mapTo(HashSet()) { it.media.handle }
             _state.update { st ->
                 st.copy(
                     name = name,
                     entries = entries,
                     isExported = exported,
-                    selection = st.selection.filterTo(HashSet()) { h -> entries.any { it.media.handle == h } },
+                    selection = st.selection.filterTo(HashSet()) { it in handles },
                 )
             }
         }
@@ -202,7 +206,7 @@ class AlbumViewModel(private val id: Long, private val systemName: String) : Vie
     fun clearSelection() = _state.update { it.copy(selection = emptySet()) }
 
     private fun run(block: suspend () -> Unit) = viewModelScope.launch {
-        runCatching { block() }.onFailure { graph.messenger.show(it.message ?: "") }
+        catching { block() }.onFailure { graph.messenger.show(it.message ?: "") }
     }
 
     fun rename(name: String) = run { PhotosRepository.renameAlbum(id, name) }

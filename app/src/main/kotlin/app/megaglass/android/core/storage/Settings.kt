@@ -1,5 +1,7 @@
 package app.megaglass.android.core.storage
 
+import app.megaglass.android.core.util.catching
+
 import android.content.Context
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
@@ -20,6 +22,9 @@ import nz.mega.sdk.MegaApiJava
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
+/** The screen that shows when the app opens. */
+enum class StartPage { HOME, DRIVE, ME }
+
 enum class SortOrder(val sdkOrder: Int) {
     NAME_ASC(MegaApiJava.ORDER_DEFAULT_ASC),
     NAME_DESC(MegaApiJava.ORDER_DEFAULT_DESC),
@@ -36,6 +41,7 @@ data class AppSettings(
     val dynamicColor: Boolean = true,
     val pureBlack: Boolean = false,
     val gridView: Boolean = false,
+    /** Sort order of lists that are not folders (Shared items, categories); folders have their own (FolderSorts). */
     val sortOrder: SortOrder = SortOrder.NAME_ASC,
     val showHidden: Boolean = false,
     /** Absolute path of the download folder; null means Download/MegaGlass. */
@@ -57,8 +63,11 @@ data class AppSettings(
     val biometricUnlock: Boolean = false,
     /** Seconds in the background before the app locks again. */
     val lockTimeout: Int = 0,
+    /** Wrong passcodes in a row. Stored, so that closing the app does not reset the count. */
+    val lockFailures: Int = 0,
     val secureScreen: Boolean = false,
     val photosGridColumns: Int = 4,
+    val startPage: StartPage = StartPage.HOME,
 )
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -87,18 +96,20 @@ class Settings(context: Context, scope: CoroutineScope) {
         val passcodeLength = intPreferencesKey("passcode_length")
         val biometricUnlock = booleanPreferencesKey("biometric_unlock")
         val lockTimeout = intPreferencesKey("lock_timeout")
+        val lockFailures = intPreferencesKey("lock_failures")
         val secureScreen = booleanPreferencesKey("secure_screen")
         val photosGridColumns = intPreferencesKey("photos_columns")
+        val startPage = stringPreferencesKey("start_page")
     }
 
     private fun Preferences.toSettings(): AppSettings {
         val d = AppSettings()
         return AppSettings(
-            themeMode = this[K.themeMode]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: d.themeMode,
+            themeMode = this[K.themeMode]?.let { catching { ThemeMode.valueOf(it) }.getOrNull() } ?: d.themeMode,
             dynamicColor = this[K.dynamicColor] ?: d.dynamicColor,
             pureBlack = this[K.pureBlack] ?: d.pureBlack,
             gridView = this[K.gridView] ?: d.gridView,
-            sortOrder = this[K.sortOrder]?.let { runCatching { SortOrder.valueOf(it) }.getOrNull() } ?: d.sortOrder,
+            sortOrder = this[K.sortOrder]?.let { catching { SortOrder.valueOf(it) }.getOrNull() } ?: d.sortOrder,
             showHidden = this[K.showHidden] ?: d.showHidden,
             downloadDir = this[K.downloadDir],
             fastTransfers = this[K.fastTransfers] ?: d.fastTransfers,
@@ -113,8 +124,10 @@ class Settings(context: Context, scope: CoroutineScope) {
             passcodeLength = this[K.passcodeLength] ?: d.passcodeLength,
             biometricUnlock = this[K.biometricUnlock] ?: d.biometricUnlock,
             lockTimeout = this[K.lockTimeout] ?: d.lockTimeout,
+            lockFailures = this[K.lockFailures] ?: d.lockFailures,
             secureScreen = this[K.secureScreen] ?: d.secureScreen,
             photosGridColumns = this[K.photosGridColumns] ?: d.photosGridColumns,
+            startPage = this[K.startPage]?.let { catching { StartPage.valueOf(it) }.getOrNull() } ?: d.startPage,
         )
     }
 
@@ -138,8 +151,10 @@ class Settings(context: Context, scope: CoroutineScope) {
         this[K.passcodeLength] = s.passcodeLength
         this[K.biometricUnlock] = s.biometricUnlock
         this[K.lockTimeout] = s.lockTimeout
+        this[K.lockFailures] = s.lockFailures
         this[K.secureScreen] = s.secureScreen
         this[K.photosGridColumns] = s.photosGridColumns
+        this[K.startPage] = s.startPage.name
     }
 
     /**
@@ -152,9 +167,9 @@ class Settings(context: Context, scope: CoroutineScope) {
 
     val current: AppSettings get() = state.value
 
-    suspend fun update(transform: (AppSettings) -> AppSettings) {
-        store.edit { prefs -> prefs.write(transform(prefs.toSettings())) }
-    }
+    /** Changes the settings and returns the new values. */
+    suspend fun update(transform: (AppSettings) -> AppSettings): AppSettings =
+        store.edit { prefs -> prefs.write(transform(prefs.toSettings())) }.toSettings()
 
     suspend fun reset() {
         store.edit { it.clear() }

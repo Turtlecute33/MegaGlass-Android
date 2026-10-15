@@ -1,5 +1,8 @@
 package app.megaglass.android.feature.auth
 
+import app.megaglass.android.ui.components.rememberPasswordStrength
+import app.megaglass.android.MegaGlassApp
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -331,7 +334,7 @@ private fun Signup(state: AuthState, vm: AuthViewModel) {
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var accepted by rememberSaveable { mutableStateOf(false) }
-    val strength = remember(password) { vm.strength(password) }
+    val strength = rememberPasswordStrength(password, MegaGlassApp.graph.mega.api)
     val mismatch = confirm.isNotEmpty() && confirm != password
     val valid = first.isNotBlank() && email.contains('@') && strength >= 1 && password == confirm && accepted
     Title(stringResource(R.string.auth_signup_title), stringResource(R.string.auth_signup_subtitle))

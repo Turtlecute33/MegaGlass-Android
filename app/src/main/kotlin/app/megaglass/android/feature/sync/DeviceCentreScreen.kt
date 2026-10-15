@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.sync
 
+import app.megaglass.android.core.util.catching
+
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -45,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -54,6 +57,7 @@ import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.mega.await
 import app.megaglass.android.core.mega.awaitResult
+import app.megaglass.android.core.mega.keepAlive
 import app.megaglass.android.core.util.Format
 import app.megaglass.android.ui.components.BackButton
 import app.megaglass.android.ui.components.EmptyState
@@ -123,10 +127,15 @@ private fun MegaBackupInfo.health(): Health = when (state()) {
 /** Loads the backups and syncs of all devices of the account, grouped by device. */
 private suspend fun loadDevices(): List<DeviceEntry> = withContext(Dispatchers.IO) {
     val api = MegaGlassApp.graph.mega.api
-    val list = api.await { getBackupInfo(it) }.megaBackupInfoList ?: return@withContext emptyList()
+    // The backup infos belong to the request, and the loop below suspends: keep the request alive.
+    val request = api.await { getBackupInfo(it) }
+    request.keepAlive { r -> devices(api, r.megaBackupInfoList ?: return@keepAlive emptyList()) }
+}
+
+private suspend fun devices(api: MegaApiJava, list: nz.mega.sdk.MegaBackupInfoList): List<DeviceEntry> {
     val infos = (0 until list.size()).map { list.get(it) }.filter { it.state() != MegaBackupInfo.BACKUP_STATE_DELETED }
     val thisDevice = api.deviceId.orEmpty()
-    infos.groupBy { it.deviceId().orEmpty() }.map { (deviceId, items) ->
+    return infos.groupBy { it.deviceId().orEmpty() }.map { (deviceId, items) ->
         val (code, request) = api.awaitResult { getDeviceName(deviceId, it) }
         val stored = if (code == MegaError.API_OK) request.name.orEmpty() else ""
         val isThis = deviceId == thisDevice
@@ -182,6 +191,7 @@ fun DeviceCentreScreen() {
     val nav = LocalNavigator.current
     val graph = MegaGlassApp.graph
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     var devices by remember { mutableStateOf<List<DeviceEntry>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -191,7 +201,7 @@ fun DeviceCentreScreen() {
     var renaming by remember { mutableStateOf<DeviceEntry?>(null) }
 
     LaunchedEffect(reload) {
-        runCatching { loadDevices() }
+        catching { loadDevices() }
             .onSuccess { devices = it; error = null }
             .onFailure { error = it.message }
         refreshing = false
@@ -241,7 +251,7 @@ fun DeviceCentreScreen() {
                     } else {
                         BackupList(device, padding) { entry ->
                             if (entry.root == MegaApiJava.INVALID_HANDLE || graph.mega.api.getNodeByHandle(entry.root) == null) {
-                                graph.messenger.show(context.getString(R.string.device_folder_missing))
+                                graph.messenger.show(resources.getString(R.string.device_folder_missing))
                             } else if (entry.type == MegaApiJava.BACKUP_TYPE_BACKUP_UPLOAD) {
                                 nav.navigate(Backups(entry.root))
                             } else {
@@ -262,7 +272,7 @@ fun DeviceCentreScreen() {
             initial = device.name,
             onConfirm = { name ->
                 scope.launch {
-                    runCatching {
+                    catching {
                         withContext(Dispatchers.IO) { graph.mega.api.await { setDeviceName(device.id, name, it) } }
                     }.onFailure { graph.messenger.show(it.message.orEmpty()) }
                     reload++

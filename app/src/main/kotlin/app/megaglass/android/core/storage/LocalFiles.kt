@@ -1,5 +1,7 @@
 package app.megaglass.android.core.storage
 
+import app.megaglass.android.core.util.catching
+
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
@@ -14,7 +16,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 
-/** A local file to upload. [temporary] files are copies that the SDK deletes after the upload. */
+/** [temporary] sources are private copies removed only after a successful upload. */
 data class LocalSource(val path: String, val name: String, val temporary: Boolean)
 
 /** Local file system helpers: real paths for content URIs, download folders, sharing. */
@@ -43,33 +45,48 @@ class LocalFiles(private val context: Context) {
      * path, which avoids a copy. Otherwise the content is copied into the cache.
      */
     suspend fun resolveForUpload(uri: Uri): LocalSource? = withContext(Dispatchers.IO) {
+        if (uri.scheme == ContentResolver.SCHEME_CONTENT && uri.authority == context.packageName + ".files") return@withContext null
         if (uri.scheme == ContentResolver.SCHEME_FILE) {
             val f = File(uri.path ?: return@withContext null)
+            if (!f.isFile || !f.canRead() || isPrivate(f)) return@withContext null
             return@withContext LocalSource(f.absolutePath, f.name, temporary = false)
         }
         val name = displayName(uri) ?: "file-${System.currentTimeMillis()}"
         realPath(uri)?.let { path ->
             val f = File(path)
-            if (f.canRead()) return@withContext LocalSource(f.absolutePath, f.name, temporary = false)
+            if (f.isFile && f.canRead() && !isPrivate(f)) return@withContext LocalSource(f.absolutePath, f.name, temporary = false)
         }
         val dir = File(uploadTmpDir, UUID.randomUUID().toString()).apply { mkdirs() }
-        val target = File(dir, name.replace('/', '_'))
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            target.outputStream().use { input.copyTo(it, 1 shl 20) }
-        } ?: return@withContext null
-        LocalSource(target.absolutePath, target.name, temporary = true)
+        val target = File(dir, localFileName(name))
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { input.copyTo(it, 1 shl 20) }
+            } ?: throw java.io.IOException("Cannot read shared file")
+            LocalSource(target.absolutePath, target.name, temporary = true)
+        } catch (e: Exception) {
+            dir.deleteRecursively()
+            throw e
+        }
     }
 
-    fun displayName(uri: Uri): String? = runCatching {
+    /** A file in the private storage of this app: a share from another app must not upload it. */
+    private fun isPrivate(file: File): Boolean {
+        return overlapsPrivateStorage(file, context.dataDir) ||
+            overlapsPrivateStorage(file, context.createDeviceProtectedStorageContext().dataDir)
+    }
+
+    fun displayName(uri: Uri): String? = catching {
         context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
             if (c.moveToFirst()) c.getString(0) else null
         }
     }.getOrNull()
 
     /** Real file path behind a content URI, when it can be found. */
-    fun realPath(uri: Uri): String? {
+    fun realPath(uri: Uri): String? = queryRealPath(uri)?.takeUnless { isPrivate(File(it)) }
+
+    private fun queryRealPath(uri: Uri): String? {
         if (!hasAllFilesAccess) return null
-        runCatching {
+        catching {
             if (DocumentsContract.isDocumentUri(context, uri) && uri.authority == "com.android.externalstorage.documents") {
                 val parts = DocumentsContract.getDocumentId(uri).split(":", limit = 2)
                 if (parts.size == 2) {
@@ -109,13 +126,13 @@ class LocalFiles(private val context: Context) {
     }
 
     @Suppress("DEPRECATION")
-    private fun dataColumn(uri: Uri): String? = runCatching {
+    private fun dataColumn(uri: Uri): String? = catching {
         context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DATA), null, null, null)?.use { c ->
             if (c.moveToFirst()) c.getString(0) else null
         }
     }.getOrNull()
 
-    /** Removes empty folders left by uploads of copied files (the SDK deletes the copies). */
+    /** Removes empty folders left after successful copied-upload cleanup. */
     fun cleanUploadTemp() {
         uploadTmpDir.listFiles()?.forEach { dir -> if (dir.isDirectory && dir.list().isNullOrEmpty()) dir.delete() }
     }

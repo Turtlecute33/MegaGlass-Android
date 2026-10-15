@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.viewer
 
+import app.megaglass.android.core.util.catching
+
 import android.app.ActivityManager
 import android.content.Context
 import android.graphics.Bitmap
@@ -57,6 +59,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -75,6 +78,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.math.sqrt
 import java.io.File
 
 /**
@@ -83,23 +87,32 @@ import java.io.File
  */
 private class PdfDocument(file: File, context: Context) {
     private val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-    private val renderer = PdfRenderer(fd)
+    private val renderer = try { PdfRenderer(fd) } catch (e: Exception) { fd.close(); throw e }
     private val lock = Mutex()
     val pageCount = renderer.pageCount
     /** Width / height of each page. */
-    val ratios: List<Float> = (0 until pageCount).map { i ->
-        renderer.openPage(i).use { it.width.toFloat() / it.height.coerceAtLeast(1) }
-    }
+    private var closed = false
+    val ratios: List<Float> = try {
+        (0 until pageCount).map { i -> renderer.openPage(i).use { it.width.coerceAtLeast(1).toFloat() / it.height.coerceAtLeast(1) } }
+    } catch (e: Exception) { renderer.close(); fd.close(); throw e }
     private val cache = object : LruCache<Int, Bitmap>(cacheBytes(context)) {
         override fun sizeOf(key: Int, value: Bitmap) = value.allocationByteCount
     }
 
+    /** Bitmap size of a page. Very tall pages (receipts, long exports) get fewer pixels: a canvas cannot draw a bitmap above 100 MB. */
+    private fun size(index: Int, width: Int): Pair<Int, Int> {
+        val w = width.coerceAtMost(MAX_WIDTH).coerceAtLeast(1)
+        val h = (w / ratios[index]).coerceAtLeast(1f)
+        val scale = minOf(1f, sqrt(MAX_PIXELS / (w * h)))
+        return (w * scale).toInt().coerceAtLeast(1) to (h * scale).toInt().coerceAtLeast(1)
+    }
+
     suspend fun render(index: Int, width: Int): Bitmap = withContext(Dispatchers.IO) {
-        cache.get(index)?.takeIf { it.width >= width }?.let { return@withContext it }
+        val (w, h) = size(index, width)
+        cache.get(index)?.takeIf { it.width >= w }?.let { return@withContext it }
         lock.withLock {
+            check(!closed) { "PDF is closed" }
             val bitmap = renderer.openPage(index).use { page ->
-                val w = width.coerceAtMost(MAX_WIDTH)
-                val h = (w / ratios[index]).toInt().coerceAtLeast(1)
                 Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { b ->
                     b.eraseColor(AndroidColor.WHITE)
                     page.render(b, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
@@ -114,8 +127,10 @@ private class PdfDocument(file: File, context: Context) {
     fun close() {
         MegaGlassApp.graph.scope.launch(Dispatchers.IO) {
             lock.withLock {
-                runCatching { renderer.close() }
-                runCatching { fd.close() }
+                if (closed) return@withLock
+                closed = true
+                catching { renderer.close() }
+                catching { fd.close() }
                 cache.evictAll()
             }
         }
@@ -123,6 +138,8 @@ private class PdfDocument(file: File, context: Context) {
 
     companion object {
         const val MAX_WIDTH = 2400
+        /** 12 MP, 48 MB in ARGB_8888. */
+        const val MAX_PIXELS = 12_000_000f
         fun cacheBytes(context: Context): Int {
             val mb = context.getSystemService(ActivityManager::class.java).memoryClass
             return (mb * 1024 * 1024 / 6).coerceAtLeast(16 * 1024 * 1024)
@@ -133,6 +150,7 @@ private class PdfDocument(file: File, context: Context) {
 @Composable
 fun PdfViewerScreen(route: PdfViewer) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val graph = MegaGlassApp.graph
     val nav = LocalNavigator.current
     var file by remember { mutableStateOf(route.localPath?.let(::File)) }
@@ -146,21 +164,21 @@ fun PdfViewerScreen(route: PdfViewer) {
         val api = if (route.folderLink) graph.mega.folderApi else graph.mega.api
         val node = withContext(Dispatchers.IO) { api.getNodeByHandle(route.handle) }
         if (node == null) {
-            error = context.getString(R.string.viewer_not_found)
+            error = resources.getString(R.string.viewer_not_found)
             return@LaunchedEffect
         }
         title = node.name ?: ""
-        runCatching { PreviewCache.fetch(route.handle, node.name ?: "file.pdf", node.size, route.folderLink) { progress = it } }
+        catching { PreviewCache.fetch(route.handle, node.name ?: "file.pdf", node.size, route.folderLink) { progress = it } }
             .onSuccess { file = it }
-            .onFailure { error = it.message ?: context.getString(R.string.error_title) }
+            .onFailure { error = it.message ?: resources.getString(R.string.error_title) }
     }
 
     var document by remember { mutableStateOf<PdfDocument?>(null) }
     LaunchedEffect(file) {
         val f = file ?: return@LaunchedEffect
         // Opening reads every page size: off the main thread.
-        document = withContext(Dispatchers.IO) { runCatching { PdfDocument(f, context) }.getOrNull() }
-        if (document == null) error = context.getString(R.string.viewer_pdf_error)
+        document = withContext(Dispatchers.IO) { catching { PdfDocument(f, context) }.getOrNull() }
+        if (document == null) error = resources.getString(R.string.viewer_pdf_error)
     }
     DisposableEffect(document) {
         val doc = document
@@ -274,7 +292,7 @@ private fun PdfPages(doc: PdfDocument, listState: androidx.compose.foundation.la
 @Composable
 private fun PdfPage(doc: PdfDocument, index: Int, width: Int) {
     var bitmap by remember(index) { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(index, width) { bitmap = runCatching { doc.render(index, width) }.getOrNull() }
+    LaunchedEffect(index, width) { bitmap = catching { doc.render(index, width) }.getOrNull() }
     Surface(
         shape = MaterialTheme.shapes.small,
         shadowElevation = 2.dp,

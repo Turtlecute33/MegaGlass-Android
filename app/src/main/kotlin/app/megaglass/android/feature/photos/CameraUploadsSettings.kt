@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.photos
 
+import app.megaglass.android.core.util.catching
+
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -42,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -64,6 +67,7 @@ import kotlinx.coroutines.launch
 fun CameraUploadsSettingsScreen() {
     val graph = MegaGlassApp.graph
     val context = LocalContext.current
+    val resources = LocalResources.current
     val nav = LocalNavigator.current
     val scope = rememberCoroutineScope()
     val settings by graph.settings.state.collectAsStateWithLifecycle()
@@ -76,7 +80,7 @@ fun CameraUploadsSettingsScreen() {
     val defaultFolder = stringResource(R.string.cu_default_folder)
 
     LaunchedEffect(folderVersion) {
-        val h = runCatching { CameraUploads.currentFolder(graph.mega) }.getOrNull()
+        val h = catching { CameraUploads.currentFolder(graph.mega) }.getOrNull()
         folderHandle = h
         folderName = h?.let { graph.nodes.item(it)?.name }
     }
@@ -89,8 +93,8 @@ fun CameraUploadsSettingsScreen() {
         val partial = context.checkSelfPermission(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
         when {
             images && (videos || !settings.cuIncludeVideos) -> askExisting = true
-            partial -> graph.messenger.show(context.getString(R.string.cu_partial_access))
-            else -> graph.messenger.show(context.getString(R.string.cu_permission_denied))
+            partial -> graph.messenger.show(resources.getString(R.string.cu_partial_access))
+            else -> graph.messenger.show(resources.getString(R.string.cu_permission_denied))
         }
     }
     val requestEnable = {
@@ -215,7 +219,7 @@ fun CameraUploadsSettingsScreen() {
             start = folderHandle,
             onPick = { handle ->
                 scope.launch {
-                    runCatching { CameraUploads.setFolder(graph.mega, handle) }
+                    catching { CameraUploads.setFolder(graph.mega, handle) }
                         .onFailure { graph.messenger.show(it.message ?: "") }
                     folderVersion++
                 }

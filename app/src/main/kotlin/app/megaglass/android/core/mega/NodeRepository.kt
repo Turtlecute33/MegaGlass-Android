@@ -2,6 +2,7 @@ package app.megaglass.android.core.mega
 
 import androidx.compose.runtime.Immutable
 import app.megaglass.android.core.storage.SortOrder
+import app.megaglass.android.core.storage.availableName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -12,6 +13,7 @@ import nz.mega.sdk.MegaApiJava
 import nz.mega.sdk.MegaError
 import nz.mega.sdk.MegaNode
 import nz.mega.sdk.MegaSearchFilter
+import nz.mega.sdk.MegaShare
 
 @Immutable
 data class Crumb(val handle: Long, val name: String)
@@ -41,6 +43,20 @@ enum class SearchScope(val sdkLocation: Int) {
     ALL(MegaApiJava.SEARCH_TARGET_ALL),
 }
 
+/**
+ * For the modification orders the SDK sorts folders by name, because folders have no
+ * modification time. The app shows the creation date of a folder, so here folders sort by that
+ * date. Folders stay before files. Null for the other orders, which need no change.
+ */
+fun SortOrder.dateComparator(): Comparator<NodeItem>? = when (this) {
+    SortOrder.MODIFIED_DESC -> compareBy<NodeItem> { !it.isFolder }.thenByDescending { it.modified }
+    SortOrder.MODIFIED_ASC -> compareBy<NodeItem> { !it.isFolder }.thenBy { it.modified }
+    else -> null
+}
+
+/** The items in [order], with folders by date for the modification orders (see dateComparator). */
+fun List<NodeItem>.sortedFor(order: SortOrder): List<NodeItem> = order.dateComparator()?.let(::sortedWith) ?: this
+
 /** File and folder operations. Every call runs on Dispatchers.IO. */
 class NodeRepository(private val mega: Mega) {
 
@@ -69,6 +85,7 @@ class NodeRepository(private val mega: Mega) {
             .filter { showHidden || inherited || !it.isMarkedSensitive }
             .map { it.toItem(api) }
             .toList()
+            .sortedFor(order)
     }
 
     /** Folder chain from the top (Cloud drive, Rubbish bin, or an incoming share) to [handle]. */
@@ -92,17 +109,47 @@ class NodeRepository(private val mega: Mega) {
         io { api.await { renameNode(require(handle), name, it) } }
     }
 
-    suspend fun move(handles: Collection<Long>, target: Long) = forEach(handles) { node ->
+    suspend fun move(handles: Collection<Long>, target: Long) = io {
         val dest = require(target)
-        api.await { moveNode(node, dest, it) }
+        val selected = handles.distinct().map(::require)
+        val names = HashSet<String>()
+        for (node in selected) {
+            val name = node.name ?: throw MegaException(MegaError.API_EARGS, "Item has no name")
+            val existing = api.getChildNode(dest, name)
+            if (!names.add(name) || existing != null && existing.handle != node.handle) {
+                throw MegaException(MegaError.API_EEXIST, "The destination already contains an item named $name")
+            }
+        }
+        forEach(handles) { node -> api.await { moveNode(node, dest, it) } }
     }
 
-    suspend fun copy(handles: Collection<Long>, target: Long) = forEach(handles) { node ->
+    suspend fun copy(handles: Collection<Long>, target: Long) = io {
         val dest = require(target)
-        api.await { copyNode(node, dest, it) }
+        val selected = handles.distinct().map(::require)
+        val used = HashSet<String>()
+        // Keep reservations until the entire copy batch is submitted and confirmed.
+        for (node in selected) {
+            val name = availableName(node.name.orEmpty(), node.isFolder) { it in used || api.getChildNode(dest, it) != null }
+            used += name
+            api.await { copyNode(node, dest, name, it) }
+        }
     }
 
-    suspend fun moveToRubbish(handles: Collection<Long>) = move(handles, rubbishHandle)
+    suspend fun moveToRubbish(handles: Collection<Long>) = io {
+        val dest = require(rubbishHandle)
+        val selected = handles.distinct().map(::require)
+        for (node in selected) {
+            if (api.getAccess(node) < MegaShare.ACCESS_OWNER) {
+                // Across share boundaries the SDK uses copy-delete, which can overwrite a file
+                // in the target. Preserve existing trash entries with a distinct target name.
+                val name = availableName(node.name.orEmpty(), node.isFolder) { api.getChildNode(dest, it) != null }
+                api.await { moveNode(node, dest, name, it) }
+            } else {
+                // An ordinary same-account move retains the node and permits duplicate names.
+                api.await { moveNode(node, dest, it) }
+            }
+        }
+    }
 
     suspend fun deletePermanently(handles: Collection<Long>) = forEach(handles) { node ->
         api.await { remove(node, it) }
@@ -152,8 +199,12 @@ class NodeRepository(private val mega: Mega) {
         api.await { encryptLinkWithPassword(link, password, it) }.text
     }
 
+    /** All versions of a file, newest first. [handle] can be any version (a restore makes a new current one). */
     suspend fun versions(handle: Long): List<NodeItem> = io {
-        api.getVersions(require(handle)).map { it.toItem(api, withCounts = false) }
+        var node = require(handle)
+        // A previous version is a child of the version after it.
+        while (true) node = api.getParentNode(node)?.takeIf { it.isFile } ?: break
+        api.getVersions(node).map { it.toItem(api, withCounts = false) }
     }
 
     suspend fun versionCount(handle: Long): Int = io {
@@ -173,8 +224,10 @@ class NodeRepository(private val mega: Mega) {
     }
 
     suspend fun folderInfo(handle: Long): FolderInfo = io {
-        val info = api.await { getFolderInfo(require(handle), it) }.megaFolderInfo
-        FolderInfo(info.numFiles, info.numFolders, info.currentSize, info.numVersions, info.versionsSize)
+        api.await { getFolderInfo(require(handle), it) }.keepAlive { r ->
+            val info = r.megaFolderInfo
+            FolderInfo(info.numFiles, info.numFolders, info.currentSize, info.numVersions, info.versionsSize)
+        }
     }
 
     suspend fun importLink(link: String, parent: Long): Long = io {
@@ -203,19 +256,28 @@ class NodeRepository(private val mega: Mega) {
         if (category != MegaApiJava.FILE_TYPE_DEFAULT) filter.byCategory(category)
         if (foldersOnly) filter.byNodeType(MegaNode.TYPE_FOLDER)
         if (favouritesOnly) filter.byFavourite(MegaSearchFilter.BOOL_FILTER_ONLY_TRUE)
-        if (!showHidden) filter.bySensitivity(MegaSearchFilter.BOOL_FILTER_ONLY_FALSE)
+        // ONLY_TRUE excludes sensitive nodes and nodes in sensitive folders (ONLY_FALSE returns only sensitive ones).
+        if (!showHidden) filter.bySensitivity(MegaSearchFilter.BOOL_FILTER_ONLY_TRUE)
         if (modifiedAfter > 0) filter.byModificationTime(modifiedAfter, Long.MAX_VALUE / 1000)
         val page = if (limit > 0) nz.mega.sdk.MegaSearchPage.createInstance(0, limit) else null
-        api.search(filter, order.sdkOrder, null, page).map { it.toItem(api) }
+        api.search(filter, order.sdkOrder, null, page)
+            // SEARCH_TARGET_ALL also covers the Rubbish bin; deleted items do not belong in the results.
+            .filter { parent != null || scope != SearchScope.ALL || !api.isInRubbish(it) }
+            .map { it.toItem(api) }
+            .sortedFor(order)
     }
 
     suspend fun favourites(showHidden: Boolean): List<NodeItem> =
         search("", scope = SearchScope.CLOUD, favouritesOnly = true, showHidden = showHidden, order = SortOrder.MODIFIED_DESC)
 
     suspend fun recents(days: Long = 30, maxNodes: Long = 500, showHidden: Boolean): List<RecentBucket> = io {
-        val list = api.await { getRecentActionsAsync(days, maxNodes, !showHidden, it) }.recentActions ?: return@io emptyList()
+        val request = api.await { getRecentActionsAsync(days, maxNodes, !showHidden, it) }
+        request.keepAlive { r -> r.recentActions?.let { toBuckets(it) } } ?: emptyList()
+    }
+
+    private fun toBuckets(list: nz.mega.sdk.MegaRecentActionBucketList): List<RecentBucket> {
         val me = api.myEmail
-        (0 until list.size()).map { i ->
+        return (0 until list.size()).map { i ->
             val b = list.get(i)
             val nodes = b.nodes
             val items = (0 until nodes.size()).map { nodes.get(it).toItem(api, withCounts = false) }
@@ -235,14 +297,17 @@ class NodeRepository(private val mega: Mega) {
 
     suspend fun publicLinks(order: SortOrder, showHidden: Boolean): List<NodeItem> = io {
         api.getPublicLinks(order.sdkOrder)
-            .filter { showHidden || !it.isMarkedSensitive }
+            .filter { showHidden || !it.isMarkedSensitive && !api.isSensitiveInherited(it) }
             .map { it.toItem(api) }
+            .sortedFor(order)
     }
 
     /** Runs [action] for every node concurrently; the SDK pipelines the requests. */
     private suspend fun forEach(handles: Collection<Long>, action: suspend (MegaNode) -> Unit) = io {
+        // Validate the entire selection before any mutation; vanished nodes must not count as success.
+        val nodes = handles.distinct().map(::require)
         coroutineScope {
-            handles.mapNotNull { api.getNodeByHandle(it) }.map { node -> async { action(node) } }.awaitAll()
+            for (batch in nodes.chunked(8)) batch.map { node -> async { action(node) } }.awaitAll()
         }
         Unit
     }

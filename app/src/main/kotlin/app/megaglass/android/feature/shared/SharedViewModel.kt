@@ -1,11 +1,14 @@
 package app.megaglass.android.feature.shared
 
+import app.megaglass.android.core.util.catching
+
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.mega.NodeItem
+import app.megaglass.android.core.mega.dateComparator
 import app.megaglass.android.core.mega.toItem
 import app.megaglass.android.feature.contacts.ContactDirectory
 import kotlinx.coroutines.Job
@@ -73,7 +76,7 @@ class SharedViewModel : ViewModel() {
             val s = graph.settings.current
             val order = s.sortOrder.sdkOrder
             val res = graph.context.resources
-            val incoming = runCatching {
+            val incoming = catching {
                 val shares = withContext(Dispatchers.IO) { api.getInSharesList(order) }
                 val unverified = withContext(Dispatchers.IO) { api.getUnverifiedIncomingShares(order).map { it.nodeHandle }.toSet() }
                 shares.mapNotNull { share ->
@@ -90,7 +93,7 @@ class SharedViewModel : ViewModel() {
                     }
                 }
             }.getOrDefault(emptyList())
-            val outgoing = runCatching {
+            val outgoing = catching {
                 val shares = withContext(Dispatchers.IO) { api.getOutShares(order) }
                 val unverified = withContext(Dispatchers.IO) { api.getUnverifiedOutgoingShares(order).map { it.nodeHandle }.toSet() }
                 shares.groupBy { it.nodeHandle }.mapNotNull { (handle, group) ->
@@ -104,17 +107,24 @@ class SharedViewModel : ViewModel() {
                     }
                     withContext(Dispatchers.IO) {
                         val node = api.getNodeByHandle(handle) ?: return@withContext null
-                        if (!s.showHidden && node.isMarkedSensitive) return@withContext null
+                        if (!s.showHidden && (node.isMarkedSensitive || api.isSensitiveInherited(node))) return@withContext null
                         SharedEntry(node.toItem(api), subtitle, unverified = handle in unverified)
                     }
                 }
             }.getOrDefault(emptyList())
-            val links = runCatching {
+            val links = catching {
                 graph.nodes.publicLinks(s.sortOrder, s.showHidden).map { SharedEntry(it, null) }
             }.getOrDefault(emptyList())
+            // Folders by their shown date for Newest and Oldest (see dateComparator).
+            val byDate = s.sortOrder.dateComparator()?.let { c -> compareBy<SharedEntry, NodeItem>(c) { it.item } }
             _state.update { st ->
                 val all = (incoming + outgoing + links).map { it.item.handle }.toSet()
-                st.copy(incoming = incoming, outgoing = outgoing, links = links, selection = st.selection.filterTo(HashSet()) { it in all })
+                st.copy(
+                    incoming = byDate?.let(incoming::sortedWith) ?: incoming,
+                    outgoing = byDate?.let(outgoing::sortedWith) ?: outgoing,
+                    links = links,
+                    selection = st.selection.filterTo(HashSet()) { it in all },
+                )
             }
         }
     }

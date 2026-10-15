@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.drive
 
+import app.megaglass.android.core.util.catching
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -134,12 +137,12 @@ class NodeInfoViewModel(private val handle: Long) : ViewModel() {
         }
         _state.update { loaded.copy(folderInfo = it.folderInfo) }
         if (loaded.item?.isFolder == true) {
-            runCatching { graph.nodes.folderInfo(handle) }.onSuccess { fi -> _state.update { it.copy(folderInfo = fi) } }
+            catching { graph.nodes.folderInfo(handle) }.onSuccess { fi -> _state.update { it.copy(folderInfo = fi) } }
         }
     }
 
     fun saveDescription(text: String) = viewModelScope.launch {
-        runCatching { graph.nodes.setDescription(handle, text) }.onFailure { graph.messenger.show(it.message ?: "") }
+        catching { graph.nodes.setDescription(handle, text) }.onFailure { graph.messenger.show(it.message ?: "") }
     }
 }
 
@@ -339,12 +342,18 @@ fun VersionsScreen(route: Versions) {
     var versions by remember { mutableStateOf<List<NodeItem>?>(null) }
     var reload by remember { mutableIntStateOf(0) }
     var confirmAll by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf<NodeItem?>(null) }
+    // The current version: route.handle becomes a previous version after a restore, and can then be deleted.
+    var anchor by remember { mutableLongStateOf(route.handle) }
     val actions = rememberNodeActions(NodeContext.CLOUD)
-    LaunchedEffect(reload) { versions = runCatching { graph.nodes.versions(route.handle) }.getOrDefault(emptyList()) }
+    LaunchedEffect(reload) {
+        versions = catching { graph.nodes.versions(anchor) }.getOrDefault(emptyList())
+        versions?.firstOrNull()?.let { anchor = it.handle }
+    }
     LaunchedEffect(Unit) { graph.nodes.changes.debounce(300).collect { reload++ } }
     val act = { block: suspend () -> Unit ->
         scope.launch {
-            runCatching { block() }.onFailure { graph.messenger.show(it.message ?: "") }
+            catching { block() }.onFailure { graph.messenger.show(it.message ?: "") }
             reload++
         }
         Unit
@@ -381,7 +390,7 @@ fun VersionsScreen(route: Versions) {
                             TextButton(onClick = { actions.download(listOf(v)) }) { Text(stringResource(R.string.action_download)) }
                             if (!current) {
                                 TextButton(onClick = { act { graph.nodes.restoreVersion(v.handle) } }) { Text(stringResource(R.string.action_restore)) }
-                                TextButton(onClick = { act { graph.nodes.removeVersion(v.handle) } }) { Text(stringResource(R.string.delete)) }
+                                TextButton(onClick = { confirmDelete = v }) { Text(stringResource(R.string.delete)) }
                             }
                         }
                     }
@@ -398,6 +407,16 @@ fun VersionsScreen(route: Versions) {
             destructive = true,
             onConfirm = { act { versions.orEmpty().drop(1).forEach { graph.nodes.removeVersion(it.handle) } } },
             onDismiss = { confirmAll = false },
+        )
+    }
+    confirmDelete?.let { v ->
+        ConfirmDialog(
+            title = stringResource(R.string.delete_version),
+            text = stringResource(R.string.delete_version_text),
+            confirmLabel = stringResource(R.string.delete),
+            destructive = true,
+            onConfirm = { act { graph.nodes.removeVersion(v.handle) } },
+            onDismiss = { confirmDelete = null },
         )
     }
 }

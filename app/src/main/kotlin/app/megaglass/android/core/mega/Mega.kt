@@ -3,8 +3,14 @@ package app.megaglass.android.core.mega
 import android.content.Context
 import android.os.Build
 import app.megaglass.android.BuildConfig
+import app.megaglass.android.core.util.invalidationEmitter
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.suspendCancellableCoroutine
 import nz.mega.sdk.MegaApiJava
 import nz.mega.sdk.MegaContactRequest
@@ -24,6 +30,7 @@ import nz.mega.sdk.MegaTransferListenerInterface
 import nz.mega.sdk.MegaUser
 import nz.mega.sdk.MegaUserAlert
 import java.io.File
+import java.lang.ref.Reference
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -48,6 +55,12 @@ data class SyncChange(val backupId: Long, val stats: MegaSyncStats?)
  * SDK callbacks arrive on the SDK thread (see MegaGlassApi), so listeners only emit and return.
  */
 class Mega(context: Context) {
+    private val callbackScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /** Public folder login/logout must be serialized across retained navigation entries. */
+    val folderSessionLock = Mutex()
+    val folderOwner = MutableStateFlow(0L)
+    val publicSetLock = Mutex()
+    var publicSetOwner = 0L
 
     private val userAgent = "MegaGlass/${BuildConfig.VERSION_NAME} (Android ${Build.VERSION.RELEASE}; ${Build.MODEL})"
     private val baseDir = File(context.filesDir, "mega").apply { mkdirs() }
@@ -89,6 +102,7 @@ class Mega(context: Context) {
 
     private val _nodes = MutableSharedFlow<NodeChange>(extraBufferCapacity = 64)
     val nodes: SharedFlow<NodeChange> = _nodes
+    private val emitNodes = invalidationEmitter(callbackScope, _nodes) { NodeChange(emptySet(), emptySet(), all = true) }
 
     private val _account = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
     val account: SharedFlow<Unit> = _account
@@ -96,6 +110,7 @@ class Mega(context: Context) {
     private val _users = MutableSharedFlow<List<Long>>(extraBufferCapacity = 16)
     /** Handles of users whose data changed (contacts or the own user). */
     val users: SharedFlow<List<Long>> = _users
+    private val emitUsers = invalidationEmitter(callbackScope, _users) { emptyList() }
 
     private val _alerts = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
     val alerts: SharedFlow<Unit> = _alerts
@@ -158,7 +173,7 @@ class Mega(context: Context) {
         }
 
         override fun onUsersUpdate(api: MegaApiJava, users: ArrayList<MegaUser>?) {
-            _users.tryEmit(users?.map { it.handle }.orEmpty())
+            emitUsers(users?.map { it.handle }.orEmpty())
         }
 
         override fun onUserAlertsUpdate(api: MegaApiJava, userAlerts: ArrayList<MegaUserAlert>?) {
@@ -167,7 +182,7 @@ class Mega(context: Context) {
 
         override fun onNodesUpdate(api: MegaApiJava, nodeList: ArrayList<MegaNode>?) {
             if (nodeList == null) {
-                _nodes.tryEmit(NodeChange(emptySet(), emptySet(), all = true))
+                emitNodes(NodeChange(emptySet(), emptySet(), all = true))
                 return
             }
             val handles = HashSet<Long>(nodeList.size)
@@ -178,7 +193,7 @@ class Mega(context: Context) {
                 parents += n.parentHandle
                 if (n.hasChanged(MegaNode.CHANGE_TYPE_FILE_ATTRIBUTES.toLong())) images += n.handle
             }
-            _nodes.tryEmit(NodeChange(handles, parents, all = false, imagesChanged = images))
+            emitNodes(NodeChange(handles, parents, all = false, imagesChanged = images))
         }
 
         override fun onAccountUpdate(api: MegaApiJava) {
@@ -219,7 +234,7 @@ class Mega(context: Context) {
     }
 
     init {
-        MegaApiJava.setLogLevel(if (BuildConfig.DEBUG) MegaApiJava.LOG_LEVEL_INFO else MegaApiJava.LOG_LEVEL_ERROR)
+        MegaApiJava.setLogLevel(MegaApiJava.LOG_LEVEL_ERROR)
         api.addListener(listener)
     }
 
@@ -242,7 +257,14 @@ suspend fun MegaApiJava.await(
     val listener = object : MegaRequestListenerInterface {
         override fun onRequestStart(api: MegaApiJava, request: MegaRequest) {}
         override fun onRequestUpdate(api: MegaApiJava, request: MegaRequest) {
-            onUpdate?.invoke(request)
+            if (cont.isActive) {
+                try {
+                    onUpdate?.invoke(request)
+                } catch (e: Exception) {
+                    if (cont.isActive) cont.resumeWithException(e)
+                    this@await.removeRequestListener(this)
+                }
+            }
         }
         override fun onRequestTemporaryError(api: MegaApiJava, request: MegaRequest, e: MegaError) {}
         override fun onRequestFinish(api: MegaApiJava, request: MegaRequest, e: MegaError) {
@@ -254,8 +276,27 @@ suspend fun MegaApiJava.await(
             }
         }
     }
-    call(listener)
+    try {
+        call(listener)
+    } catch (e: Exception) {
+        removeRequestListener(listener)
+        if (cont.isActive) cont.resumeWithException(e)
+    }
+    // Registered after call: cancellation before registration must also remove the delegate.
+    cont.invokeOnCancellation { removeRequestListener(listener) }
 }
+
+/**
+ * Runs [block] while this request stays alive. The objects that a request returns (recentActions,
+ * megaFolderInfo, megaSet, ...) and their items belong to the request: the SDK frees them when
+ * the request object is collected, even while they are still in use.
+ */
+inline fun <T, R> T.keepAlive(block: (T) -> R): R =
+    try {
+        block(this)
+    } finally {
+        Reference.reachabilityFence(this)
+    }
 
 /** Same as [await], but returns the SDK error code instead of throwing. */
 suspend fun MegaApiJava.awaitResult(
@@ -269,5 +310,11 @@ suspend fun MegaApiJava.awaitResult(
             if (cont.isActive) cont.resume(e.errorCode to request)
         }
     }
-    call(listener)
+    try {
+        call(listener)
+    } catch (e: Exception) {
+        removeRequestListener(listener)
+        if (cont.isActive) cont.resumeWithException(e)
+    }
+    cont.invokeOnCancellation { removeRequestListener(listener) }
 }

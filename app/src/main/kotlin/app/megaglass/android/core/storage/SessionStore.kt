@@ -4,11 +4,14 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.AtomicFile
 import java.io.File
+import java.io.IOException
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
+import javax.crypto.AEADBadTagException
 import javax.crypto.spec.GCMParameterSpec
 
 /**
@@ -17,27 +20,47 @@ import javax.crypto.spec.GCMParameterSpec
  */
 class SessionStore(context: Context) {
 
-    private val file = File(context.noBackupFilesDir, "session.bin")
+    private val file = AtomicFile(File(context.noBackupFilesDir, "session.bin"))
 
+    @Synchronized
     fun save(session: String) {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val data = cipher.iv + cipher.doFinal(session.toByteArray())
-        val tmp = File(file.parentFile, "session.tmp")
-        tmp.writeText(Base64.encodeToString(data, Base64.NO_WRAP))
-        tmp.renameTo(file)
+        val encoded = Base64.encode(data, Base64.NO_WRAP)
+        val out = file.startWrite()
+        try {
+            out.write(encoded)
+            file.finishWrite(out)
+            if (!file.readFully().contentEquals(encoded)) throw IOException("Cannot store the saved session")
+        } catch (e: Exception) {
+            file.failWrite(out)
+            throw e
+        }
     }
 
-    fun load(): String? = runCatching {
-        if (!file.exists()) return null
-        val data = Base64.decode(file.readText(), Base64.NO_WRAP)
+    @Synchronized
+    fun load(): String? {
+        if (!file.baseFile.exists()) return null
+        // IO or Keystore availability errors are recoverable; they must not be mistaken for
+        // a missing session and trigger deletion of local account data.
+        val encoded = file.readFully()
+        val data = try { Base64.decode(encoded, Base64.NO_WRAP) } catch (_: IllegalArgumentException) { return null }
+        if (data.size < IV_SIZE + 16) return null
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, data, 0, IV_SIZE))
-        String(cipher.doFinal(data, IV_SIZE, data.size - IV_SIZE))
-    }.getOrNull()
+        return try { String(cipher.doFinal(data, IV_SIZE, data.size - IV_SIZE)) }
+        catch (_: AEADBadTagException) { null }
+    }
 
+    @Synchronized
     fun clear() {
         file.delete()
+        val legacy = File(file.baseFile.parentFile, "session.tmp")
+        legacy.delete()
+        if (listOf(file.baseFile, File(file.baseFile.path + ".bak"), File(file.baseFile.path + ".new"), legacy).any { it.exists() }) {
+            throw IOException("Cannot remove the saved session")
+        }
     }
 
     private fun key(): SecretKey {

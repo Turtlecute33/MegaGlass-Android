@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.transfers
 
+import app.megaglass.android.core.util.catching
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -154,7 +156,13 @@ fun TransfersScreen() {
                                         else -> graph.messenger.show(graph.context.getString(R.string.file_moved_or_deleted))
                                     }
                                 },
-                                onRetry = { scope.launch { runCatching { transfers.retry(item) } } },
+                                onRetry = {
+                                    scope.launch {
+                                        if (!catching { transfers.retry(item) }.getOrDefault(false)) {
+                                            graph.messenger.show(graph.context.getString(R.string.retry_not_possible))
+                                        }
+                                    }
+                                },
                                 onRemove = { transfers.removeFromHistory(item) },
                                 modifier = Modifier.animateItem(),
                             )

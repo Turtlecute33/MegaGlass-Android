@@ -23,15 +23,17 @@ import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import app.megaglass.android.core.util.catching
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,8 +45,11 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
+import app.megaglass.android.core.mega.SessionState
 import app.megaglass.android.ui.components.Ic
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** Wrong codes in a row before the app logs out and removes the passcode. */
 private const val MAX_ATTEMPTS = 10
@@ -57,20 +62,24 @@ fun biometricAvailable(context: Context): Boolean =
         ?.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
 
 /** Shows the system biometric prompt; calls [onSuccess] on the main thread. */
-fun showBiometricPrompt(context: Context, title: String, cancel: String, onSuccess: () -> Unit) {
+fun showBiometricPrompt(context: Context, title: String, cancel: String, onSuccess: () -> Unit): CancellationSignal {
     val executor = ContextCompat.getMainExecutor(context)
+    val signal = CancellationSignal()
     BiometricPrompt.Builder(context)
         .setTitle(title)
         .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
         .setNegativeButton(cancel, executor) { _, _ -> }
         .build()
         .authenticate(
-            CancellationSignal(),
+            signal,
             executor,
             object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onSuccess()
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    if (!signal.isCanceled) onSuccess()
+                }
             },
         )
+    return signal
 }
 
 /** Covers the app until the passcode or a strong biometric unlocks it. */
@@ -83,37 +92,64 @@ fun LockScreen() {
     val scope = rememberCoroutineScope()
     var code by remember { mutableStateOf("") }
     var shake by remember { mutableIntStateOf(0) }
-    var attempts by rememberSaveable { mutableIntStateOf(0) }
+    val attempts = settings.lockFailures
     var checking by remember { mutableStateOf(false) }
+    var wiping by remember { mutableStateOf(false) }
+    var checkError by remember { mutableStateOf<String?>(null) }
+    var biometricSignal by remember { mutableStateOf<CancellationSignal?>(null) }
+    DisposableEffect(Unit) { onDispose { biometricSignal?.cancel() } }
     val length = settings.passcodeLength
     val biometricReady = remember { biometricAvailable(context) }
     val useBiometric = settings.biometricUnlock && biometricReady
     val promptTitle = stringResource(R.string.lock_biometric_title)
     val promptCancel = stringResource(R.string.lock_use_passcode)
     val biometric = {
-        showBiometricPrompt(activity ?: context, promptTitle, promptCancel) { graph.lock.unlock() }
+        biometricSignal?.cancel()
+        biometricSignal = showBiometricPrompt(activity ?: context, promptTitle, promptCancel) {
+            graph.lock.unlock()
+            graph.scope.launch { graph.lock.resetFailures() }
+        }
+    }
+
+    // Too many wrong passcodes: log out and delete the local data. In the app scope, so that it
+    // completes when this screen closes; the count is stored, so closing the app does not help.
+    fun wipe() {
+        if (wiping) return
+        wiping = true
+        biometricSignal?.cancel()
+        graph.scope.launch(Dispatchers.Main) {
+            try {
+                graph.session.logout()
+                val removed = graph.session.state.value == SessionState.LoggedOut && withContext(Dispatchers.IO) {
+                    java.io.File(graph.context.filesDir, "pending-uploads").deleteRecursively()
+                }
+                if (removed) graph.lock.setPasscode(null)
+                else checkError = graph.context.getString(R.string.lock_cleanup_failed)
+            } finally { wiping = false }
+        }
     }
 
     BackHandler { activity?.moveTaskToBack(true) }
-    LaunchedEffect(Unit) { if (useBiometric) biometric() }
+    LaunchedEffect(Unit) {
+        if (graph.lock.failures >= MAX_ATTEMPTS) wipe() else if (useBiometric) biometric()
+    }
 
     fun check(entered: String) {
         checking = true
         scope.launch {
-            val ok = graph.lock.verify(entered)
-            checking = false
+            val ok = try {
+                catching { graph.lock.verify(entered) }.getOrElse {
+                    checkError = graph.context.getString(R.string.lock_check_failed)
+                    return@launch
+                }
+            } finally { checking = false }
             if (ok) {
-                attempts = 0
                 graph.lock.unlock()
                 return@launch
             }
-            attempts++
             shake++
             code = ""
-            if (attempts >= MAX_ATTEMPTS) {
-                graph.session.logout()
-                graph.lock.setPasscode(null)
-            }
+            if (graph.lock.failures >= MAX_ATTEMPTS) wipe()
         }
     }
 
@@ -130,7 +166,7 @@ fun LockScreen() {
             Spacer(Modifier.height(24.dp))
             Text(stringResource(R.string.lock_title), style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
-            val left = MAX_ATTEMPTS - attempts
+            val left = (MAX_ATTEMPTS - attempts).coerceAtLeast(0)
             Text(
                 if (attempts >= WARN_AFTER) pluralStringResource(R.plurals.lock_attempts_left, left, left)
                 else stringResource(R.string.lock_subtitle),
@@ -142,7 +178,7 @@ fun LockScreen() {
             Spacer(Modifier.height(40.dp))
             NumberPad(
                 onDigit = { d ->
-                    if (checking || code.length >= length) return@NumberPad
+                    if (checking || wiping || code.length >= length) return@NumberPad
                     code += d
                     if (code.length == length) check(code)
                 },
@@ -155,6 +191,12 @@ fun LockScreen() {
                     }
                 } else null,
             )
+            checkError?.let { message ->
+                Text(message, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 16.dp))
+                if (attempts >= MAX_ATTEMPTS) TextButton(onClick = { wipe() }, enabled = !wiping) {
+                    Text(stringResource(R.string.retry))
+                }
+            }
         }
     }
 }

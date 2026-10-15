@@ -338,8 +338,9 @@ public final class FileWrapper {
             return null;
         }
         FileWrapper existing = parent.findChild(newName);
-        // A provider cannot replace a document in one step, so the old file goes first.
-        if (existing != null && (!overwrite || existing.folder || !existing.deleteDocument())) {
+        // SAF cannot atomically replace an existing document. Removing it before a fallible
+        // rename loses the user's file if the provider fails. Let the SDK report the collision.
+        if (existing != null) {
             return null;
         }
         ContentResolver resolver = resolver();
@@ -623,7 +624,7 @@ public final class FileWrapper {
     }
 
     private static boolean isValidName(String name) {
-        return name != null && !name.isEmpty() && !name.equals(".") && !name.equals("..") && name.indexOf('/') < 0;
+        return name != null && !name.isEmpty() && !name.equals(".") && !name.equals("..") && name.indexOf('/') < 0 && name.indexOf('\0') < 0;
     }
 
     private static ContentResolver resolver() {

@@ -19,7 +19,7 @@
     <string name="settings_title">Settings</string>
     <string name="about_title">About</string>
     <string name="logout_title">Log out?</string>
-    <string name="logout_text">Offline files, cached thumbnails and the transfer history on this device are deleted. Your files stay in your cloud.</string>
+    <string name="logout_text">Offline files, local text drafts, cached thumbnails and transfer history on this device are deleted. Save your edits before logging out. Photos awaiting upload stay on this device. Files already in your cloud are kept.</string>
     <plurals name="logout_transfers_warning">
         <item quantity="one">%d transfer is not finished. It stops when you log out.</item>
         <item quantity="other">%d transfers are not finished. They stop when you log out.</item>

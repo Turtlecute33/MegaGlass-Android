@@ -38,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -67,12 +68,13 @@ fun ContactDetailScreen(route: ContactDetail) {
     val state by vm.state.collectAsStateWithLifecycle()
     val nav = LocalNavigator.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     var menu by remember { mutableStateOf(false) }
     var editAlias by rememberSaveable { mutableStateOf(false) }
     var confirmRemove by rememberSaveable { mutableStateOf(false) }
     var credentials by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(state.removed) { if (state.removed) nav.back() }
+    LaunchedEffect(state.removed) { if (state.removed) nav.backFrom(route) }
 
     Scaffold(
         topBar = {
@@ -117,7 +119,7 @@ fun ContactDetailScreen(route: ContactDetail) {
                         TextButton(onClick = {
                             context.getSystemService(ClipboardManager::class.java)
                                 .setPrimaryClip(ClipData.newPlainText("e-mail", contact.email))
-                            MegaGlassApp.graph.messenger.show(context.getString(R.string.copied))
+                            MegaGlassApp.graph.messenger.show(resources.getString(R.string.copied))
                         }) {
                             Text(contact.email)
                             Spacer(Modifier.width(6.dp))

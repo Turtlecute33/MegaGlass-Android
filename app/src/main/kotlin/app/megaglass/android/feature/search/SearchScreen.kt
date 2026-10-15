@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.search
 
+import app.megaglass.android.core.util.catching
+
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
@@ -70,6 +72,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -111,26 +115,24 @@ class SearchViewModel(private val parent: Long) : ViewModel() {
 
     init {
         viewModelScope.launch {
-            combine(_state, trigger) { s, _ -> s.copy(results = null, searching = false, selection = emptySet()) }
+            combine(_state, trigger, graph.settings.state) { s, revision, settings ->
+                Triple(s.copy(results = null, searching = false, selection = emptySet()), revision, settings.sortOrder to settings.showHidden)
+            }
+                .distinctUntilChanged()
                 .debounce(250)
-                .collect { s -> search(s) }
+                .collectLatest { (s, _, _) -> search(s) }
         }
         viewModelScope.launch { graph.nodes.changes.debounce(1000).collect { trigger.update { it + 1 } } }
     }
 
-    private var lastKey: Any? = null
-
     private suspend fun search(s: SearchState) {
-        val key = listOf(s.query, s.type, s.date, s.inFolder, trigger.value)
-        if (key == lastKey) return
-        lastKey = key
         if (!s.active) {
             _state.update { it.copy(results = emptyList(), searching = false) }
             return
         }
         _state.update { it.copy(searching = true) }
         val after = if (s.date.days > 0) System.currentTimeMillis() / 1000 - s.date.days * 86_400L else 0
-        val result = runCatching {
+        val result = catching {
             graph.nodes.search(
                 query = s.query,
                 scope = SearchScope.ALL,
@@ -146,10 +148,10 @@ class SearchViewModel(private val parent: Long) : ViewModel() {
         _state.update { it.copy(results = result, searching = false) }
     }
 
-    fun setQuery(q: String) = _state.update { it.copy(query = q) }
-    fun setType(t: TypeFilter) = _state.update { it.copy(type = t) }
-    fun setDate(d: DateFilter) = _state.update { it.copy(date = d) }
-    fun setInFolder(v: Boolean) = _state.update { it.copy(inFolder = v) }
+    fun setQuery(q: String) = _state.update { it.copy(query = q, results = null, selection = emptySet()) }
+    fun setType(t: TypeFilter) = _state.update { it.copy(type = t, results = null, selection = emptySet()) }
+    fun setDate(d: DateFilter) = _state.update { it.copy(date = d, results = null, selection = emptySet()) }
+    fun setInFolder(v: Boolean) = _state.update { it.copy(inFolder = v, results = null, selection = emptySet()) }
     fun toggle(item: NodeItem) = _state.update {
         it.copy(selection = if (item.handle in it.selection) it.selection - item.handle else it.selection + item.handle)
     }

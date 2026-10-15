@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.notifications
 
+import app.megaglass.android.core.util.catching
+
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -92,7 +94,7 @@ class NotificationsViewModel : ViewModel() {
     init {
         viewModelScope.launch {
             load()
-            runCatching { api.await { acknowledgeUserAlerts(it) } }
+            catching { api.await { acknowledgeUserAlerts(it) } }
         }
         viewModelScope.launch { graph.mega.alerts.debounce(300).collect { load() } }
     }

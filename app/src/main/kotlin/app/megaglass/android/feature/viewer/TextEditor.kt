@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.viewer
 
+import app.megaglass.android.core.util.catching
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,14 +36,19 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.storage.LocalSource
+import app.megaglass.android.core.mega.SessionState
+import app.megaglass.android.core.storage.localFileName
 import app.megaglass.android.core.transfers.Purpose
 import app.megaglass.android.core.transfers.TransferStatus
 import app.megaglass.android.core.util.FileType
@@ -52,49 +59,79 @@ import app.megaglass.android.ui.components.IconAction
 import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.nav.TextEditor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import nz.mega.sdk.MegaShare
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 
 /** Files above this size open read-only in a line list, which stays fast for long logs. */
 private const val EDIT_LIMIT = 512L * 1024
 
-private fun readText(file: File): String {
-    val decoder = Charsets.UTF_8.newDecoder()
-        .onMalformedInput(CodingErrorAction.REPLACE)
-        .onUnmappableCharacter(CodingErrorAction.REPLACE)
-    return file.inputStream().use { input -> decoder.decode(java.nio.ByteBuffer.wrap(input.readBytes())).toString() }
+/** The text, and true when the file is valid UTF-8. Files in other encodings open read-only, so that a save cannot damage them. */
+private fun readText(file: File): Pair<String, Boolean> {
+    val bytes = file.readBytes()
+    return try {
+        val decoder = Charsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+        decoder.decode(ByteBuffer.wrap(bytes)).toString() to true
+    } catch (_: CharacterCodingException) {
+        String(bytes, Charsets.UTF_8) to false
+    }
+}
+
+/**
+ * The loaded file and the edits. It is a ViewModel of the entry, so unsaved edits stay while
+ * the editor is not on screen (another tab, Transfers).
+ */
+class TextEditorModel : ViewModel() {
+    var title by mutableStateOf("")
+    var text by mutableStateOf<String?>(null)
+    var canEdit by mutableStateOf(false)
+    var parent = nz.mega.sdk.MegaApiJava.INVALID_HANDLE
+    val editorState = TextFieldState()
+    var original by mutableStateOf("")
+    var saving by mutableStateOf(false)
 }
 
 @Composable
 fun TextEditorScreen(route: TextEditor) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val graph = MegaGlassApp.graph
     val nav = LocalNavigator.current
-    var title by remember { mutableStateOf(route.localPath?.let { File(it).name }.orEmpty()) }
-    var text by remember { mutableStateOf<String?>(null) }
+    val m = viewModel { TextEditorModel().apply { title = route.localPath?.let { File(it).name }.orEmpty() } }
+    var title by m::title
+    var text by m::text
+    var canEdit by m::canEdit
+    var parent by m::parent
+    val editorState = m.editorState
+    var original by m::original
     var error by remember { mutableStateOf<String?>(null) }
     var progress by remember { mutableFloatStateOf(0f) }
-    var canEdit by remember { mutableStateOf(false) }
-    var parent by remember { mutableStateOf(nz.mega.sdk.MegaApiJava.INVALID_HANDLE) }
-    var saving by remember { mutableStateOf(false) }
+    var saving by m::saving
     var attempt by remember { mutableIntStateOf(0) }
-    val editorState = remember { TextFieldState() }
-    var original by remember { mutableStateOf("") }
     var dirty by remember { mutableStateOf(false) }
     var askDiscard by remember { mutableStateOf(false) }
 
     LaunchedEffect(route, attempt) {
-        runCatching {
+        if (text != null) return@LaunchedEffect
+        catching {
             val file = if (route.localPath != null) {
                 File(route.localPath)
             } else {
                 val api = if (route.folderLink) graph.mega.folderApi else graph.mega.api
                 val node = withContext(Dispatchers.IO) { api.getNodeByHandle(route.handle) }
-                    ?: throw IllegalStateException(context.getString(R.string.viewer_not_found))
+                    ?: throw IllegalStateException(resources.getString(R.string.viewer_not_found))
                 title = node.name ?: ""
                 parent = node.parentHandle
                 canEdit = !route.folderLink && withContext(Dispatchers.IO) { api.getAccess(node) } >= MegaShare.ACCESS_READWRITE
@@ -102,11 +139,12 @@ fun TextEditorScreen(route: TextEditor) {
             }
             if (file.length() > EDIT_LIMIT) canEdit = false
             withContext(Dispatchers.IO) { readText(file) }
-        }.onSuccess {
-            text = it
-            original = it
-            if (canEdit) editorState.edit { replace(0, length, it) }
-        }.onFailure { error = it.message ?: context.getString(R.string.error_title) }
+        }.onSuccess { (content, utf8) ->
+            if (!utf8) canEdit = false
+            if (canEdit) editorState.edit { replace(0, length, content) }
+            original = content
+            text = content
+        }.onFailure { error = it.message ?: resources.getString(R.string.error_title) }
     }
     LaunchedEffect(editorState, original) {
         snapshotFlow { editorState.text.toString() }.collect { dirty = canEdit && it != original }
@@ -115,27 +153,45 @@ fun TextEditorScreen(route: TextEditor) {
     val save: () -> Unit = save@{
         if (!dirty || saving) return@save
         saving = true
-        // App scope: the save continues when the screen closes right after.
-        graph.scope.launch {
-            runCatching {
-                val content = editorState.text.toString()
-                val dir = File(context.cacheDir, "edit/" + System.nanoTime()).apply { mkdirs() }
-                val file = File(dir, title)
-                withContext(Dispatchers.IO) { file.writeText(content) }
-                // Same name in the same folder: MEGA keeps the old file as a version.
-                val done = launch {
-                    val item = graph.transfers.completed.first { it.purpose == Purpose.EDIT && it.localPath == file.absolutePath }
-                    graph.messenger.show(
-                        if (item.status == TransferStatus.COMPLETED) context.getString(R.string.editor_saved, title)
-                        else item.error ?: context.getString(R.string.error_title),
-                    )
-                }
-                graph.transfers.upload(listOf(LocalSource(file.absolutePath, title, temporary = true)), parent, Purpose.EDIT, startFirst = true)
-                original = content
-                dirty = false
-                done
-            }.onFailure { graph.messenger.show(it.message ?: context.getString(R.string.error_title)) }
-            saving = false
+        val content = editorState.text.toString()
+        val savedTitle = title
+        val savedParent = parent
+        // The save outlives the screen; edits become clean only after the SDK confirms success.
+        graph.scope.launch(Dispatchers.Main) {
+            val saveJob = currentCoroutineContext().job
+            val sessionMonitor = graph.scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                graph.session.state.first { it != SessionState.Ready }
+                saveJob.cancel()
+            }
+            try {
+                catching {
+                    withContext(Dispatchers.IO) {
+                        val api = graph.mega.api
+                        val destination = api.getNodeByHandle(savedParent) ?: throw java.io.IOException("The destination folder is no longer available")
+                        if (api.getChildNode(destination, savedTitle)?.handle != route.handle) {
+                            throw java.io.IOException("This file changed or moved. Reopen it before saving.")
+                        }
+                    }
+                    val dir = File(context.cacheDir, "edit/" + java.util.UUID.randomUUID()).apply { mkdirs() }
+                    val file = File(dir, localFileName(savedTitle))
+                    withContext(Dispatchers.IO) { file.writeText(content) }
+                    coroutineScope {
+                        val done = async(start = CoroutineStart.UNDISPATCHED) {
+                            graph.transfers.completed.first { it.purpose == Purpose.EDIT && it.localPath == file.absolutePath }
+                        }
+                        graph.transfers.upload(listOf(LocalSource(file.absolutePath, savedTitle, temporary = false)), savedParent, Purpose.EDIT, startFirst = true)
+                        val item = done.await()
+                        if (item.status != TransferStatus.COMPLETED) throw java.io.IOException(item.error ?: "Save failed")
+                    }
+                    original = content
+                    dirty = editorState.text.toString() != content
+                    withContext(Dispatchers.IO) { dir.deleteRecursively() }
+                    graph.messenger.show(resources.getString(R.string.editor_saved, savedTitle))
+                }.onFailure { graph.messenger.show(it.message ?: resources.getString(R.string.error_title)) }
+            } finally {
+                sessionMonitor.cancel()
+                saving = false
+            }
         }
     }
 

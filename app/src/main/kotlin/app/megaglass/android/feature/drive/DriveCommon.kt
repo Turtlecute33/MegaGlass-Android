@@ -53,11 +53,15 @@ private val sortLabels = mapOf(
     SortOrder.FAVOURITE to R.string.sort_favourite,
 )
 
-/** Sort and list/grid buttons for top app bars. The choice is saved for all folders. */
+/**
+ * Sort and list/grid buttons for top app bars. A folder passes its own [folderSort]; other lists
+ * (Shared items, categories) use one sort order that is saved in the settings.
+ */
 @Composable
-fun ViewOptionsActions() {
+fun ViewOptionsActions(folderSort: SortOrder? = null, onFolderSort: (SortOrder) -> Unit = {}) {
     val settings = MegaGlassApp.graph.settings
     val s by settings.state.collectAsStateWithLifecycle()
+    val current = folderSort ?: s.sortOrder
     val scope = rememberCoroutineScope()
     var open by remember { mutableStateOf(false) }
     IconAction(
@@ -73,9 +77,10 @@ fun ViewOptionsActions() {
                     text = { Text(stringResource(label)) },
                     onClick = {
                         open = false
-                        scope.launch { settings.update { it.copy(sortOrder = order) } }
+                        if (folderSort != null) onFolderSort(order)
+                        else scope.launch { settings.update { it.copy(sortOrder = order) } }
                     },
-                    trailingIcon = if (s.sortOrder == order) { { Ic(R.drawable.ic_check) } } else null,
+                    trailingIcon = if (current == order) { { Ic(R.drawable.ic_check) } } else null,
                 )
             }
         }

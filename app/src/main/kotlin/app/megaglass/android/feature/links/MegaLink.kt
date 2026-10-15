@@ -64,19 +64,30 @@ private fun replaceKey(url: String, key: String): String {
 fun parseMegaLink(raw: String): MegaLink {
     var u = raw.trim()
     if (u.startsWith("mega://", ignoreCase = true)) u = "https://mega.nz/" + u.substring(7).removePrefix("/")
-    u = u.replace(Regex("^https?://(www\\.)?mega\\.(co\\.nz|nz|io)", RegexOption.IGNORE_CASE), "https://mega.nz")
+    val uri = try { java.net.URI(u) } catch (_: java.net.URISyntaxException) { return MegaLink.Invalid(u) }
+    val hosts = setOf("mega.nz", "mega.co.nz", "mega.io", "www.mega.nz", "www.mega.co.nz", "www.mega.io")
+    val scheme = uri.scheme?.lowercase()
+    val standardPort = uri.port == -1 || scheme == "https" && uri.port == 443 || scheme == "http" && uri.port == 80
+    if (scheme !in setOf("http", "https") || uri.host?.lowercase() !in hosts || uri.rawUserInfo != null || !standardPort) {
+        return MegaLink.Invalid(u)
+    }
+    val rawPath = uri.rawPath.orEmpty().ifEmpty { "/" }
+    val legacy = rawPath == "/"
+    val modern = Regex("^/(file|folder|collection)/[A-Za-z0-9_-]+$").matches(rawPath)
+    if (!legacy && !modern) return MegaLink.Invalid(u)
+    u = "https://mega.nz" + rawPath + (uri.rawFragment?.let { "#$it" } ?: "")
     val path = u.substringBefore('#')
     val frag = fragment(u)
     return when {
-        frag.startsWith("P!") -> MegaLink.Protected(u)
-        frag.startsWith("F!") -> {
+        legacy && frag.startsWith("P!") && frag.length > 2 -> MegaLink.Protected(u)
+        legacy && frag.startsWith("F!") -> {
             val parts = frag.removePrefix("F!").split('!')
             val handle = parts.getOrNull(0).orEmpty()
-            if (handle.isEmpty()) return MegaLink.Invalid(u)
+            if (!handle.matches(Regex("[A-Za-z0-9_-]+"))) return MegaLink.Invalid(u)
             val key = parts.getOrNull(1).orEmpty()
             MegaLink.Folder("https://mega.nz/#F!$handle!$key", parts.getOrNull(2)?.substringBefore('?')?.takeIf { it.isNotEmpty() }, null)
         }
-        frag.startsWith("!") -> MegaLink.File(u)
+        legacy && frag.startsWith("!") && frag.removePrefix("!").substringBefore('!').matches(Regex("[A-Za-z0-9_-]+")) -> MegaLink.File(u)
         "/file/" in path -> MegaLink.File(u)
         "/folder/" in path -> {
             val key = frag.substringBefore('/')

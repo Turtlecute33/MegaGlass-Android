@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.shared
 
+import app.megaglass.android.core.util.catching
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -137,8 +139,8 @@ private class ShareFolderModel(private val handle: Long, private val scope: Coro
 
     fun setAccess(member: ShareMember, access: Int) = scope.launch {
         busy = true
-        runCatching {
-            val node = api.getNodeByHandle(handle) ?: return@runCatching
+        catching {
+            val node = api.getNodeByHandle(handle) ?: return@catching
             api.await { share(node, member.email, access, it) }
         }.onFailure { graph.messenger.show(error(it)) }
         busy = false
@@ -148,8 +150,8 @@ private class ShareFolderModel(private val handle: Long, private val scope: Coro
     /** Opens the share keys, then shares with each e-mail. Returns true when all succeed. */
     suspend fun share(emails: List<String>, access: Int): Boolean {
         busy = true
-        val result = runCatching {
-            val node = withContext(Dispatchers.IO) { api.getNodeByHandle(handle) } ?: return@runCatching
+        val result = catching {
+            val node = withContext(Dispatchers.IO) { api.getNodeByHandle(handle) } ?: return@catching
             api.await { openShareDialog(node, it) }
             coroutineScope {
                 emails.map { email -> async { api.await { share(node, email, access, it) } } }.awaitAll()

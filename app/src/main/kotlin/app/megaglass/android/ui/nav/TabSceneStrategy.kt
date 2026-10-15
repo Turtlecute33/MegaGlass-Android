@@ -10,18 +10,24 @@ import androidx.navigation3.scene.SceneStrategyScope
 const val TAB_METADATA = "tab"
 
 /**
- * One entry on screen; Back (and its predictive preview) goes only to earlier entries of the
- * same tab. At the root of a tab NavDisplay does not take Back, so MainScaffold can switch tabs
- * and the root of Home closes the app with the system animation.
+ * One entry on screen. Back (and its predictive preview) goes to the entry before it, which is
+ * the previous entry of the same tab or, at the root of a tab, the top of the tab used before
+ * (see AppNavigator.back). At the root of the [start] tab NavDisplay does not take Back, so the
+ * system closes the app with its own animation.
+ *
+ * NavDisplay calls onBack once for each entry that is not in previousEntries, so
+ * previousEntries must hold all the other entries: one Back pops one entry.
  */
-class TabSceneStrategy : SceneStrategy<StackEntry> {
+class TabSceneStrategy(private val start: Tab) : SceneStrategy<StackEntry> {
     override fun SceneStrategyScope<StackEntry>.calculateScene(entries: List<NavEntry<StackEntry>>): Scene<StackEntry> {
         val last = entries.last()
-        val tab = last.metadata[TAB_METADATA]
+        val startName = start.name
+        val atStartRoot = last.metadata[TAB_METADATA] == startName &&
+            entries.getOrNull(entries.lastIndex - 1)?.metadata?.get(TAB_METADATA) != startName
         return TabScene(
             key = last.contentKey,
             entry = last,
-            previousEntries = entries.dropLast(1).filter { it.metadata[TAB_METADATA] == tab },
+            previousEntries = if (atStartRoot) emptyList() else entries.dropLast(1),
         )
     }
 }

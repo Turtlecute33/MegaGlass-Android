@@ -1,6 +1,5 @@
 package app.megaglass.android.ui.nav
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.tween
@@ -25,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -36,6 +36,7 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -43,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,8 +65,6 @@ private data class TabInfo(val tab: Tab, val label: Int, val icon: Int, val sele
 private val tabs = listOf(
     TabInfo(Tab.HOME, R.string.tab_home, R.drawable.ic_home, R.drawable.ic_home_fill),
     TabInfo(Tab.DRIVE, R.string.tab_drive, R.drawable.ic_cloud, R.drawable.ic_cloud_fill),
-    TabInfo(Tab.PHOTOS, R.string.tab_photos, R.drawable.ic_photo_library, R.drawable.ic_photo_library_fill),
-    TabInfo(Tab.SHARED, R.string.tab_shared, R.drawable.ic_folder_shared, R.drawable.ic_folder_shared_fill),
     TabInfo(Tab.MENU, R.string.tab_menu, R.drawable.ic_account_circle, R.drawable.ic_account_circle_fill),
 )
 
@@ -74,10 +74,13 @@ fun MainScaffold(nav: AppNavigator) {
     val route = nav.currentRoute
     val fullScreen = route is FullScreen
     val snackbar = remember { SnackbarHostState() }
+    val viewModels = remember(nav) { NavigationViewModels() }
+    DisposableEffect(viewModels) { onDispose { viewModels.close() } }
 
     LaunchedEffect(Unit) {
         graph.messenger.messages.collect { m ->
-            val result = snackbar.showSnackbar(m.text, m.actionLabel, withDismissAction = m.actionLabel == null)
+            // With an action the default duration is Indefinite, which would hold back all later messages.
+            val result = snackbar.showSnackbar(m.text, m.actionLabel, withDismissAction = m.actionLabel == null, duration = SnackbarDuration.Long)
             if (result == SnackbarResult.ActionPerformed) m.onAction?.invoke()
         }
     }
@@ -95,9 +98,6 @@ fun MainScaffold(nav: AppNavigator) {
     val adaptive = currentWindowAdaptiveInfo()
     val suiteType = if (fullScreen) NavigationSuiteType.None
     else NavigationSuiteScaffoldDefaults.navigationSuiteType(adaptive)
-
-    // At the root of a tab other than Home, Back returns to the previous tab.
-    BackHandler(enabled = nav.currentTab != Tab.HOME && nav.isAtTabRoot) { nav.back() }
 
     NavigationSuiteScaffold(
         navigationSuiteType = suiteType,
@@ -121,14 +121,21 @@ fun MainScaffold(nav: AppNavigator) {
                 onBack = { nav.back() },
                 entryDecorators = listOf(
                     rememberSaveableStateHolderNavEntryDecorator(),
-                    rememberViewModelStoreNavEntryDecorator(),
+                    rememberViewModelStoreNavEntryDecorator(viewModelStoreOwner = viewModels),
                 ),
-                sceneStrategies = remember { listOf(TabSceneStrategy()) },
+                sceneStrategies = remember { listOf(TabSceneStrategy(nav.startTab)) },
                 transitionSpec = { forward() },
                 popTransitionSpec = { backward() },
                 predictivePopTransitionSpec = { backward() },
                 entryProvider = { e ->
-                    NavEntry(e, contentKey = e.id, metadata = mapOf(TAB_METADATA to e.tab.name)) { RouteContent(it.route) }
+                    NavEntry(e, contentKey = e.id, metadata = mapOf(TAB_METADATA to e.tab.name)) {
+                        Box(propagateMinConstraints = true) {
+                            RouteContent(it.route)
+                            // A screen that is leaving (or shown behind a Back gesture) takes no taps,
+                            // so a second tap on Back or on an item does not navigate again.
+                            if (nav.backStack.lastOrNull()?.id != it.id) Spacer(Modifier.matchParentSize().pointerInput(Unit) {})
+                        }
+                    }
                 },
             )
             TransferPill(

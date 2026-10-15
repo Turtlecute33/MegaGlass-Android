@@ -1,9 +1,12 @@
 package app.megaglass.android.feature.photos
 
+import app.megaglass.android.core.util.catching
+
 import androidx.compose.runtime.Immutable
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.core.mega.NodeItem
 import app.megaglass.android.core.mega.await
+import app.megaglass.android.core.mega.keepAlive
 import app.megaglass.android.core.mega.toItem
 import app.megaglass.android.core.util.FileType
 import app.megaglass.android.ui.nav.Album
@@ -25,8 +28,13 @@ enum class MediaFilter { ALL, PHOTOS, VIDEOS }
 @Immutable
 data class MediaItem(val node: NodeItem, val takenAt: Long) {
     val handle get() = node.handle
-    val day: LocalDate get() = Instant.ofEpochSecond(takenAt).atZone(ZoneId.systemDefault()).toLocalDate()
+    val day: LocalDate get() = mediaDay(takenAt)
 }
+
+/** Invalid dates in shared media metadata must not crash the photo timeline. */
+internal fun mediaDay(seconds: Long): LocalDate = catching {
+    Instant.ofEpochSecond(seconds).atZone(ZoneId.systemDefault()).toLocalDate()
+}.getOrDefault(LocalDate.ofEpochDay(0))
 
 @Immutable
 data class AlbumInfo(
@@ -72,7 +80,7 @@ object PhotosRepository {
                 MediaFilter.VIDEOS -> MegaApiJava.FILE_TYPE_VIDEO
             },
         )
-        if (!showHidden) f.bySensitivity(MegaSearchFilter.BOOL_FILTER_ONLY_FALSE)
+        if (!showHidden) f.bySensitivity(MegaSearchFilter.BOOL_FILTER_ONLY_TRUE)
         api.search(f, MegaApiJava.ORDER_MEDIATS_DESC, null, null)
             .asSequence()
             .map { it.toMedia(api) }
@@ -101,6 +109,7 @@ object PhotosRepository {
     /** User albums, newest first. */
     suspend fun userAlbums(): List<AlbumInfo> = withContext(Dispatchers.IO) {
         val sets = api.sets
+        sets.keepAlive {
         (0 until sets.size()).mapNotNull { i ->
             val set = sets.get(i)
             if (set.type() != MegaSet.SET_TYPE_ALBUM) return@mapNotNull null
@@ -108,9 +117,9 @@ object PhotosRepository {
             val count = elements.size().toInt()
             val coverElement = api.getSetCover(set.id())
             val coverNode = if (coverElement != MegaApiJava.INVALID_HANDLE) api.getSetElement(set.id(), coverElement)?.node() else null
-            val cover = coverNode ?: (0 until count).asSequence()
+            val cover = coverNode ?: elements.keepAlive { (0 until count).asSequence()
                 .map { elements.get(it.toLong()).node() }
-                .firstOrNull { api.getNodeByHandle(it) != null }
+                .firstOrNull { api.getNodeByHandle(it) != null } }
             AlbumInfo(
                 id = set.id(),
                 name = set.name() ?: "",
@@ -120,24 +129,27 @@ object PhotosRepository {
                 isExported = set.isExported,
             ) to set.ts()
         }.sortedByDescending { it.second }.map { it.first }
+        }
     }
 
     /** Items of a user album, newest first. Elements whose node is gone are left out. */
     suspend fun albumEntries(id: Long, showHidden: Boolean): List<AlbumEntry> = withContext(Dispatchers.IO) {
         val elements = api.getSetElements(id)
+        elements.keepAlive {
         (0 until elements.size()).mapNotNull { i ->
             val e = elements.get(i)
             val node = api.getNodeByHandle(e.node()) ?: return@mapNotNull null
             if (api.isInRubbish(node)) return@mapNotNull null
-            if (!showHidden && node.isMarkedSensitive) return@mapNotNull null
+            if (!showHidden && (node.isMarkedSensitive || api.isSensitiveInherited(node))) return@mapNotNull null
             AlbumEntry(e.id(), node.toMedia(api))
         }.sortedByDescending { it.media.takenAt }
+        }
     }
 
     fun albumName(id: Long): String? = api.getSet(id)?.name()
 
     suspend fun createAlbum(name: String): Long = withContext(Dispatchers.IO) {
-        api.await { createSet(name, MegaSet.SET_TYPE_ALBUM, it) }.megaSet.id()
+        api.await { createSet(name, MegaSet.SET_TYPE_ALBUM, it) }.keepAlive { it.megaSet.id() }
     }
 
     suspend fun renameAlbum(id: Long, name: String) = withContext(Dispatchers.IO) {
@@ -153,7 +165,7 @@ object PhotosRepository {
     /** Adds nodes to an album; nodes already in it are skipped. */
     suspend fun addToAlbum(id: Long, handles: Collection<Long>) = withContext(Dispatchers.IO) {
         val elements = api.getSetElements(id)
-        val present = (0 until elements.size()).map { elements.get(it).node() }.toSet()
+        val present = elements.keepAlive { (0 until it.size()).map { i -> it.get(i).node() }.toSet() }
         val list = MegaHandleList.createInstance()
         val names = MegaStringList.createInstance()
         handles.filter { it !in present }.forEach {

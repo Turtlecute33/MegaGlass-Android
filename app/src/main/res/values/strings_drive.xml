@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <plurals name="upload_unreadable">
+        <item quantity="one">Could not read %d selected file.</item>
+        <item quantity="other">Could not read %d selected files.</item>
+    </plurals>
     <string name="cloud_drive">Cloud drive</string>
     <string name="incoming_shares">Incoming shares</string>
     <string name="rubbish_bin">Rubbish bin</string>
@@ -150,4 +154,6 @@
     <string name="delete">Delete</string>
     <string name="delete_previous_versions">Delete previous versions</string>
     <string name="delete_previous_versions_text">Only the current version stays. You cannot undo this.</string>
+    <string name="delete_version">Delete this version?</string>
+    <string name="delete_version_text">The version does not go to the Rubbish bin. You cannot undo this.</string>
 </resources>

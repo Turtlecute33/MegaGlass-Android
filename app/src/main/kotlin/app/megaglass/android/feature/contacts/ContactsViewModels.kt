@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.contacts
 
+import app.megaglass.android.core.util.catching
+
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -74,7 +76,7 @@ class ContactsViewModel : ViewModel() {
     }
 
     fun load() = viewModelScope.launch {
-        runCatching {
+        catching {
             val contacts = directory.contacts()
             val incoming = withContext(Dispatchers.IO) {
                 api.incomingContactRequests.count { it.status == MegaContactRequest.STATUS_UNRESOLVED }
@@ -88,7 +90,7 @@ class ContactsViewModel : ViewModel() {
     }
 
     fun invite(email: String, message: String) = viewModelScope.launch {
-        runCatching {
+        catching {
             api.await { inviteContact(email.trim(), message.ifBlank { null }, MegaContactRequest.INVITE_ACTION_ADD, it) }
         }.onSuccess {
             graph.messenger.show(graph.context.getString(R.string.contact_invite_sent, email.trim()))
@@ -154,7 +156,7 @@ class ContactRequestsViewModel : ViewModel() {
         if (item.handle in _state.value.busy) return
         _state.update { it.copy(busy = it.busy + item.handle) }
         viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { block() } }.onFailure { graph.messenger.show(contactError(it)) }
+            catching { withContext(Dispatchers.IO) { block() } }.onFailure { graph.messenger.show(contactError(it)) }
             _state.update { it.copy(busy = it.busy - item.handle) }
             load()
         }
@@ -196,7 +198,7 @@ class ContactDetailViewModel(private val email: String) : ViewModel() {
         val contact = directory.toContact(user)
         val shares = withContext(Dispatchers.IO) { api.getInShares(user).map { it.toItem(api, owner = contact.name) } }
         val mine = withContext(Dispatchers.IO) { api.myCredentials }
-        val theirs = runCatching { api.await { getUserCredentials(user, it) }.password }.getOrNull()
+        val theirs = catching { api.await { getUserCredentials(user, it) }.password }.getOrNull()
         _state.update {
             it.copy(
                 loading = false,
@@ -232,7 +234,7 @@ class ContactDetailViewModel(private val email: String) : ViewModel() {
         if (_state.value.busy) return
         _state.update { it.copy(busy = true) }
         viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { block() } }.onFailure { graph.messenger.show(contactError(it)) }
+            catching { withContext(Dispatchers.IO) { block() } }.onFailure { graph.messenger.show(contactError(it)) }
             _state.update { it.copy(busy = false) }
             if (!_state.value.removed) load()
         }

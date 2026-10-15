@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.drive
 
+import app.megaglass.android.core.util.catching
+
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -8,9 +10,10 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -45,45 +48,65 @@ class Uploader internal constructor(
 /** Uploads content URIs into [parent]; real paths are used when possible (no copy). */
 suspend fun uploadUris(uris: List<Uri>, parent: Long) {
     val graph = MegaGlassApp.graph
-    val sources = uris.mapNotNull { runCatching { graph.files.resolveForUpload(it) }.getOrNull() }
+    val account = graph.mega.api.myUserHandle
+    val sources = mutableListOf<LocalSource>()
+    var unreadable = 0
+    for (uri in uris.distinct()) {
+        val source = catching { graph.files.resolveForUpload(uri) }.getOrNull()
+        if (source == null) unreadable++ else sources += source
+    }
+    if (unreadable > 0) graph.messenger.show(graph.context.resources.getQuantityString(R.plurals.upload_unreadable, unreadable, unreadable))
     if (sources.isEmpty()) return
+    check(graph.session.isReady && graph.mega.api.myUserHandle == account) { "The account changed while preparing this upload" }
     graph.transfers.upload(sources, parent)
     graph.messenger.show(
         graph.context.resources.getQuantityString(R.plurals.upload_started, sources.size, sources.size),
     )
 }
 
+/**
+ * Starts an upload in the app scope and shows an error as a message: the target folder can be
+ * gone (deleted, share removed) when a picker returns.
+ */
+private fun launchUpload(block: suspend () -> Unit) {
+    val graph = MegaGlassApp.graph
+    graph.scope.launch {
+        catching { block() }.onFailure { graph.messenger.show(it.message ?: graph.context.getString(R.string.error_title)) }
+    }
+}
+
 @Composable
 fun rememberUploader(parent: Long): Uploader {
     val graph = MegaGlassApp.graph
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val resources = LocalResources.current
     val target by rememberUpdatedState(parent)
     val storage = rememberStorageAccess()
-    var photoFile by remember { mutableStateOf<File?>(null) }
+    // Saveable: the system can destroy this activity while the camera app is open.
+    var photoPath by rememberSaveable { mutableStateOf<String?>(null) }
     var askTextName by remember { mutableStateOf(false) }
 
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) scope.launch { uploadUris(uris, target) }
+        if (uris.isNotEmpty()) launchUpload { uploadUris(uris, target) }
     }
     val folder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         val path = graph.files.realPath(uri)
         if (path == null) {
-            graph.messenger.show(context.getString(R.string.folder_upload_needs_access))
+            graph.messenger.show(resources.getString(R.string.folder_upload_needs_access))
             return@rememberLauncherForActivityResult
         }
-        scope.launch {
+        launchUpload {
             graph.transfers.upload(listOf(LocalSource(path, File(path).name, temporary = false)), target)
-            graph.messenger.show(context.getString(R.string.folder_upload_started, File(path).name))
+            graph.messenger.show(resources.getString(R.string.folder_upload_started, File(path).name))
         }
     }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        val f = photoFile
+        val f = photoPath?.let(::File)
         if (ok && f != null && f.length() > 0) {
-            scope.launch { graph.transfers.upload(listOf(LocalSource(f.absolutePath, f.name, temporary = true)), target) }
-        }
-        photoFile = null
+            launchUpload { graph.transfers.upload(listOf(LocalSource(f.absolutePath, f.name, temporary = true)), target) }
+        } else f?.delete()
+        photoPath = null
     }
 
     if (askTextName) {
@@ -95,7 +118,7 @@ fun rememberUploader(parent: Long): Uploader {
             initial = "notes.txt",
             selectBaseName = true,
             onConfirm = { name ->
-                scope.launch {
+                launchUpload {
                     val dir = File(context.cacheDir, "uploads/" + System.nanoTime()).apply { mkdirs() }
                     val file = File(dir, name)
                     withContext(Dispatchers.IO) { file.writeText("") }
@@ -112,10 +135,12 @@ fun rememberUploader(parent: Long): Uploader {
             pickFiles = { files.launch(arrayOf("*/*")) },
             pickFolder = { storage.ensure { folder.launch(null) } },
             photo = {
-                val dir = File(context.cacheDir, "camera").apply { mkdirs() }
+                // A captured photo is the only original until its upload succeeds. Cache
+                // eviction and a second capture must not remove or replace it.
+                val dir = File(context.filesDir, "pending-uploads").apply { mkdirs() }
                 val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
-                val f = File(dir, "IMG_$stamp.jpg")
-                photoFile = f
+                val f = File.createTempFile("IMG_${stamp}_", ".jpg", dir)
+                photoPath = f.absolutePath
                 camera.launch(graph.files.shareUri(f))
             },
             newText = { askTextName = true },
@@ -126,11 +151,10 @@ fun rememberUploader(parent: Long): Uploader {
 @Composable
 fun UploadDestinationDialog(uris: List<Uri>, onDismiss: () -> Unit) {
     // The app scope: the dialog leaves the composition before large files finish copying.
-    val scope = MegaGlassApp.graph.scope
     FolderPickerDialog(
         title = pluralStringResource(R.plurals.upload_items, uris.size, uris.size),
         confirmLabel = stringResource(R.string.upload_here),
-        onPick = { target -> scope.launch { uploadUris(uris, target) } },
+        onPick = { target -> launchUpload { uploadUris(uris, target) } },
         onDismiss = onDismiss,
     )
 }

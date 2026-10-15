@@ -1,0 +1,19 @@
+--- a/bindings/megaapi.i
++++ b/bindings/megaapi.i
+@@ -516,6 +516,16 @@
+ %newobject mega::MegaApi::listAllNodesByPageAtOffset;
+ %newobject mega::MegaNodeScopeFilter::copy;
+ %newobject mega::MegaListAllNodesFilter::createInstance;
++%newobject mega::MegaSearchFilter::createInstance;
++%newobject mega::MegaSearchPage::createInstance;
++%newobject mega::MegaHandleList::createInstance;
++%newobject mega::MegaStringList::createInstance;
++%newobject mega::MegaCancelToken::createInstance;
++%newobject mega::MegaUploadOptions::createInstance;
++%newobject mega::MegaApi::getSets;
++%newobject mega::MegaApi::getSet;
++%newobject mega::MegaApi::getSetElements;
++%newobject mega::MegaApi::getSetElement;
+ %newobject mega::MegaDownloadItemList::createInstance;
+ %newobject mega::MegaDownloadItemList::copy;
+ %newobject mega::MegaListAllNodesFilter::copy;

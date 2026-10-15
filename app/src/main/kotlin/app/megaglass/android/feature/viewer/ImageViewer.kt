@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.viewer
 
+import app.megaglass.android.core.util.catching
+
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -125,7 +127,7 @@ fun ImageViewerScreen(route: ImageViewer) {
     var entries by remember { mutableStateOf<List<MediaEntry>?>(null) }
     var start by remember { mutableIntStateOf(0) }
     LaunchedEffect(route) {
-        val (list, index) = runCatching { loadEntries(route.source, route.handle, setOf(FileType.IMAGE, FileType.VIDEO)) }
+        val (list, index) = catching { loadEntries(route.source, route.handle, setOf(FileType.IMAGE, FileType.VIDEO)) }
             .getOrDefault(emptyList<MediaEntry>() to 0)
         entries = list
         start = index
@@ -207,7 +209,7 @@ private fun Pager(list: List<MediaEntry>, start: Int, chrome: Boolean, onToggleC
                         IconAction(R.drawable.ic_download, stringResource(R.string.action_download), {
                             storage.ensure {
                                 scope.launch {
-                                    runCatching { downloadFolderLinkNode(entry.handle) }
+                                    catching { downloadFolderLinkNode(entry.handle) }
                                     graph.messenger.show(graph.context.resources.getQuantityString(R.plurals.download_started, 1, 1))
                                 }
                             }
@@ -238,7 +240,7 @@ private fun ImagePage(entry: MediaEntry, onTap: () -> Unit) {
     LaunchedEffect(wantOriginal) {
         if (!wantOriginal) return@LaunchedEffect
         loading = true
-        runCatching { PreviewCache.fetch(entry.handle, entry.name, entry.size, entry.folderLink) }
+        catching { PreviewCache.fetch(entry.handle, entry.name, entry.size, entry.folderLink) }
             .onSuccess { original = it }
             .onFailure { failed = true }
         loading = false

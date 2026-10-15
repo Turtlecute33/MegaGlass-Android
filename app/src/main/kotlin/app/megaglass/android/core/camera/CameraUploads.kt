@@ -1,5 +1,7 @@
 package app.megaglass.android.core.camera
 
+import app.megaglass.android.core.util.catching
+
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -28,6 +30,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
 import nz.mega.sdk.MegaError
 import java.time.Duration
 import java.util.concurrent.TimeUnit
@@ -58,6 +61,9 @@ object CameraUploads {
 
     private val _status = MutableStateFlow<CuStatus>(CuStatus.Off)
     val status: StateFlow<CuStatus> = _status.asStateFlow()
+
+    /** The periodic, trigger and "upload now" workers can start together; only one scans and uploads at a time. */
+    internal val running = Mutex()
 
     internal fun setStatus(status: CuStatus) {
         _status.value = status
@@ -167,7 +173,7 @@ object CameraUploads {
         val root = api.rootNode ?: return@withContext null
         val existing = api.getChildNode(root, defaultName)?.takeIf { it.isFolder }
         val handle = existing?.handle ?: api.await { createFolder(defaultName, root, it) }.nodeHandle
-        runCatching { api.await { setCameraUploadsFolder(handle, it) } }
+        catching { api.await { setCameraUploadsFolder(handle, it) } }
         handle
     }
 

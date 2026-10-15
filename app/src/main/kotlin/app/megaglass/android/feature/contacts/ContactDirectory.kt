@@ -1,5 +1,7 @@
 package app.megaglass.android.feature.contacts
 
+import app.megaglass.android.core.util.catching
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +22,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import nz.mega.sdk.MegaApiJava
 import nz.mega.sdk.MegaUser
 import java.util.concurrent.ConcurrentHashMap
@@ -83,7 +87,8 @@ class ContactDirectory private constructor() {
     /** Visible contacts, sorted by display name. */
     suspend fun contacts(): List<Contact> = withContext(Dispatchers.IO) {
         val users = api.contacts.filter { it.visibility == MegaUser.VISIBILITY_VISIBLE }
-        coroutineScope { users.map { async { toContact(it) } }.awaitAll() }
+        val gate = Semaphore(6)
+        coroutineScope { users.map { async { gate.withPermit { toContact(it) } } }.awaitAll() }
             .sortedBy { it.name.lowercase() }
     }
 
@@ -108,16 +113,16 @@ class ContactDirectory private constructor() {
             fullName = n.full,
             alias = n.alias,
             color = parseColor(api.getUserAvatarColor(user)),
-            verified = runCatching { api.areCredentialsVerified(user) }.getOrDefault(false),
+            verified = catching { api.areCredentialsVerified(user) }.getOrDefault(false),
             since = user.timestamp,
             avatarVersion = avatarVersions[user.handle] ?: 0,
         )
     }
 
     private suspend fun fetchNames(user: MegaUser): Names = coroutineScope {
-        val first = async { runCatching { api.await { getUserAttribute(user, MegaApiJava.USER_ATTR_FIRSTNAME, it) }.text }.getOrNull() }
-        val last = async { runCatching { api.await { getUserAttribute(user, MegaApiJava.USER_ATTR_LASTNAME, it) }.text }.getOrNull() }
-        val alias = async { runCatching { api.await { getUserAlias(user.handle, it) }.name }.getOrNull() }
+        val first = async { catching { api.await { getUserAttribute(user, MegaApiJava.USER_ATTR_FIRSTNAME, it) }.text }.getOrNull() }
+        val last = async { catching { api.await { getUserAttribute(user, MegaApiJava.USER_ATTR_LASTNAME, it) }.text }.getOrNull() }
+        val alias = async { catching { api.await { getUserAlias(user.handle, it) }.name }.getOrNull() }
         Names(
             full = listOfNotNull(first.await(), last.await()).joinToString(" ").trim(),
             alias = alias.await()?.trim()?.takeIf { it.isNotEmpty() },
@@ -131,10 +136,17 @@ class ContactDirectory private constructor() {
     }
 
     private fun parseColor(value: String?): Int =
-        runCatching { android.graphics.Color.parseColor(value) }.getOrDefault(0)
+        catching { android.graphics.Color.parseColor(value) }.getOrDefault(0)
 
     companion object {
-        val instance: ContactDirectory by lazy { ContactDirectory() }
+        private val holder = lazy { ContactDirectory() }
+        val instance: ContactDirectory get() = holder.value
+        fun clearIfCreated() {
+            if (holder.isInitialized()) {
+                holder.value.names.clear()
+                holder.value.avatarVersions.clear()
+            }
+        }
     }
 }
 

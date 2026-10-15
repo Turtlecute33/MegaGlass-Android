@@ -1,9 +1,19 @@
 package app.megaglass.android.core.transfers
 
 import androidx.compose.runtime.Immutable
+import app.megaglass.android.core.util.catching
 import app.megaglass.android.core.mega.Mega
 import app.megaglass.android.core.mega.MegaException
+import app.megaglass.android.core.mega.await
+import app.megaglass.android.core.storage.VerifiedFiles
+import app.megaglass.android.core.storage.ensureDirectory
+import app.megaglass.android.core.storage.localFileName
+import app.megaglass.android.core.storage.availableName
+import app.megaglass.android.core.storage.deleteUploadCopy
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import app.megaglass.android.core.storage.LocalSource
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -16,12 +26,16 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import nz.mega.sdk.MegaApiJava
+import nz.mega.sdk.MegaCancelToken
 import nz.mega.sdk.MegaDownloadItemList
 import nz.mega.sdk.MegaError
+import nz.mega.sdk.MegaNode
 import nz.mega.sdk.MegaTransfer
 import nz.mega.sdk.MegaTransferListenerInterface
 import nz.mega.sdk.MegaUploadOptions
 import java.io.File
+import java.io.IOException
+import java.util.concurrent.atomic.AtomicLong
 
 enum class Direction { DOWNLOAD, UPLOAD }
 
@@ -42,6 +56,7 @@ object Purpose {
     const val EDIT = "edit"
     /** Copy in the cache for an in-app viewer (PDF, text, full-size image). */
     const val PREVIEW = "preview"
+    const val TEMP_SUFFIX = ":tmp"
 
     fun of(appData: String?): String = appData?.substringBefore(':').orEmpty()
 }
@@ -79,11 +94,14 @@ data class TransfersState(
     val downloadsPaused: Boolean = false,
     val uploadsPaused: Boolean = false,
     val overQuota: Boolean = false,
+    /** Hidden viewer downloads still need the background job to stay alive. */
+    val internalTransfers: Int = 0,
+    val viewerProgress: Map<String, Float> = emptyMap(),
 ) {
     val totalBytes: Long get() = active.sumOf { it.total }
     val transferredBytes: Long get() = active.sumOf { it.transferred }
     val progress: Float get() = totalBytes.let { if (it > 0) transferredBytes.toFloat() / it else 0f }
-    val isIdle: Boolean get() = active.isEmpty()
+    val isIdle: Boolean get() = active.isEmpty() && internalTransfers == 0
     val downloads: Int get() = active.count { it.direction == Direction.DOWNLOAD }
     val uploads: Int get() = active.count { it.direction == Direction.UPLOAD }
 }
@@ -93,7 +111,7 @@ data class TransfersState(
  * (parallel connections, chunk encryption and MACs in native code); this class only keeps a
  * snapshot for the UI and the notification, rebuilt at most [TICK_MS] apart.
  */
-class TransferManager(private val mega: Mega, private val scope: CoroutineScope) {
+class TransferManager(private val mega: Mega, private val scope: CoroutineScope, private val temporaryRoots: List<File> = emptyList()) {
 
     private val api get() = mega.api
 
@@ -110,11 +128,23 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope)
     val state: StateFlow<TransfersState> = _state.asStateFlow()
 
     private val _completed = MutableSharedFlow<TransferItem>(extraBufferCapacity = 256)
+    // SDK callbacks cannot suspend. A single drain preserves completion order without dropping
+    // events when an observer is writing metadata or updating a foreground notification.
+    private val completionQueue = Channel<Pair<Long, TransferItem>>(Channel.UNLIMITED)
+    private val sessionEpoch = AtomicLong()
+    @Volatile private var accepting = true
     /** Every top-level transfer that finished (any status). */
     val completed: SharedFlow<TransferItem> = _completed
 
     /** Called when transfers start, so the app can keep the process alive (see TransferJobService). */
     var onActive: (() -> Unit)? = null
+    var onError: ((String) -> Unit)? = null
+    var retryOffline: (suspend (Long) -> Unit)? = null
+
+    private val targets = HashSet<String>()
+    private val tokens = HashMap<Int, MegaCancelToken>()
+    private val uploadGate = Mutex()
+    private val reservedNames = HashSet<Pair<Long, String>>()
 
     /**
      * Transfers of the folder link instance get negative tags, so that the two SDK instances
@@ -130,14 +160,14 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope)
 
     /** Key of the folder transfer that owns [t], or 0 when [t] is a top-level item. Call with [lock] held. */
     private fun parentOf(api: MegaApiJava, t: MegaTransfer): Int {
-        if (t.folderTransferTag == 0) return 0
+        if (t.folderTransferTag <= 0) return 0
         val parent = key(api, t.folderTransferTag)
         return if (parent !in batches && records[parent]?.item?.isFolder == true) parent else 0
     }
 
     private val sink = object : MegaTransferListenerInterface {
         override fun onTransferStart(api: MegaApiJava, transfer: MegaTransfer) {
-            if (skip(transfer)) return
+            if (!accepting || skip(transfer)) return
             val k = key(api, transfer.tag)
             val first = synchronized(lock) {
                 if (isBatch(transfer)) {
@@ -145,6 +175,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope)
                     return@synchronized false
                 }
                 records[k] = Record(transfer.toItem(k), parentOf(api, transfer))
+                if (transfer.folderTransferTag > 0) tokens[key(api, transfer.folderTransferTag)]?.let { tokens[k] = it }
                 records.size == 1
             }
             dirty = true
@@ -153,7 +184,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope)
         }
 
         override fun onTransferUpdate(api: MegaApiJava, transfer: MegaTransfer) {
-            if (skip(transfer)) return
+            if (!accepting || skip(transfer)) return
             val k = key(api, transfer.tag)
             synchronized(lock) {
                 if (k in batches || isBatch(transfer)) return
@@ -170,13 +201,15 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope)
         }
 
         override fun onTransferFinish(api: MegaApiJava, transfer: MegaTransfer, e: MegaError) {
-            if (skip(transfer)) return
-            val error = if (e.errorCode == MegaError.API_OK) null else e.errorString
+            if (!accepting || skip(transfer)) return
+            val error = if (e.errorCode == MegaError.API_OK) null else e.errorString ?: "Error ${e.errorCode}"
             val k = key(api, transfer.tag)
             var done: TransferItem? = null
             synchronized(lock) {
                 if (batches.remove(k) || isBatch(transfer)) return@synchronized
                 val r = records.remove(k)
+                tokens.remove(k)
+                targets.remove(transfer.path)
                 val item = transfer.toItem(k, r?.item?.fileCount ?: 0).copy(
                     status = when {
                         transfer.state == MegaTransfer.STATE_CANCELLED -> TransferStatus.CANCELLED
@@ -195,7 +228,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope)
                 if (records.isEmpty()) overQuota = false
             }
             dirty = true
-            done?.let { _completed.tryEmit(it) }
+            done?.let { completionQueue.trySend(sessionEpoch.get() to it) }
         }
 
         override fun onTransferData(api: MegaApiJava, transfer: MegaTransfer, buffer: ByteArray) = false
@@ -215,11 +248,44 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope)
 
     init {
         mega.transferSink = sink
+        scope.launch(Dispatchers.IO) {
+            for ((epoch, item) in completionQueue) {
+                if (!accepting || epoch != sessionEpoch.get()) continue
+                if (item.direction == Direction.UPLOAD && item.status == TransferStatus.COMPLETED && !item.isFolder &&
+                    item.appData.endsWith(Purpose.TEMP_SUFFIX)) {
+                    catching { deleteUploadCopy(File(item.localPath), temporaryRoots) }
+                        .onFailure { onError?.invoke("Upload completed, but its local copy could not be removed") }
+                }
+                var result = item
+                if (item.status == TransferStatus.COMPLETED && item.direction == Direction.DOWNLOAD && !item.isFolder &&
+                    item.purpose in setOf(Purpose.PREVIEW, Purpose.OPEN, Purpose.SHARE)) {
+                    try {
+                        val file = File(item.localPath)
+                        if (!file.isFile || file.length() != item.total) throw IOException("Downloaded file is incomplete")
+                        VerifiedFiles.mark(file)
+                    } catch (e: Exception) {
+                        result = item.copy(status = TransferStatus.FAILED, error = e.message ?: "Cannot verify downloaded file")
+                    }
+                }
+                if (!accepting || epoch != sessionEpoch.get()) continue
+                if (result != item) synchronized(lock) {
+                    finished.removeAll { it.tag == item.tag && it.finishedAt == item.finishedAt }
+                    finished.addFirst(result)
+                    while (finished.size > MAX_HISTORY) finished.removeLast()
+                    dirty = true
+                }
+                _completed.emit(result)
+            }
+        }
         scope.launch(Dispatchers.Default) {
             while (isActive) {
                 if (dirty) {
                     dirty = false
-                    _state.value = snapshot()
+                    val epoch = sessionEpoch.get()
+                    val current = snapshot()
+                    synchronized(lock) {
+                        if (accepting && epoch == sessionEpoch.get()) _state.value = current
+                    }
                 }
                 delay(TICK_MS)
             }
@@ -286,6 +352,8 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope)
             downloadsPaused = api.areTransfersPaused(MegaTransfer.TYPE_DOWNLOAD),
             uploadsPaused = api.areTransfersPaused(MegaTransfer.TYPE_UPLOAD),
             overQuota = overQuota,
+            internalTransfers = synchronized(lock) { records.values.count { it.folderTag == 0 && it.item.purpose == Purpose.PREVIEW } },
+            viewerProgress = synchronized(lock) { records.values.filter { it.item.purpose == Purpose.PREVIEW }.associate { it.item.localPath to it.item.progress } },
         )
     }
 
@@ -295,74 +363,168 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope)
      */
     suspend fun download(handles: Collection<Long>, dir: File, purpose: String = Purpose.DOWNLOAD, startFirst: Boolean = false) =
         withContext(Dispatchers.IO) {
-            dir.mkdirs()
+            check(accepting) { "The session has ended" }
+            dir.ensureDirectory()
             val items = MegaDownloadItemList.createInstance()
             val path = dir.absolutePath + File.separator
-            for (h in handles) {
-                val node = api.getNodeByHandle(h) ?: continue
+            val nodes = handles.distinct().map { h -> api.getNodeByHandle(h) ?: throw MegaException(MegaError.API_ENOENT, "Item not found") }
+            for (node in nodes) {
+                val h = node.handle
                 val data = if (purpose == Purpose.OFFLINE) "${Purpose.OFFLINE}:$h" else purpose
                 items.add(node, path, null, data, startFirst)
             }
             if (items.size() == 0) return@withContext
-            api.startDownloadBatch(
-                items, null,
-                MegaTransfer.COLLISION_CHECK_FINGERPRINT,
-                MegaTransfer.COLLISION_RESOLUTION_NEW_WITH_N,
-                null,
-            )
+            val token = MegaCancelToken.createInstance()
+            if (nodes.size == 1) {
+                val node = nodes.single()
+                val data = if (purpose == Purpose.OFFLINE) "${Purpose.OFFLINE}:${node.handle}" else purpose
+                // A batch folder's appData belongs to every file, and its unnamed container has
+                // no appData. A single-node transfer reports completion for the whole folder.
+                api.startDownload(node, path, localFileName(node.name ?: "file"), data, startFirst, token,
+                    MegaTransfer.COLLISION_CHECK_FINGERPRINT, MegaTransfer.COLLISION_RESOLUTION_NEW_WITH_N,
+                    cancellationListener(token))
+            } else {
+                api.startDownloadBatch(items, token,
+                    MegaTransfer.COLLISION_CHECK_FINGERPRINT, MegaTransfer.COLLISION_RESOLUTION_NEW_WITH_N,
+                    cancellationListener(token))
+            }
             onActive?.invoke()
         }
 
-    /** Downloads one node to an exact file path (overwriting), for previews and the editor. */
+    /** Downloads one node to an exact private cache path. */
     suspend fun downloadTo(handle: Long, target: File, purpose: String, folderLink: Boolean = false) =
         withContext(Dispatchers.IO) {
             val source = if (folderLink) mega.folderApi else api
             val node = source.getNodeByHandle(handle) ?: throw MegaException(MegaError.API_ENOENT, "Item not found")
-            target.parentFile?.mkdirs()
-            source.startDownload(
-                node, target.parentFile!!.absolutePath + File.separator, target.name, purpose, true, null,
-                MegaTransfer.COLLISION_CHECK_ASSUMEDIFFERENT, MegaTransfer.COLLISION_RESOLUTION_OVERWRITE,
-            )
-            onActive?.invoke()
+            downloadNodeTo(source, node, target, purpose)
         }
+
+    /** Public nodes are copied by the SDK and need not be present in the account tree. */
+    suspend fun downloadPublicNodeTo(node: MegaNode, target: File, purpose: String) = withContext(Dispatchers.IO) {
+        downloadNodeTo(api, node, target, purpose)
+    }
+
+    private fun downloadNodeTo(source: MegaApiJava, node: MegaNode, target: File, purpose: String) {
+        check(accepting) { "The session has ended" }
+        val parent = target.parentFile ?: throw IOException("Invalid download destination")
+        parent.ensureDirectory()
+        val path = target.absolutePath
+        if (!synchronized(lock) { targets.add(path) }) throw IOException("This file is already being prepared")
+        try {
+            VerifiedFiles.forget(target)
+            val token = MegaCancelToken.createInstance()
+            source.startDownload(node, parent.absolutePath + File.separator, target.name, purpose, true, token,
+                MegaTransfer.COLLISION_CHECK_ASSUMEDIFFERENT, MegaTransfer.COLLISION_RESOLUTION_OVERWRITE,
+                cancellationListener(token))
+        } catch (e: Exception) {
+            synchronized(lock) { targets.remove(path) }
+            throw e
+        }
+        onActive?.invoke()
+    }
 
     /** Uploads local files or folders into [parent]. A folder uploads with all its contents. */
     suspend fun upload(sources: List<LocalSource>, parent: Long, purpose: String = Purpose.UPLOAD, startFirst: Boolean = false) =
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) { uploadGate.withLock {
+            check(accepting) { "The session has ended" }
             val node = api.getNodeByHandle(parent) ?: throw MegaException(MegaError.API_ENOENT, "Folder not found")
+            if (!node.isFolder) throw IOException("Upload destination is not a folder")
+            sources.forEach { s ->
+                val file = File(s.path)
+                if (!file.exists() || !file.canRead()) throw IOException("Cannot read upload source: ${s.name}")
+            }
             for (s in sources) {
-                val options = MegaUploadOptions.createInstance().apply {
-                    setAppData(purpose)
-                    setIsSourceTemporary(s.temporary)
-                    setStartFirst(startFirst)
-                    if (s.name != File(s.path).name) setFileName(s.name)
+                val requested = localFileName(s.name)
+                // A Save in the text editor explicitly replaces a file. Other uploads preserve
+                // existing names even if the account has file versioning disabled.
+                val name = if (purpose == Purpose.EDIT) requested else availableName(requested, File(s.path).isDirectory) { candidate ->
+                    api.getChildNode(node, candidate) != null || synchronized(lock) { parent to candidate in reservedNames }
                 }
-                api.startUpload(s.path, node, null, options)
+                val reservation = parent to name
+                synchronized(lock) { reservedNames += reservation }
+                val options = MegaUploadOptions().apply {
+                    setAppData(if (s.temporary && !purpose.endsWith(Purpose.TEMP_SUFFIX)) purpose + Purpose.TEMP_SUFFIX else purpose)
+                    // The SDK deletes temporary sources on failure and cancellation too. Keep
+                    // them for Retry, and remove private copies on confirmed completion above.
+                    setIsSourceTemporary(false)
+                    setStartFirst(startFirst)
+                    setFileName(name)
+                }
+                val token = MegaCancelToken.createInstance()
+                try {
+                    api.startUpload(s.path, node, token, options, cancellationListener(token, reservation))
+                } catch (e: Exception) {
+                    synchronized(lock) { reservedNames.remove(reservation) }
+                    throw e
+                }
             }
             if (sources.isNotEmpty()) onActive?.invoke()
-        }
+        } }
 
     fun pauseAll(pause: Boolean) {
-        api.pauseTransfers(pause)
-        dirty = true
+        scope.launch(Dispatchers.IO) {
+            catching { api.await { pauseTransfers(pause, it) } }.onFailure { onError?.invoke(it.message ?: "Cannot pause transfers") }
+            if (synchronized(lock) { records.keys.any { it < 0 } }) {
+                catching { mega.folderApi.await { pauseTransfers(pause, it) } }.onFailure { onError?.invoke(it.message ?: "Cannot pause transfers") }
+            }
+            dirty = true
+        }
     }
 
     private fun owner(tag: Int): Pair<MegaApiJava, Int> = if (tag >= 0) api to tag else mega.folderApi to -tag
 
     fun pause(tag: Int, pause: Boolean) {
         val (a, t) = owner(tag)
-        a.pauseTransferByTag(t, pause, null)
-        dirty = true
+        scope.launch(Dispatchers.IO) {
+            catching { a.await { pauseTransferByTag(t, pause, it) } }.onFailure { onError?.invoke(it.message ?: "Cannot pause transfer") }
+            dirty = true
+        }
     }
 
     fun cancel(tag: Int) {
+        synchronized(lock) { tokens[tag] }?.let { it.cancel(); return }
         val (a, t) = owner(tag)
         a.cancelTransferByTag(t)
     }
 
+    /** Cancels the downloads into [localPath]: viewer downloads, which the Transfers screen does not list. */
+    fun cancelDownloadTo(localPath: String) {
+        synchronized(lock) { records.filterValues { it.item.localPath == localPath }.keys.toList() }.forEach(::cancel)
+    }
+
+    /** Cancels the uploads started for [purpose]: camera uploads stop when their work stops (Wi-Fi lost, not charging). */
+    fun cancelUploads(purpose: String) {
+        synchronized(lock) { records.filterValues { it.item.direction == Direction.UPLOAD && it.item.purpose == purpose }.keys.toList() }.forEach(::cancel)
+    }
+
+    fun cancelPurpose(appData: String) {
+        synchronized(lock) { records.filterValues { it.item.appData == appData }.keys.toList() }.forEach(::cancel)
+    }
+
+    /** Local paths of the uploads in the queue. */
+    fun uploadingPaths(): Set<String> = api.getTransfers(MegaTransfer.TYPE_UPLOAD)?.mapNotNullTo(HashSet()) { it.path }.orEmpty()
+
     fun cancelAll() {
-        api.cancelTransfers(MegaTransfer.TYPE_DOWNLOAD)
-        api.cancelTransfers(MegaTransfer.TYPE_UPLOAD)
+        synchronized(lock) { (records.keys + batches).toList() }.forEach(::cancel)
+    }
+
+    /** Cancel tokens avoid the SDK's documented deadlock during folder enumeration. */
+    private fun cancellationListener(token: MegaCancelToken? = null, reservation: Pair<Long, String>? = null) = object : MegaTransferListenerInterface {
+        override fun onTransferStart(api: MegaApiJava, transfer: MegaTransfer) {
+            val owned = token ?: transfer.cancelToken
+            if (owned != null) synchronized(lock) { tokens[key(api, transfer.tag)] = owned }
+        }
+        override fun onTransferFinish(api: MegaApiJava, transfer: MegaTransfer, e: MegaError) {
+            synchronized(lock) {
+                tokens.remove(key(api, transfer.tag)); targets.remove(transfer.path)
+                if (reservation != null) reservedNames.remove(reservation)
+            }
+        }
+        override fun onTransferUpdate(api: MegaApiJava, transfer: MegaTransfer) {}
+        override fun onTransferTemporaryError(api: MegaApiJava, transfer: MegaTransfer, e: MegaError) {}
+        override fun onTransferData(api: MegaApiJava, transfer: MegaTransfer, buffer: ByteArray) = false
+        override fun onFolderTransferUpdate(api: MegaApiJava, transfer: MegaTransfer, stage: Int, folderCount: Long,
+            createdFolderCount: Long, fileCount: Long, currentFolder: String?, currentFileLeafName: String?) {}
     }
 
     fun moveToFirst(tag: Int) {
@@ -370,17 +532,35 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope)
         a.moveTransferToFirstByTag(t)
     }
 
-    /** Starts a failed or cancelled transfer again. */
-    suspend fun retry(item: TransferItem) {
-        removeFromHistory(item)
-        if (item.direction == Direction.DOWNLOAD) {
-            val file = File(item.localPath)
-            val dir = if (item.isFolder) file.parentFile else file.parentFile
-            if (dir != null) download(listOf(item.nodeHandle), dir, item.purpose.ifEmpty { Purpose.DOWNLOAD })
-        } else {
-            val f = File(item.localPath)
-            if (f.exists()) upload(listOf(LocalSource(f.absolutePath, item.name, false)), item.parentHandle, item.appData)
+    /**
+     * Starts a failed or cancelled transfer again. Returns false, and keeps the item in the list,
+     * when it cannot start: the node is not in the account (link downloads), the source file of
+     * an upload is gone, or the target folder is gone.
+     */
+    suspend fun retry(item: TransferItem): Boolean {
+        if (item.tag < 0) return false
+        val ready = withContext(Dispatchers.IO) {
+            if (item.direction == Direction.DOWNLOAD) {
+                File(item.localPath).parentFile != null && api.getNodeByHandle(item.nodeHandle) != null
+            } else {
+                File(item.localPath).exists() && api.getNodeByHandle(item.parentHandle) != null
+            }
         }
+        if (!ready) return false
+        if (item.direction == Direction.DOWNLOAD && item.purpose == Purpose.OFFLINE) {
+            val retry = retryOffline ?: return false
+            val handle = item.appData.substringAfter(':', "").substringBefore(':').toLongOrNull() ?: item.nodeHandle
+            retry(handle)
+            removeFromHistory(item)
+            return true
+        }
+        if (item.direction == Direction.DOWNLOAD) {
+            download(listOf(item.nodeHandle), File(item.localPath).parentFile!!, item.purpose.ifEmpty { Purpose.DOWNLOAD })
+        } else {
+            upload(listOf(LocalSource(item.localPath, item.name, item.appData.endsWith(Purpose.TEMP_SUFFIX))), item.parentHandle, item.appData)
+        }
+        removeFromHistory(item)
+        return true
     }
 
     fun removeFromHistory(item: TransferItem) {
@@ -390,6 +570,20 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope)
 
     fun clearHistory() {
         synchronized(lock) { finished.clear() }
+        dirty = true
+    }
+
+    fun beginSession() { accepting = true }
+
+    fun endSession() {
+        accepting = false
+        sessionEpoch.incrementAndGet()
+        cancelAll()
+        synchronized(lock) {
+            records.clear(); finished.clear(); batches.clear(); targets.clear(); reservedNames.clear(); tokens.clear()
+        }
+        overQuota = false
+        _state.value = TransfersState()
         dirty = true
     }
 
