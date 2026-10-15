@@ -16,6 +16,4 @@
                 android:endColor="#8E0B10" />
         </aapt:attr>
     </path>
-    <!-- Soft glass highlight -->
-    <path android:pathData="M0,0h108v46c-30,-10 -70,-6 -108,10z" android:fillColor="#1FFFFFFF" />
 </vector>
