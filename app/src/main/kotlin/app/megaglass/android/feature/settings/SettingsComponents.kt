@@ -47,6 +47,7 @@ import app.megaglass.android.R
 import app.megaglass.android.ui.components.BackButton
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.SectionHeader
+import app.megaglass.android.ui.components.rememberDialogAllowed
 import app.megaglass.android.ui.nav.LocalNavigator
 
 /** One row of a settings group. */
@@ -214,6 +215,7 @@ fun ChoiceDialog(
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    if (!rememberDialogAllowed()) return
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },

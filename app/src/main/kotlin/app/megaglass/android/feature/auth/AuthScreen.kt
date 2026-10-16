@@ -105,7 +105,7 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
                 Column(Modifier.widthIn(max = 440.dp).fillMaxWidth()) {
                     when (step) {
                         AuthStep.WELCOME -> Welcome(notice, onLogin = { vm.go(AuthStep.LOGIN) }, onSignup = { vm.go(AuthStep.SIGNUP) })
-                        // The step of an earlier login stays: a notice after logout can also show here.
+                        // The notice stays visible after the user moves on to the login step.
                         AuthStep.LOGIN -> Login(state, notice, vm)
                         AuthStep.TWO_FACTOR -> TwoFactor(state, vm)
                         AuthStep.SIGNUP -> Signup(state, vm)

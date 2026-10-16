@@ -60,6 +60,7 @@ import app.megaglass.android.feature.drive.FolderPickerDialog
 import app.megaglass.android.ui.components.BackButton
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.SectionHeader
+import app.megaglass.android.ui.components.rememberDialogAllowed
 import app.megaglass.android.ui.nav.LocalNavigator
 import kotlinx.coroutines.launch
 
@@ -254,6 +255,7 @@ private fun SwitchRow(icon: Int, title: String, subtitle: String?, checked: Bool
 
 @Composable
 private fun ExistingMediaDialog(onConfirm: (Boolean) -> Unit, onDismiss: () -> Unit) {
+    if (!rememberDialogAllowed()) return
     var all by remember { mutableStateOf(true) }
     AlertDialog(
         onDismissRequest = onDismiss,

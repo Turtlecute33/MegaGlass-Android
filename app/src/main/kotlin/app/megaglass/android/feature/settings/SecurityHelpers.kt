@@ -43,12 +43,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import nz.mega.sdk.MegaError
 
-/** True when the account has two-factor authentication. False when the check fails. */
-suspend fun twoFactorEnabled(): Boolean = withContext(Dispatchers.IO) {
+/** True when the account has two-factor authentication; null when the check fails. */
+suspend fun twoFactorEnabled(): Boolean? = withContext(Dispatchers.IO) {
     val api = MegaGlassApp.graph.mega.api
-    val email = api.myEmail ?: return@withContext false
+    val email = api.myEmail ?: return@withContext null
     val (code, request) = api.awaitResult { multiFactorAuthCheck(email, it) }
-    code == MegaError.API_OK && request.flag
+    if (code == MegaError.API_OK) request.flag else null
 }
 
 /** Blocks screenshots and the recents preview while this screen shows a secret. */

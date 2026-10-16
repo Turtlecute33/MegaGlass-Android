@@ -51,6 +51,7 @@ import app.megaglass.android.ui.components.LoadingBox
 import app.megaglass.android.ui.components.NodeThumbnail
 import app.megaglass.android.ui.components.TextInputDialog
 import app.megaglass.android.ui.components.invalidNameError
+import app.megaglass.android.ui.components.rememberDialogAllowed
 import app.megaglass.android.ui.components.subtitle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -71,6 +72,7 @@ fun FolderPickerDialog(
     exclude: Set<Long> = emptySet(),
     start: Long? = null,
 ) {
+    if (!rememberDialogAllowed()) return
     val graph = MegaGlassApp.graph
     val api = graph.mega.api
     val scope = rememberCoroutineScope()

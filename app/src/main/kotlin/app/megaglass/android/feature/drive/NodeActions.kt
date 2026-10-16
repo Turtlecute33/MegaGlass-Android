@@ -66,6 +66,7 @@ import app.megaglass.android.ui.components.TextInputDialog
 import app.megaglass.android.ui.components.copySensitive
 import app.megaglass.android.ui.components.invalidNameError
 import app.megaglass.android.ui.components.labelColor
+import app.megaglass.android.ui.components.rememberDialogAllowed
 import app.megaglass.android.ui.components.rememberStorageAccess
 import app.megaglass.android.ui.components.subtitle
 import app.megaglass.android.ui.nav.AppNavigator
@@ -351,6 +352,7 @@ fun NodeActionsHost(state: NodeActionsState) {
 
 @Composable
 private fun NodeSheet(item: NodeItem, state: NodeActionsState, onDismiss: () -> Unit) {
+    if (!rememberDialogAllowed()) return
     val graph = MegaGlassApp.graph
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val offline by graph.offline.handles.collectAsStateWithLifecycle()
@@ -424,6 +426,7 @@ private fun LabelRow(current: Int, onPick: (Int) -> Unit) {
 /** Creates the public link and shows it, with copy and share, and the key as a separate option. */
 @Composable
 private fun LinkDialog(item: NodeItem, state: NodeActionsState, onDismiss: () -> Unit) {
+    if (!rememberDialogAllowed()) return
     val graph = MegaGlassApp.graph
     var link by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }

@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.os.PersistableBundle
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
@@ -34,6 +36,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +57,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.megaglass.android.R
+import java.util.UUID
 
 /** A Material Symbols icon from res/drawable. */
 @Composable
@@ -138,6 +142,23 @@ fun ErrorState(message: String, onRetry: (() -> Unit)?, modifier: Modifier = Mod
     modifier = modifier,
 )
 
+/** True while the app lock covers the app. */
+val LocalAppLocked = compositionLocalOf { false }
+
+private class Shown { var value = false }
+
+/**
+ * False for a dialog or sheet that first appears while the app is locked, until the unlock: its
+ * window would be added above the lock window. One that was open before the lock stays.
+ */
+@Composable
+fun rememberDialogAllowed(): Boolean {
+    val locked = LocalAppLocked.current
+    val shown = remember { Shown() }
+    if (!locked) shown.value = true
+    return shown.value
+}
+
 @Composable
 fun ConfirmDialog(
     title: String,
@@ -148,6 +169,7 @@ fun ConfirmDialog(
     destructive: Boolean = false,
     @DrawableRes icon: Int? = null,
 ) {
+    if (!rememberDialogAllowed()) return
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = icon?.let { { Ic(it) } },
@@ -183,6 +205,7 @@ fun TextInputDialog(
     keyboardType: KeyboardType = KeyboardType.Text,
     validate: (String) -> String? = { if (it.isBlank()) "" else null },
 ) {
+    if (!rememberDialogAllowed()) return
     val end = if (selectBaseName && initial.contains('.')) initial.lastIndexOf('.') else initial.length
     var value by remember { mutableStateOf(TextFieldValue(initial, TextRange(0, end))) }
     val error = validate(value.text)
@@ -250,9 +273,26 @@ fun UsageBar(fraction: Float, modifier: Modifier = Modifier, height: Dp = 12.dp)
     )
 }
 
-/** Copies a secret (a link with its key, a recovery key); Android 13+ hides it in the clipboard preview. */
-fun copySensitive(context: Context, text: String) {
+/**
+ * Copies a secret (a link with its key, a recovery key); Android 13+ hides it in the clipboard preview.
+ * With [expire] the clip is removed after [SECRET_CLIP_MS], unless something else was copied since.
+ */
+fun copySensitive(context: Context, text: String, expire: Boolean = false) {
+    val clipboard = context.applicationContext.getSystemService(ClipboardManager::class.java)
+    val id = UUID.randomUUID().toString()
     val clip = ClipData.newPlainText("MEGA", text)
-    clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
-    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+    clip.description.extras = PersistableBundle().apply {
+        putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
+        if (expire) putString(CLIP_ID, id)
+    }
+    clipboard.setPrimaryClip(clip)
+    if (!expire) return
+    Handler(Looper.getMainLooper()).postDelayed({
+        // In the background the clipboard cannot be read (null): clear it anyway, the secret must not stay.
+        val current = clipboard.primaryClipDescription
+        if (current == null || current.extras?.getString(CLIP_ID) == id) clipboard.clearPrimaryClip()
+    }, SECRET_CLIP_MS)
 }
+
+private const val SECRET_CLIP_MS = 60_000L
+private const val CLIP_ID = "app.megaglass.clip"

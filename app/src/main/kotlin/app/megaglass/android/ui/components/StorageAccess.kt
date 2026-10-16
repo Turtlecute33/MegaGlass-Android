@@ -50,7 +50,7 @@ fun rememberStorageAccess(): StorageAccess {
         }
     }
     val action = access.pending
-    if (action != null && !access.waitingForSettings) {
+    if (action != null && !access.waitingForSettings && rememberDialogAllowed()) {
         AlertDialog(
             onDismissRequest = { access.pending = null },
             icon = { Ic(R.drawable.ic_sd_card) },

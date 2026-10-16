@@ -45,11 +45,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.util.Format
 import app.megaglass.android.feature.auth.OtpField
@@ -61,6 +63,7 @@ import app.megaglass.android.ui.components.Avatar
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.SectionHeader
 import app.megaglass.android.ui.components.UsageBar
+import app.megaglass.android.ui.components.rememberDialogAllowed
 import app.megaglass.android.ui.nav.ChangeEmail
 import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.theme.AppTheme
@@ -71,6 +74,7 @@ import nz.mega.sdk.MegaAccountDetails
 fun AccountScreen(vm: AccountViewModel = viewModel()) {
     val nav = LocalNavigator.current
     val context = LocalContext.current
+    val resources = LocalResources.current
     val account by vm.state.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     var editName by remember { mutableStateOf(false) }
@@ -165,7 +169,7 @@ fun AccountScreen(vm: AccountViewModel = viewModel()) {
     }
     when (cancelStep) {
         CancelStep.NONE -> Unit
-        CancelStep.WARN -> AlertDialog(
+        CancelStep.WARN -> if (rememberDialogAllowed()) AlertDialog(
             onDismissRequest = { cancelStep = CancelStep.NONE },
             icon = { Ic(R.drawable.ic_warning, tint = MaterialTheme.colorScheme.error) },
             title = { Text(stringResource(R.string.account_cancel_title)) },
@@ -174,8 +178,10 @@ fun AccountScreen(vm: AccountViewModel = viewModel()) {
                 Button(
                     onClick = {
                         scope.launch {
-                            cancelStep = if (twoFactorEnabled()) CancelStep.CODE else CancelStep.NONE
-                            if (cancelStep == CancelStep.NONE) vm.cancelAccount(null) { cancelStep = CancelStep.SENT }
+                            val has2fa = twoFactorEnabled()
+                            cancelStep = if (has2fa == true) CancelStep.CODE else CancelStep.NONE
+                            if (has2fa == false) vm.cancelAccount(null) { cancelStep = CancelStep.SENT }
+                            if (has2fa == null) MegaGlassApp.graph.messenger.show(resources.getString(R.string.security_2fa_check_error))
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
@@ -183,7 +189,7 @@ fun AccountScreen(vm: AccountViewModel = viewModel()) {
             },
             dismissButton = { TextButton(onClick = { cancelStep = CancelStep.NONE }) { Text(stringResource(R.string.cancel)) } },
         )
-        CancelStep.CODE -> {
+        CancelStep.CODE -> if (rememberDialogAllowed()) {
             var code by remember { mutableStateOf("") }
             AlertDialog(
                 onDismissRequest = { cancelStep = CancelStep.NONE },
@@ -197,7 +203,7 @@ fun AccountScreen(vm: AccountViewModel = viewModel()) {
                 dismissButton = { TextButton(onClick = { cancelStep = CancelStep.NONE }) { Text(stringResource(R.string.cancel)) } },
             )
         }
-        CancelStep.SENT -> AlertDialog(
+        CancelStep.SENT -> if (rememberDialogAllowed()) AlertDialog(
             onDismissRequest = { cancelStep = CancelStep.NONE },
             icon = { Ic(R.drawable.ic_mail) },
             title = { Text(stringResource(R.string.account_cancel_sent_title)) },
@@ -213,6 +219,7 @@ private const val PRICING_URL = "https://mega.io/pricing"
 
 @Composable
 private fun NameDialog(first: String, last: String, onSave: (String, String) -> Unit, onDismiss: () -> Unit) {
+    if (!rememberDialogAllowed()) return
     var f by remember { mutableStateOf(first) }
     var l by remember { mutableStateOf(last) }
     AlertDialog(

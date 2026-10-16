@@ -93,6 +93,7 @@ import app.megaglass.android.ui.components.IconAction
 import app.megaglass.android.ui.components.LoadingBox
 import app.megaglass.android.ui.components.TextInputDialog
 import app.megaglass.android.ui.components.copySensitive
+import app.megaglass.android.ui.components.rememberDialogAllowed
 import app.megaglass.android.ui.nav.Album
 import app.megaglass.android.ui.nav.AppNavigator
 import app.megaglass.android.ui.nav.CameraUploadsSettings
@@ -405,6 +406,7 @@ private fun AddToAlbumSheet(
     onNew: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    if (!rememberDialogAllowed()) return
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Text(
             stringResource(R.string.photos_add_to_album),
@@ -598,6 +600,7 @@ fun AlbumScreen(route: Album) {
 /** Full-height sheet to select photos and videos from the timeline. */
 @Composable
 private fun MediaPickerSheet(exclude: Set<Long>, onPick: (Set<Long>) -> Unit, onDismiss: () -> Unit) {
+    if (!rememberDialogAllowed()) return
     val graph = MegaGlassApp.graph
     var sections by remember { mutableStateOf<List<DaySection>?>(null) }
     var selection by remember { mutableStateOf(emptySet<Long>()) }
@@ -648,6 +651,7 @@ private fun MediaPickerSheet(exclude: Set<Long>, onPick: (Set<Long>) -> Unit, on
 
 @Composable
 private fun AlbumLinkDialog(link: String, onDismiss: () -> Unit) {
+    if (!rememberDialogAllowed()) return
     val context = LocalContext.current
     val resources = LocalResources.current
     val graph = MegaGlassApp.graph

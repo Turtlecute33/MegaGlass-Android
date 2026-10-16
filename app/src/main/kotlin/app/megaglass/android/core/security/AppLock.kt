@@ -3,6 +3,9 @@ package app.megaglass.android.core.security
 import app.megaglass.android.core.util.catching
 
 import android.os.SystemClock
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
+import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -12,8 +15,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.security.UnrecoverableKeyException
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 
@@ -75,6 +83,54 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
         _locked.value = false
     }
 
+    /**
+     * Turns biometric unlock on or off. On creates a Keystore key that only a strong biometric
+     * can use; a fingerprint or face added later makes the key invalid.
+     */
+    suspend fun setBiometric(on: Boolean) {
+        withContext(Dispatchers.IO) {
+            if (on) createBiometricKey() else catching { keyStore().deleteEntry(BIOMETRIC_KEY) }
+        }
+        settings.update { it.copy(biometricUnlock = on) }
+    }
+
+    /**
+     * The cipher for the biometric prompt, or null when the key is missing or invalid (the
+     * biometrics of the device changed). Throws when the Keystore is not available.
+     */
+    fun biometricCipher(): Cipher? = try {
+        val key = keyStore().getKey(BIOMETRIC_KEY, null) as? SecretKey
+        key?.let { Cipher.getInstance(BIOMETRIC_TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, it) } }
+    } catch (_: KeyPermanentlyInvalidatedException) {
+        null
+    } catch (_: UnrecoverableKeyException) {
+        null
+    }
+
+    /** Unlocks when the biometric prompt authorized [cipher] (from [biometricCipher]). */
+    fun unlockWithBiometric(cipher: Cipher): Boolean {
+        val ok = catching { cipher.doFinal(ByteArray(16)) }.isSuccess
+        if (ok) _locked.value = false
+        return ok
+    }
+
+    private fun keyStore() = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+
+    private fun createBiometricKey() {
+        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        generator.init(
+            KeyGenParameterSpec.Builder(BIOMETRIC_KEY, KeyProperties.PURPOSE_ENCRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .setUserAuthenticationRequired(true)
+                .setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+                .setInvalidatedByBiometricEnrollment(true)
+                .build(),
+        )
+        generator.generateKey()
+    }
+
     /** Sets a new passcode, or turns the lock off with null. */
     suspend fun setPasscode(passcode: String?) {
         val value = passcode?.let {
@@ -84,6 +140,7 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
             }
         }
         failures = 0
+        if (value == null) withContext(Dispatchers.IO) { catching { keyStore().deleteEntry(BIOMETRIC_KEY) } }
         settings.update {
             it.copy(
                 passcodeHash = value,
@@ -102,5 +159,10 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
         } finally {
             spec.clearPassword()
         }
+    }
+
+    private companion object {
+        const val BIOMETRIC_KEY = "megaglass.lock.biometric"
+        const val BIOMETRIC_TRANSFORMATION = "AES/GCM/NoPadding"
     }
 }

@@ -99,6 +99,8 @@
     <string name="security_2fa_on">On. Log-in needs a code from your authenticator app.</string>
     <string name="security_2fa_off">Off. Turn it on for more protection.</string>
     <string name="security_checking">Checking…</string>
+    <string name="security_2fa_check_failed">Cannot check. Tap to try again.</string>
+    <string name="security_2fa_check_error">Cannot check two-factor authentication. Try again.</string>
     <string name="security_2fa_disable_title">Turn off two-factor authentication?</string>
     <string name="security_2fa_disable_text">Enter the code from your authenticator app.</string>
     <string name="security_2fa_code_title">Enter your 6-digit code</string>
@@ -110,7 +112,9 @@
     <string name="security_2fa_done_title">Two-factor authentication is on</string>
     <string name="security_2fa_done_text">If you lose access to your authenticator app, you need your recovery key. Save it now if you did not do this before.</string>
     <string name="security_copy">Copy</string>
+    <string name="security_copied_secret">Copied. The clipboard is cleared after 1 minute.</string>
     <string name="security_open_authenticator">Open authenticator</string>
+    <string name="security_send_key_to">Add the key to %1$s?</string>
     <string name="security_no_authenticator">No authenticator app is installed. Copy the key into your app.</string>
     <string name="security_change_password">Change password</string>
     <string name="security_change_password_text">Your password encrypts your data. MEGA cannot see it or reset it for you.</string>
@@ -165,6 +169,7 @@
     <string name="lock_use_biometric">Unlock with biometrics</string>
     <string name="lock_biometric_title">Unlock MegaGlass</string>
     <string name="lock_use_passcode">Use passcode</string>
+    <string name="lock_biometric_reset">Biometric unlock is off because the fingerprints or faces on this device changed. Enter your passcode, then turn it on again in Settings.</string>
 
     <!-- About -->
     <string name="about_privacy">MegaGlass has no analytics, no ads and no telemetry. Files are encrypted on this device before they are uploaded. The app connects only to MEGA.</string>

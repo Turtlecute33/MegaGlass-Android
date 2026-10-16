@@ -52,7 +52,9 @@ import app.megaglass.android.core.storage.StartPage
 import app.megaglass.android.feature.auth.AuthScreen
 import app.megaglass.android.feature.drive.UploadDestinationDialog
 import app.megaglass.android.feature.lock.LockScreen
+import app.megaglass.android.ui.components.ConfirmDialog
 import app.megaglass.android.ui.components.Ic
+import app.megaglass.android.ui.components.LocalAppLocked
 import app.megaglass.android.ui.nav.AppNavigator
 import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.nav.MainScaffold
@@ -86,18 +88,20 @@ fun AppRoot(incoming: MutableStateFlow<IncomingAction?>) {
     MegaGlassTheme(settings) {
         Surface(color = MaterialTheme.colorScheme.surface) {
             Box(Modifier.fillMaxSize()) {
-                AnimatedContent(
-                    targetState = session.screenKey(),
-                    transitionSpec = { fadeIn() togetherWith fadeOut() },
-                    label = "session",
-                ) { key ->
-                    when (key) {
-                        "starting" -> Box(Modifier.fillMaxSize())
-                        "out" -> AuthScreen()
-                        "loading" -> LoadingSession(session as? SessionState.Loading)
-                        "blocked" -> BlockedScreen((session as? SessionState.Blocked)?.message.orEmpty())
-                        "failed" -> ResumeFailedScreen((session as? SessionState.Failed)?.message.orEmpty())
-                        else -> ReadyContent(incoming)
+                CompositionLocalProvider(LocalAppLocked provides (locked && graph.lock.isEnabled)) {
+                    AnimatedContent(
+                        targetState = session.screenKey(),
+                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        label = "session",
+                    ) { key ->
+                        when (key) {
+                            "starting" -> Box(Modifier.fillMaxSize())
+                            "out" -> AuthScreen()
+                            "loading" -> LoadingSession(session as? SessionState.Loading)
+                            "blocked" -> BlockedScreen((session as? SessionState.Blocked)?.message.orEmpty())
+                            "failed" -> ResumeFailedScreen((session as? SessionState.Failed)?.message.orEmpty())
+                            else -> ReadyContent(incoming)
+                        }
                     }
                 }
                 if (locked && graph.lock.isEnabled) {
@@ -212,6 +216,7 @@ private fun LoadingSession(state: SessionState.Loading?) {
 @Composable
 private fun ResumeFailedScreen(message: String) {
     val scope = rememberCoroutineScope()
+    var confirmLogout by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
@@ -227,9 +232,20 @@ private fun ResumeFailedScreen(message: String) {
         Text(message, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(24.dp))
         Button(onClick = { MegaGlassApp.graph.session.start() }) { Text(stringResource(R.string.retry)) }
-        androidx.compose.material3.TextButton(onClick = { scope.launch { MegaGlassApp.graph.session.logout() } }) {
+        androidx.compose.material3.TextButton(onClick = { confirmLogout = true }) {
             Text(stringResource(R.string.logout))
         }
+    }
+    if (confirmLogout) {
+        ConfirmDialog(
+            title = stringResource(R.string.logout_title),
+            text = stringResource(R.string.logout_text),
+            confirmLabel = stringResource(R.string.logout),
+            destructive = true,
+            icon = R.drawable.ic_logout,
+            onConfirm = { scope.launch { MegaGlassApp.graph.session.logout() } },
+            onDismiss = { confirmLogout = false },
+        )
     }
 }
 

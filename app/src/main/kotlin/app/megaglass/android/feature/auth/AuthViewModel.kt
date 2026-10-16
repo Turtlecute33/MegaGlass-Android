@@ -52,6 +52,7 @@ class AuthViewModel : ViewModel() {
     fun login(email: String, password: String) = run {
         try {
             session.login(email, password)
+            loggedIn()
         } catch (_: TwoFactorRequired) {
             pendingPassword = password
             _state.update { it.copy(step = AuthStep.TWO_FACTOR, email = email) }
@@ -61,7 +62,14 @@ class AuthViewModel : ViewModel() {
     fun submitCode(code: String) = run {
         val password = pendingPassword ?: return@run go(AuthStep.LOGIN)
         session.login(_state.value.email, password, code)
+        loggedIn()
+    }
+
+    /** This model outlives the session: after a logout the screen starts again, without the old e-mail. */
+    private fun loggedIn() {
         pendingPassword = null
+        pendingName = ""
+        _state.value = AuthState()
     }
 
     fun signup(firstName: String, lastName: String, email: String, password: String) = run {

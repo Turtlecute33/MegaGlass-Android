@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -50,6 +51,7 @@ import app.megaglass.android.ui.components.Ic
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import javax.crypto.Cipher
 
 /** Wrong codes in a row before the app logs out and removes the passcode. */
 private const val MAX_ATTEMPTS = 10
@@ -61,8 +63,8 @@ fun biometricAvailable(context: Context): Boolean =
     context.getSystemService(BiometricManager::class.java)
         ?.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
 
-/** Shows the system biometric prompt; calls [onSuccess] on the main thread. */
-fun showBiometricPrompt(context: Context, title: String, cancel: String, onSuccess: () -> Unit): CancellationSignal {
+/** Shows the system biometric prompt for [cipher]; calls [onSuccess] with it on the main thread. */
+fun showBiometricPrompt(context: Context, title: String, cancel: String, cipher: Cipher, onSuccess: (Cipher) -> Unit): CancellationSignal {
     val executor = ContextCompat.getMainExecutor(context)
     val signal = CancellationSignal()
     BiometricPrompt.Builder(context)
@@ -71,11 +73,13 @@ fun showBiometricPrompt(context: Context, title: String, cancel: String, onSucce
         .setNegativeButton(cancel, executor) { _, _ -> }
         .build()
         .authenticate(
+            BiometricPrompt.CryptoObject(cipher),
             signal,
             executor,
             object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    if (!signal.isCanceled) onSuccess()
+                    val authorized = result.cryptoObject?.cipher ?: return
+                    if (!signal.isCanceled) onSuccess(authorized)
                 }
             },
         )
@@ -96,6 +100,7 @@ fun LockScreen() {
     var checking by remember { mutableStateOf(false) }
     var wiping by remember { mutableStateOf(false) }
     var checkError by remember { mutableStateOf<String?>(null) }
+    var biometricNotice by remember { mutableStateOf(false) }
     var biometricSignal by remember { mutableStateOf<CancellationSignal?>(null) }
     DisposableEffect(Unit) { onDispose { biometricSignal?.cancel() } }
     val length = settings.passcodeLength
@@ -103,11 +108,20 @@ fun LockScreen() {
     val useBiometric = settings.biometricUnlock && biometricReady
     val promptTitle = stringResource(R.string.lock_biometric_title)
     val promptCancel = stringResource(R.string.lock_use_passcode)
-    val biometric = {
-        biometricSignal?.cancel()
-        biometricSignal = showBiometricPrompt(activity ?: context, promptTitle, promptCancel) {
-            graph.lock.unlock()
-            graph.scope.launch { graph.lock.resetFailures() }
+    val biometric: () -> Unit = {
+        scope.launch {
+            // Keystore not available: the passcode still works.
+            val cipher = catching { withContext(Dispatchers.IO) { graph.lock.biometricCipher() } }.getOrElse { return@launch }
+            if (cipher == null) {
+                // The biometrics of the device changed. Only the owner, with the passcode, can turn it on again.
+                biometricNotice = true
+                graph.scope.launch { graph.lock.setBiometric(false) }
+                return@launch
+            }
+            biometricSignal?.cancel()
+            biometricSignal = showBiometricPrompt(activity ?: context, promptTitle, promptCancel, cipher) { authorized ->
+                if (graph.lock.unlockWithBiometric(authorized)) graph.scope.launch { graph.lock.resetFailures() }
+            }
         }
     }
 
@@ -191,6 +205,14 @@ fun LockScreen() {
                     }
                 } else null,
             )
+            if (biometricNotice) {
+                Text(
+                    stringResource(R.string.lock_biometric_reset),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
+            }
             checkError?.let { message ->
                 Text(message, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 16.dp))
                 if (attempts >= MAX_ATTEMPTS) TextButton(onClick = { wipe() }, enabled = !wiping) {

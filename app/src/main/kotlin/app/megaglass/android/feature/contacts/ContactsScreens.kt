@@ -62,6 +62,7 @@ import app.megaglass.android.ui.components.EmptyState
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.IconAction
 import app.megaglass.android.ui.components.LoadingBox
+import app.megaglass.android.ui.components.rememberDialogAllowed
 import app.megaglass.android.ui.nav.ContactDetail
 import app.megaglass.android.ui.nav.ContactRequests
 import app.megaglass.android.ui.nav.LocalNavigator
@@ -238,6 +239,7 @@ internal fun IconBubble(
 
 @Composable
 private fun InviteDialog(onInvite: (String, String) -> Unit, onDismiss: () -> Unit) {
+    if (!rememberDialogAllowed()) return
     var email by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("") }
     val valid = email.trim().let { it.contains('@') && it.contains('.') && !it.contains(' ') }

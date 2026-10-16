@@ -7,6 +7,7 @@ import app.megaglass.android.core.util.catching
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -83,6 +84,7 @@ import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.LoadingBox
 import app.megaglass.android.ui.components.TextInputDialog
 import app.megaglass.android.ui.components.copySensitive
+import app.megaglass.android.ui.components.rememberDialogAllowed
 import app.megaglass.android.ui.nav.ChangeEmail
 import app.megaglass.android.ui.nav.ChangePassword
 import app.megaglass.android.ui.nav.LocalNavigator
@@ -98,6 +100,14 @@ import nz.mega.sdk.MegaApiJava
 import nz.mega.sdk.MegaError
 
 private val lockTimeouts = listOf(0, 30, 60, 300, 1800)
+
+/** A change to the app lock that needs the current passcode first. */
+private sealed interface LockChange {
+    data object TurnOff : LockChange
+    data object NewPasscode : LockChange
+    data object Biometric : LockChange
+    data class Timeout(val seconds: Int) : LockChange
+}
 
 @Composable
 private fun timeoutLabel(seconds: Int): String = when {
@@ -125,20 +135,26 @@ fun SecuritySettingsScreen() {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var twoFactor by remember { mutableStateOf<Boolean?>(null) }
+    var twoFactorFailed by remember { mutableStateOf(false) }
+    var twoFactorCheck by remember { mutableIntStateOf(0) }
     var askTimeout by remember { mutableStateOf(false) }
-    var disablePasscode by remember { mutableStateOf(false) }
+    var lockChange by remember { mutableStateOf<LockChange?>(null) }
     var disable2fa by remember { mutableStateOf(false) }
     val canBiometric = remember { biometricAvailable(context) }
     val passcodeOn = settings.passcodeHash != null
 
-    LaunchedEffect(Unit) { twoFactor = twoFactorEnabled() }
+    LaunchedEffect(twoFactorCheck) {
+        twoFactorFailed = false
+        twoFactor = twoFactorEnabled()
+        twoFactorFailed = twoFactor == null
+    }
 
     val lockRows = buildList {
         add(SettingRow.Toggle(R.drawable.ic_lock, stringResource(R.string.security_passcode), stringResource(R.string.security_passcode_summary), passcodeOn) { on ->
-            if (on) nav.navigate(PasscodeSetup) else disablePasscode = true
+            if (on) nav.navigate(PasscodeSetup) else lockChange = LockChange.TurnOff
         })
         if (passcodeOn) {
-            add(SettingRow.Link(R.drawable.ic_password, stringResource(R.string.security_change_passcode)) { nav.navigate(PasscodeSetup) })
+            add(SettingRow.Link(R.drawable.ic_password, stringResource(R.string.security_change_passcode)) { lockChange = LockChange.NewPasscode })
             add(
                 SettingRow.Toggle(
                     R.drawable.ic_fingerprint,
@@ -146,7 +162,10 @@ fun SecuritySettingsScreen() {
                     stringResource(if (canBiometric) R.string.security_biometric_summary else R.string.security_biometric_unavailable),
                     settings.biometricUnlock && canBiometric,
                     enabled = canBiometric,
-                ) { on -> graph.scope.launch { graph.settings.update { it.copy(biometricUnlock = on) } } },
+                ) { on ->
+                    if (on) lockChange = LockChange.Biometric
+                    else graph.scope.launch { graph.lock.setBiometric(false) }
+                },
             )
             add(SettingRow.Link(R.drawable.ic_lock_clock, stringResource(R.string.security_timeout), value = timeoutLabel(settings.lockTimeout)) {
                 askTimeout = true
@@ -159,7 +178,11 @@ fun SecuritySettingsScreen() {
         )
     }
     val accountRows = listOf(
-        SettingRow.Toggle(
+        if (twoFactorFailed) {
+            SettingRow.Link(R.drawable.ic_verified_user, stringResource(R.string.security_2fa), summary = stringResource(R.string.security_2fa_check_failed)) {
+                twoFactorCheck++
+            }
+        } else SettingRow.Toggle(
             R.drawable.ic_verified_user,
             stringResource(R.string.security_2fa),
             when (twoFactor) {
@@ -191,26 +214,40 @@ fun SecuritySettingsScreen() {
             title = stringResource(R.string.security_timeout),
             options = lockTimeouts.map { timeoutLabel(it) },
             selected = lockTimeouts.indexOf(settings.lockTimeout).coerceAtLeast(0),
-            onSelect = { i -> graph.scope.launch { graph.settings.update { it.copy(lockTimeout = lockTimeouts[i]) } } },
+            onSelect = { i ->
+                val seconds = lockTimeouts[i]
+                // A longer time keeps the app open longer: as weak as turning the lock off.
+                if (seconds > settings.lockTimeout) lockChange = LockChange.Timeout(seconds)
+                else graph.scope.launch { graph.settings.update { it.copy(lockTimeout = seconds) } }
+            },
             onDismiss = { askTimeout = false },
         )
     }
-    if (disablePasscode) {
+    lockChange?.let { change ->
+        val turnOff = change == LockChange.TurnOff
         TextInputDialog(
-            title = stringResource(R.string.security_passcode_off_title),
+            title = stringResource(if (turnOff) R.string.security_passcode_off_title else R.string.lock_subtitle),
             label = stringResource(R.string.security_current_passcode),
-            confirmLabel = stringResource(R.string.security_turn_off),
+            confirmLabel = stringResource(if (turnOff) R.string.security_turn_off else R.string.ok),
             password = true,
             keyboardType = KeyboardType.NumberPassword,
             onConfirm = { pin ->
                 scope.launch {
                     catching {
-                        if (graph.lock.matches(pin)) graph.lock.setPasscode(null)
-                        else graph.messenger.show(resources.getString(R.string.security_wrong_passcode))
+                        if (!graph.lock.matches(pin)) {
+                            graph.messenger.show(resources.getString(R.string.security_wrong_passcode))
+                            return@catching
+                        }
+                        when (change) {
+                            LockChange.TurnOff -> graph.lock.setPasscode(null)
+                            LockChange.NewPasscode -> nav.navigate(PasscodeSetup)
+                            LockChange.Biometric -> graph.lock.setBiometric(true)
+                            is LockChange.Timeout -> graph.settings.update { it.copy(lockTimeout = change.seconds) }
+                        }
                     }.onFailure { graph.messenger.show(context.errorText(it)) }
                 }
             },
-            onDismiss = { disablePasscode = false },
+            onDismiss = { lockChange = null },
             validate = { if (it.length == settings.passcodeLength) null else "" },
         )
     }
@@ -234,6 +271,7 @@ fun SecuritySettingsScreen() {
 /** Asks for the 6-digit authenticator code. */
 @Composable
 fun CodeDialog(title: String, text: String?, confirm: String, onCode: (String) -> Unit, onDismiss: () -> Unit) {
+    if (!rememberDialogAllowed()) return
     var code by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -419,7 +457,11 @@ fun ChangePasswordScreen() {
             }
             val has2fa = twoFactorEnabled()
             busy = false
-            if (has2fa) askCode = true else change(null)
+            when (has2fa) {
+                true -> askCode = true
+                false -> change(null)
+                null -> error = resources.getString(R.string.security_2fa_check_error)
+            }
         }
     }
 
@@ -516,7 +558,13 @@ fun ChangeEmailScreen() {
         if (error != null) Text(error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
         Gap(24)
         FormButton(stringResource(R.string.security_send_confirmation), busy, valid) {
-            scope.launch { if (twoFactorEnabled()) askCode = true else change(null) }
+            scope.launch {
+                when (twoFactorEnabled()) {
+                    true -> askCode = true
+                    false -> change(null)
+                    null -> error = resources.getString(R.string.security_2fa_check_error)
+                }
+            }
         }
     }
 
@@ -543,6 +591,7 @@ fun TwoFactorSetupScreen() {
     val scope = rememberCoroutineScope()
     var step by remember { mutableStateOf(TwoFactorStep.INTRO) }
     var secret by remember { mutableStateOf<String?>(null) }
+    var authenticator by remember { mutableStateOf<Pair<String, Intent>?>(null) }
     var code by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -606,15 +655,25 @@ fun TwoFactorSetupScreen() {
                         }
                         Gap(12)
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedButton(onClick = { copySensitive(context, key) }, modifier = Modifier.weight(1f)) {
+                            OutlinedButton(onClick = {
+                                copySensitive(context, key, expire = true)
+                                graph.messenger.show(resources.getString(R.string.security_copied_secret))
+                            }, modifier = Modifier.weight(1f)) {
                                 Text(stringResource(R.string.security_copy))
                             }
                             FilledTonalButton(onClick = {
                                 val uri = Uri.parse("otpauth://totp/MEGA:" + Uri.encode(api.myEmail.orEmpty()) + "?secret=" + key + "&issuer=MEGA")
-                                try {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                                } catch (_: ActivityNotFoundException) {
-                                    graph.messenger.show(resources.getString(R.string.security_no_authenticator))
+                                val intent = Intent(Intent.ACTION_VIEW, uri)
+                                // Any app can claim otpauth links: the user sees which app gets the key,
+                                // also when there is only one (a chooser opens a single app at once).
+                                val pm = context.packageManager
+                                val apps = pm.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong()))
+                                when (apps.size) {
+                                    0 -> graph.messenger.show(resources.getString(R.string.security_no_authenticator))
+                                    1 -> apps[0].activityInfo.let { app ->
+                                        authenticator = app.loadLabel(pm).toString() to Intent(intent).setClassName(app.packageName, app.name)
+                                    }
+                                    else -> context.startActivity(Intent.createChooser(intent, resources.getString(R.string.security_open_authenticator)))
                                 }
                             }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.security_open_authenticator)) }
                         }
@@ -642,6 +701,22 @@ fun TwoFactorSetupScreen() {
                 Gap(24)
             }
         }
+    }
+
+    authenticator?.let { (label, intent) ->
+        ConfirmDialog(
+            title = stringResource(R.string.security_send_key_to, label),
+            text = null,
+            confirmLabel = stringResource(R.string.security_open_authenticator),
+            onConfirm = {
+                try {
+                    context.startActivity(intent)
+                } catch (_: ActivityNotFoundException) {
+                    graph.messenger.show(resources.getString(R.string.security_no_authenticator))
+                }
+            },
+            onDismiss = { authenticator = null },
+        )
     }
 }
 
@@ -721,9 +796,9 @@ fun RecoveryKeyScreen() {
             Gap(24)
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(onClick = {
-                    copySensitive(context, k)
+                    copySensitive(context, k, expire = true)
                     scope.launch { markExported() }
-                    graph.messenger.show(resources.getString(R.string.copied))
+                    graph.messenger.show(resources.getString(R.string.security_copied_secret))
                 }, modifier = Modifier.weight(1f).height(52.dp)) {
                     Ic(R.drawable.ic_content_copy, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))

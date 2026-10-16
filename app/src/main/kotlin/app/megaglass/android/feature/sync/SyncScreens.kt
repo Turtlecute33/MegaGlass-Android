@@ -59,6 +59,7 @@ import app.megaglass.android.ui.components.EmptyState
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.IconAction
 import app.megaglass.android.ui.components.LoadingBox
+import app.megaglass.android.ui.components.rememberDialogAllowed
 import app.megaglass.android.ui.components.rememberStorageAccess
 import app.megaglass.android.ui.nav.Folder
 import app.megaglass.android.ui.nav.LocalNavigator
@@ -187,7 +188,7 @@ fun SyncsScreen(vm: SyncViewModel = viewModel()) {
             var busy by remember(s) { mutableStateOf(false) }
             var error by remember(s) { mutableStateOf<String?>(null) }
             val remotePath = remember(s) { graph.mega.api.getNodePathByHandle(s.remote).orEmpty() }
-            AlertDialog(
+            if (rememberDialogAllowed()) AlertDialog(
                 onDismissRequest = { if (!busy) step = null },
                 icon = { Ic(R.drawable.ic_cloud_sync) },
                 title = { Text(stringResource(R.string.sync_confirm_title)) },
@@ -232,7 +233,7 @@ fun SyncsScreen(vm: SyncViewModel = viewModel()) {
         )
     }
 
-    stalls?.let { list ->
+    stalls?.takeIf { rememberDialogAllowed() }?.let { list ->
         ModalBottomSheet(onDismissRequest = { stalls = null }) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).navigationBarsPadding()) {
                 Text(stringResource(R.string.sync_stalled_title), style = MaterialTheme.typography.titleLarge)

@@ -57,6 +57,7 @@ import app.megaglass.android.ui.components.LoadingBox
 import app.megaglass.android.ui.components.NodeRow
 import app.megaglass.android.ui.components.SectionHeader
 import app.megaglass.android.ui.components.TextInputDialog
+import app.megaglass.android.ui.components.rememberDialogAllowed
 import app.megaglass.android.ui.nav.ContactDetail
 import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.nav.MediaSource
@@ -216,6 +217,7 @@ private fun CredentialsDialog(
     onVerify: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    if (!rememberDialogAllowed()) return
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Ic(R.drawable.ic_verified_user) },

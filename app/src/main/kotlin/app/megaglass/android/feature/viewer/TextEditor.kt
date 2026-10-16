@@ -56,6 +56,7 @@ import app.megaglass.android.ui.components.BackButton
 import app.megaglass.android.ui.components.ErrorState
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.IconAction
+import app.megaglass.android.ui.components.rememberDialogAllowed
 import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.nav.TextEditor
 import kotlinx.coroutines.Dispatchers
@@ -270,7 +271,7 @@ fun TextEditorScreen(route: TextEditor) {
         }
     }
 
-    if (askDiscard) {
+    if (askDiscard && rememberDialogAllowed()) {
         AlertDialog(
             onDismissRequest = { askDiscard = false },
             icon = { Ic(R.drawable.ic_edit) },

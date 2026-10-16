@@ -59,6 +59,7 @@ import app.megaglass.android.core.util.Format
 import app.megaglass.android.ui.components.ConfirmDialog
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.SectionHeader
+import app.megaglass.android.ui.components.rememberDialogAllowed
 import app.megaglass.android.ui.components.rememberStorageAccess
 import app.megaglass.android.ui.nav.Account
 import app.megaglass.android.ui.nav.CameraUploadsSettings
@@ -466,7 +467,7 @@ fun AboutScreen() {
         settingsGroup(licenceTitle, licenceRows)
     }
 
-    licence?.let { text ->
+    licence?.takeIf { rememberDialogAllowed() }?.let { text ->
         AlertDialog(
             onDismissRequest = { licence = null },
             title = { Text("MEGA SDK") },

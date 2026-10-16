@@ -77,6 +77,7 @@ import app.megaglass.android.feature.contacts.ContactDirectory
 import app.megaglass.android.feature.contacts.EmailAvatar
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.NodeThumbnail
+import app.megaglass.android.ui.components.rememberDialogAllowed
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -169,6 +170,7 @@ private class ShareFolderModel(private val handle: Long, private val scope: Coro
 /** Shares a folder with contacts: add people, change access, stop sharing. */
 @Composable
 fun ShareFolderSheet(handle: Long, onDismiss: () -> Unit) {
+    if (!rememberDialogAllowed()) return
     val scope = rememberCoroutineScope()
     val model = remember(handle) { ShareFolderModel(handle, scope) }
     var adding by remember { mutableStateOf(false) }
