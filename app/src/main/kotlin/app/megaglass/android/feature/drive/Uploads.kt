@@ -45,14 +45,17 @@ class Uploader internal constructor(
     fun newTextFile() = newText()
 }
 
-/** Uploads content URIs into [parent]; real paths are used when possible (no copy). */
-suspend fun uploadUris(uris: List<Uri>, parent: Long) {
+/**
+ * Uploads content URIs into [parent]. URIs from the app's pickers use real paths when possible
+ * (no copy); URIs [shared] by other apps are always copied.
+ */
+suspend fun uploadUris(uris: List<Uri>, parent: Long, shared: Boolean) {
     val graph = MegaGlassApp.graph
     val account = graph.mega.api.myUserHandle
     val sources = mutableListOf<LocalSource>()
     var unreadable = 0
     for (uri in uris.distinct()) {
-        val source = catching { graph.files.resolveForUpload(uri) }.getOrNull()
+        val source = catching { graph.files.resolveForUpload(uri, shared) }.getOrNull()
         if (source == null) unreadable++ else sources += source
     }
     if (unreadable > 0) graph.messenger.show(graph.context.resources.getQuantityString(R.plurals.upload_unreadable, unreadable, unreadable))
@@ -87,13 +90,13 @@ fun rememberUploader(parent: Long): Uploader {
     var askTextName by remember { mutableStateOf(false) }
 
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) launchUpload { uploadUris(uris, target) }
+        if (uris.isNotEmpty()) launchUpload { uploadUris(uris, target, shared = false) }
     }
     val folder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         val path = graph.files.realPath(uri)
         if (path == null) {
-            graph.messenger.show(resources.getString(R.string.folder_upload_needs_access))
+            graph.messenger.show(resources.getString(if (graph.files.hasAllFilesAccess) R.string.folder_not_local else R.string.folder_upload_needs_access))
             return@rememberLauncherForActivityResult
         }
         launchUpload {
@@ -158,7 +161,7 @@ fun UploadDestinationDialog(uris: List<Uri>, onDismiss: () -> Unit) {
     FolderPickerDialog(
         title = pluralStringResource(R.plurals.upload_items, uris.size, uris.size),
         confirmLabel = stringResource(R.string.upload_here),
-        onPick = { target -> launchUpload { uploadUris(uris, target) } },
+        onPick = { target -> launchUpload { uploadUris(uris, target, shared = true) } },
         onDismiss = onDismiss,
     )
 }

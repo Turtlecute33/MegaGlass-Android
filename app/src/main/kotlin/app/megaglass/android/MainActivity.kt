@@ -13,6 +13,7 @@ import androidx.core.content.IntentCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import app.megaglass.android.feature.links.findMegaLink
 import app.megaglass.android.ui.AppRoot
 import app.megaglass.android.ui.IncomingAction
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,12 +74,19 @@ class MainActivity : ComponentActivity() {
         incoming.value = when (intent.action) {
             Intent.ACTION_VIEW -> intent.dataString?.takeIf(::isMegaLink)?.let { IncomingAction.OpenLink(it) }
             Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
-                ?.let { IncomingAction.Upload(listOf(it)) }
+                ?.let { IncomingAction.Upload(listOf(it)) } ?: sharedText(intent)
             Intent.ACTION_SEND_MULTIPLE -> IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
                 ?.takeIf { it.isNotEmpty() }?.let { IncomingAction.Upload(it) }
             ACTION_TRANSFERS -> IncomingAction.ShowTransfers
             else -> null
         }
+    }
+
+    /** A shared text, for example a link from a browser or a chat: opens the first MEGA link in it. */
+    private fun sharedText(intent: Intent): IncomingAction? {
+        val link = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.let(::findMegaLink)
+        if (link == null) android.widget.Toast.makeText(this, R.string.share_nothing, android.widget.Toast.LENGTH_LONG).show()
+        return link?.let { IncomingAction.OpenLink(it) }
     }
 
     private fun isMegaLink(url: String): Boolean {

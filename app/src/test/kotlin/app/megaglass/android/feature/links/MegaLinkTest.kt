@@ -21,6 +21,13 @@ class MegaLinkTest {
         )) assertTrue(url, parseMegaLink(url) is MegaLink.Invalid)
     }
 
+    @Test fun sharedTextsOpenTheirFirstMegaLink() {
+        assertEquals("https://mega.nz/folder/root#key", findMegaLink("Look:\nhttps://evil.test/file/a#b https://mega.nz/folder/root#key mega://#!h!k"))
+        assertEquals("mega://#!h!k", findMegaLink("  mega://#!h!k"))
+        assertNull(findMegaLink("https://mega.nz.evil.test/file/handle#key and some text"))
+        assertNull(findMegaLink(""))
+    }
+
     @Test fun folderSubpathsRemainSeparateFromTheSdkUrl() {
         assertEquals(MegaLink.Folder("https://mega.nz/folder/root#key", "child", null),
             parseMegaLink("https://mega.nz/folder/root#key/folder/child"))

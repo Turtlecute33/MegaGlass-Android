@@ -4,6 +4,7 @@
         <item quantity="one">Could not read %d selected file.</item>
         <item quantity="other">Could not read %d selected files.</item>
     </plurals>
+    <string name="share_nothing">Nothing to upload</string>
     <string name="cloud_drive">Cloud drive</string>
     <string name="incoming_shares">Incoming shares</string>
     <string name="rubbish_bin">Rubbish bin</string>

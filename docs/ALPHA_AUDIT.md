@@ -140,11 +140,14 @@ and checked before builds. A fresh checkout must run both SDK scripts as documen
   removes offline data.
 - Failed captured originals persist under private `files/pending-uploads`, outside cache
   eviction. Ordinary logout retains them; the explicit passcode wipe removes them. Failed
-  copied-upload sources remain retriable while present. Transfer history is bounded and not a
-  persistent recovery catalogue for every pending original; app-data deletion removes originals.
+  copied-upload sources remain retriable while present; copies that no queued upload reads are
+  removed when the node tree of the next run is current, and by Clear cache. Transfer history
+  is bounded and not a persistent recovery catalogue for every pending original; app-data
+  deletion removes originals.
 - Completion delivery uses an in-process FIFO mailbox; it is not a durable event log. Under a
   prolonged stalled observer its backlog can grow. Disk-image trimming has a recent-reader
-  grace period and is a soft budget. Large-file/private-preview cache eviction is still manual.
+  grace period and is a soft budget. Viewer, open-with and link copies have the same kind of
+  budget (512 MB each, oldest first), applied at start and after each viewer download.
 - Only one public folder SDK session can be active. Superseded entries report that the link must
   be reopened. Native two-way sync runs while the process lives; a continuous Android sync
   service is not implemented. Chat/calls are intentionally excluded. Navigation remains based

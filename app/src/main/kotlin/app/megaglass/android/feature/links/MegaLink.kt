@@ -57,6 +57,10 @@ private fun replaceKey(url: String, key: String): String {
     }
 }
 
+/** The first MEGA link in [text], for example a link shared from a browser or a chat. */
+fun findMegaLink(text: String): String? =
+    text.split(Regex("\\s+")).firstOrNull { it.isNotEmpty() && parseMegaLink(it) !is MegaLink.Invalid }
+
 /**
  * Parses https://mega.nz links (also mega.co.nz, www., and mega:// forms):
  * /file/h#k, #!h!k, /folder/h#k[/folder/s | /file/s], #F!h!k[!s], /collection/h#k, #P!….

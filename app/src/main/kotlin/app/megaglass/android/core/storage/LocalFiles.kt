@@ -40,19 +40,22 @@ class LocalFiles(private val context: Context) {
 
     private val uploadTmpDir: File get() = File(context.cacheDir, "uploads").apply { mkdirs() }
 
+    /** Upload copies older than this run belong to an earlier process. */
+    private val startedAt = System.currentTimeMillis()
+
     /**
-     * Returns a path the SDK can read for [uri]. With all-files access most URIs map to a real
-     * path, which avoids a copy. Otherwise the content is copied into the cache.
+     * Returns a path the SDK can read for [uri]. With all-files access, a URI from the app's own
+     * pickers maps to a real path, which avoids a copy. Other content is copied into the cache.
+     * A URI [shared] by another app is always read through the content resolver, so that the
+     * sender's access applies: a path, document ID or _data value from the sender can name a
+     * file that only this app can read.
      */
-    suspend fun resolveForUpload(uri: Uri): LocalSource? = withContext(Dispatchers.IO) {
-        if (uri.scheme == ContentResolver.SCHEME_CONTENT && uri.authority == context.packageName + ".files") return@withContext null
-        if (uri.scheme == ContentResolver.SCHEME_FILE) {
-            val f = File(uri.path ?: return@withContext null)
-            if (!f.isFile || !f.canRead() || isPrivate(f)) return@withContext null
-            return@withContext LocalSource(f.absolutePath, f.name, temporary = false)
-        }
+    suspend fun resolveForUpload(uri: Uri, shared: Boolean): LocalSource? = withContext(Dispatchers.IO) {
+        if (uri.scheme != ContentResolver.SCHEME_CONTENT) return@withContext null
+        // "userId@authority" also names the app's own provider.
+        if (uri.authority?.substringAfterLast('@') == context.packageName + ".files") return@withContext null
         val name = displayName(uri) ?: "file-${System.currentTimeMillis()}"
-        realPath(uri)?.let { path ->
+        if (!shared) realPath(uri)?.let { path ->
             val f = File(path)
             if (f.isFile && f.canRead() && !isPrivate(f)) return@withContext LocalSource(f.absolutePath, f.name, temporary = false)
         }
@@ -104,11 +107,10 @@ class LocalFiles(private val context: Context) {
                 }
             }
             if (DocumentsContract.isDocumentUri(context, uri) && uri.authority == "com.android.providers.downloads.documents") {
-                val id = DocumentsContract.getDocumentId(uri)
-                if (id.startsWith("raw:")) return id.removePrefix("raw:")
-                if (id.startsWith("msf:")) {
-                    dataColumn(MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL, id.removePrefix("msf:").toLong()))?.let { return it }
-                }
+                downloadsPath(DocumentsContract.getDocumentId(uri))?.let { return it }
+            }
+            if (DocumentsContract.isTreeUri(uri) && uri.authority == "com.android.providers.downloads.documents") {
+                downloadsPath(DocumentsContract.getTreeDocumentId(uri))?.let { return it }
             }
             if (DocumentsContract.isDocumentUri(context, uri) && uri.authority == "com.android.providers.media.documents") {
                 val (type, id) = DocumentsContract.getDocumentId(uri).split(":", limit = 2).let { it[0] to it.getOrNull(1) }
@@ -125,6 +127,14 @@ class LocalFiles(private val context: Context) {
         return null
     }
 
+    /** Downloads provider IDs: "raw:" holds the path, "msf:" is a MediaStore row. */
+    private fun downloadsPath(id: String): String? = when {
+        id.startsWith("raw:") -> id.removePrefix("raw:")
+        id.startsWith("msf:") -> id.removePrefix("msf:").toLongOrNull()
+            ?.let { dataColumn(MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL, it)) }
+        else -> null
+    }
+
     @Suppress("DEPRECATION")
     private fun dataColumn(uri: Uri): String? = catching {
         context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DATA), null, null, null)?.use { c ->
@@ -132,9 +142,12 @@ class LocalFiles(private val context: Context) {
         }
     }.getOrNull()
 
-    /** Removes empty folders left after successful copied-upload cleanup. */
-    fun cleanUploadTemp() {
-        uploadTmpDir.listFiles()?.forEach { dir -> if (dir.isDirectory && dir.list().isNullOrEmpty()) dir.delete() }
+    /**
+     * Removes upload copies that no upload in the SDK queue ([inUse]) reads. Copies of this run
+     * stay, for Retry, unless [all]; then only the copies of the last minutes stay.
+     */
+    fun cleanUploadTemp(inUse: Set<String>, all: Boolean = false) {
+        removeUploadCopies(uploadTmpDir, inUse, if (all) System.currentTimeMillis() - 120_000 else startedAt)
     }
 
     /** content:// URI for a local file, for sharing and "open with". */

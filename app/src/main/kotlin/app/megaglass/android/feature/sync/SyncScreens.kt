@@ -86,7 +86,7 @@ fun SyncsScreen(vm: SyncViewModel = viewModel()) {
     val pickLocal = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         val path = graph.files.realPath(uri)
-        if (path == null) graph.messenger.show(resources.getString(R.string.sync_needs_access))
+        if (path == null) graph.messenger.show(resources.getString(if (graph.files.hasAllFilesAccess) R.string.folder_not_local else R.string.sync_needs_access))
         else step = AddStep.PickCloud(path)
     }
     val startAdd = { storage.ensure { if (storage.granted) pickLocal.launch(null) else graph.messenger.show(resources.getString(R.string.sync_needs_access)) } }

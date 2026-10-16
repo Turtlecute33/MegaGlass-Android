@@ -6,7 +6,9 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import app.megaglass.android.core.FileOpener
 import app.megaglass.android.core.camera.CameraUploads
 import app.megaglass.android.feature.contacts.ContactDirectory
+import app.megaglass.android.feature.viewer.PreviewCache
 import app.megaglass.android.feature.viewer.StreamServer
+import app.megaglass.android.feature.viewer.PlaybackQueue
 import app.megaglass.android.feature.viewer.PlaybackService
 import android.content.Intent
 import app.megaglass.android.core.Messenger
@@ -20,6 +22,7 @@ import app.megaglass.android.core.storage.LocalFiles
 import app.megaglass.android.core.storage.OfflineStore
 import app.megaglass.android.core.storage.SessionStore
 import app.megaglass.android.core.storage.Settings
+import app.megaglass.android.core.storage.trimImageCache
 import app.megaglass.android.core.transfers.TransferJobService
 import app.megaglass.android.core.transfers.TransferManager
 import coil3.ImageLoader
@@ -28,9 +31,11 @@ import coil3.SingletonImageLoader
 import coil3.memory.MemoryCache
 import coil3.request.crossfade
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import nz.mega.sdk.MegaEvent
 import java.io.File
@@ -59,7 +64,16 @@ class AppGraph(val context: Context) {
         transfers.onError = { messenger.show(it) }
         transfers.retryOffline = { offline.makeAvailable(listOf(it)) }
         CameraUploads.install(this)
-        scope.launch(Dispatchers.IO) { files.cleanUploadTemp() }
+        // The SDK resumes the uploads of an earlier run when the nodes are current; the copies
+        // that no upload reads are left over from failed or cancelled uploads.
+        scope.launch(Dispatchers.IO, start = CoroutineStart.UNDISPATCHED) {
+            mega.events.first { it.type == MegaEvent.EVENT_NODES_CURRENT }
+            files.cleanUploadTemp(transfers.uploadingPaths())
+        }
+        // Decrypted copies of cloud files stay only up to a size limit.
+        scope.launch(Dispatchers.IO) {
+            listOf("preview", "open", "links").forEach { trimImageCache(File(context.cacheDir, it), PreviewCache.BUDGET) }
+        }
         // Thumbnails of changed files are stale.
         scope.launch {
             nodes.changes.filter { it.imagesChanged.isNotEmpty() }.collect { change -> change.imagesChanged.forEach(images::invalidate) }
@@ -73,6 +87,7 @@ class AppGraph(val context: Context) {
         opener.clear()
         context.stopService(Intent(context, PlaybackService::class.java))
         StreamServer.releasePlayback()
+        PlaybackQueue.clear()
         ContactDirectory.clearIfCreated()
         folderSorts.clear()
         images.clear()

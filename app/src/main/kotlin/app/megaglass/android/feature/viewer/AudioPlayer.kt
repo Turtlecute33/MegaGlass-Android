@@ -98,12 +98,13 @@ fun AudioPlayerScreen(route: AudioPlayer) {
     val folderLink = route.source is MediaSource.FolderLink
     val requestedId = route.localPath?.let { "f:" + File(it).absolutePath } ?: "h:${route.handle}"
     val serverError = stringResource(R.string.viewer_stream_error)
+    val appName = stringResource(R.string.app_name)
     val emptyText = stringResource(R.string.viewer_not_found)
 
     LaunchedEffect(controller) {
         val c = controller ?: return@LaunchedEffect
         if (started) return@LaunchedEffect
-        val existing = (0 until c.mediaItemCount).firstOrNull { c.getMediaItemAt(it).mediaId == requestedId }
+        val existing = (0 until c.mediaItemCount).firstOrNull { PlaybackQueue[c.getMediaItemAt(it).mediaId]?.key == requestedId }
         if (existing != null) {
             // The queue is already playing (the screen opened again): only move to the item.
             if (c.currentMediaItemIndex != existing) c.seekTo(existing, 0)
@@ -118,28 +119,28 @@ fun AudioPlayerScreen(route: AudioPlayer) {
             return@LaunchedEffect
         }
         val api = if (folderLink) graph.mega.folderApi else graph.mega.api
+        // With the app lock on, the notification and the lock screen show no names or covers.
+        val hidden = graph.lock.isEnabled
         val items = withContext(Dispatchers.IO) {
             if (list.any { !it.isLocal } && !StreamServer.holdForPlayback(api)) return@withContext null
-            list.mapIndexedNotNull { i, e ->
-                val uri = e.file?.let(Uri::fromFile) ?: StreamServer.link(api, e.handle)?.let(Uri::parse) ?: return@mapIndexedNotNull null
+            list.zip(PlaybackQueue.add(list)).mapIndexed { i, (e, id) ->
                 // Artwork: the cached thumbnail; the start item loads its thumbnail now.
-                val art = if (e.hasThumbnail) {
+                val art = if (e.hasThumbnail && !hidden) {
                     val image = NodeImage(e.handle, folderLink = e.folderLink)
                     val file = graph.images.file(image).takeIf { it.length() > 0 }
                         ?: if (i == index) catching { graph.images.load(image) }.getOrNull() else null
                     file?.let(Uri::fromFile)
                 } else null
+                val metadata = if (hidden) hiddenMetadata(appName) else MediaMetadata.Builder()
+                    .setTitle(e.title)
+                    .setDisplayTitle(e.title)
+                    .setArtworkUri(art)
+                    .setIsPlayable(true)
+                    .build()
                 MediaItem.Builder()
-                    .setMediaId(e.key)
-                    .setUri(uri)
-                    .setMediaMetadata(
-                        MediaMetadata.Builder()
-                            .setTitle(e.name.substringBeforeLast('.'))
-                            .setDisplayTitle(e.name.substringBeforeLast('.'))
-                            .setArtworkUri(art)
-                            .setIsPlayable(true)
-                            .build(),
-                    )
+                    .setMediaId(id)
+                    .setUri(e.file?.let(Uri::fromFile) ?: PlaybackQueue.uri(id))
+                    .setMediaMetadata(metadata)
                     .build()
             }
         }
@@ -204,7 +205,7 @@ private fun AudioContent(player: Player) {
                 Artwork(current, Modifier.fillMaxWidth(0.8f).aspectRatio(1f))
                 Spacer(Modifier.height(24.dp))
                 Text(
-                    current?.mediaMetadata?.title?.toString().orEmpty(),
+                    current?.title().orEmpty(),
                     style = MaterialTheme.typography.headlineSmall,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
@@ -293,17 +294,38 @@ private fun AudioContent(player: Player) {
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     modifier = Modifier.widthIn(max = 600.dp).padding(horizontal = 8.dp),
                 ) {
-                    Text(item.mediaMetadata.title?.toString().orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(item.title(), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
     }
 }
 
+private val MediaEntry.title get() = name.substringBeforeLast('.')
+
+/** The name in the app, also when the session shows a neutral title (app lock). */
+private fun MediaItem.title(): String = PlaybackQueue[mediaId]?.title ?: mediaMetadata.title?.toString().orEmpty()
+
+/**
+ * A neutral title for the system controls. Empty values also replace the tags of the file
+ * (artist, album, embedded cover), which the player adds to the metadata.
+ */
+private fun hiddenMetadata(title: String) = MediaMetadata.Builder()
+    .setTitle(title)
+    .setDisplayTitle(title)
+    .setArtist("")
+    .setAlbumTitle("")
+    .setAlbumArtist("")
+    .setSubtitle("")
+    .setDescription("")
+    .setArtworkData(ByteArray(0), MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+    .setIsPlayable(true)
+    .build()
+
 @Composable
 private fun Artwork(item: MediaItem?, modifier: Modifier) {
     val context = LocalContext.current
-    val handle = item?.mediaId?.takeIf { it.startsWith("h:") }?.removePrefix("h:")?.toLongOrNull()
+    val image = PlaybackQueue[item?.mediaId]?.takeIf { !it.isLocal && it.hasThumbnail }?.let { NodeImage(it.handle, folderLink = it.folderLink) }
     val shape = MaterialTheme.shapes.extraLarge
     val fallback: @Composable () -> Unit = {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
@@ -311,12 +333,9 @@ private fun Artwork(item: MediaItem?, modifier: Modifier) {
         }
     }
     Box(modifier.clip(shape)) {
-        val art = item?.mediaMetadata?.artworkUri
-        if (art != null || handle != null) {
+        if (image != null) {
             SubcomposeAsyncImage(
-                model = remember(item.mediaId) {
-                    ImageRequest.Builder(context).data(art?.path?.let(::File) ?: NodeImage(handle!!)).build()
-                },
+                model = remember(image) { ImageRequest.Builder(context).data(image).build() },
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

@@ -14,6 +14,7 @@
     <string name="search">Search</string>
     <string name="error_title">Something went wrong</string>
     <string name="no_app_to_open">No app can open this file</string>
+    <string name="folder_not_local">Choose a folder in the device storage.</string>
     <string name="copied">Copied to clipboard</string>
     <string name="empty_folder">Empty folder</string>
     <plurals name="n_files">

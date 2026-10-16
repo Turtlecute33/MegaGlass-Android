@@ -1,5 +1,6 @@
 package app.megaglass.android.ui.components
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -58,9 +59,19 @@ fun rememberStorageAccess(): StorageAccess {
             confirmButton = {
                 Button(onClick = {
                     access.waitingForSettings = true
-                    context.startActivity(
+                    // Some devices have no settings page for one app: try the list of all apps, then
+                    // continue with the app folder.
+                    val opened = listOf(
                         Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + context.packageName)),
-                    )
+                        Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
+                    ).any { intent ->
+                        try { context.startActivity(intent); true } catch (_: ActivityNotFoundException) { false }
+                    }
+                    if (!opened) {
+                        access.waitingForSettings = false
+                        access.pending = null
+                        action()
+                    }
                 }) { Text(stringResource(R.string.storage_access_allow)) }
             },
             dismissButton = {

@@ -124,6 +124,23 @@ class SafeFilesTest {
         assertTrue(root.exists())
     }
 
+    @Test fun leftoverUploadCopiesGoButQueuedAndNewCopiesStay() {
+        val root = temp.newFolder("uploads")
+        val start = System.currentTimeMillis()
+        fun copy(dir: String, age: Long) = File(root, dir).apply { mkdir() }.let { d ->
+            File(d, "file.jpg").apply { writeText("copy"); setLastModified(start - age) }.also { d.setLastModified(start - age) }
+        }
+        val leftover = copy("leftover", 600_000)
+        val queued = copy("queued", 600_000)
+        val preparing = copy("preparing", 0)
+        val empty = File(root, "empty").apply { mkdir(); setLastModified(start - 600_000) }
+        removeUploadCopies(root, setOf(queued.absolutePath), start - 120_000)
+        assertFalse(leftover.parentFile!!.exists())
+        assertFalse(empty.exists())
+        assertTrue(queued.exists())
+        assertTrue(preparing.exists())
+    }
+
     @Test fun anUploadSymlinkCannotDeleteAnOriginalOutsideThePrivateRoot() {
         val root = temp.newFolder("uploads")
         val original = temp.newFile("original").apply { writeText("keep") }

@@ -34,6 +34,18 @@ fun availableName(name: String, folder: Boolean = false, occupied: (String) -> B
     }
 }
 
+/**
+ * Removes the upload copies in [root] (a folder each) that no path in [inUse] reads and that
+ * were last written before [before]: newer copies can still be in preparation.
+ */
+fun removeUploadCopies(root: File, inUse: Set<String>, before: Long) {
+    root.listFiles()?.forEach { dir ->
+        val prefix = dir.absolutePath + File.separator
+        if (inUse.any { it == dir.absolutePath || it.startsWith(prefix) }) return@forEach
+        if (dir.walkTopDown().all { it.lastModified() < before }) dir.deleteRecursively()
+    }
+}
+
 /** Commits a completed private file without first deleting the previous copy. */
 fun replaceFile(source: File, target: File) {
     Files.move(source.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)

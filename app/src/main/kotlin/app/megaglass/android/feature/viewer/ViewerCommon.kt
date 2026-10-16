@@ -12,6 +12,7 @@ import app.megaglass.android.core.storage.localFileName
 import app.megaglass.android.core.storage.VerifiedFiles
 import app.megaglass.android.core.storage.ensureDirectory
 import app.megaglass.android.core.storage.replaceFile
+import app.megaglass.android.core.storage.trimImageCache
 import app.megaglass.android.core.transfers.Purpose
 import app.megaglass.android.core.transfers.TransferStatus
 import app.megaglass.android.core.util.FileType
@@ -147,6 +148,9 @@ private fun children(api: MegaApiJava, parent: Long, order: SortOrder, types: Se
  */
 object PreviewCache {
 
+    /** Size limit of each cache of decrypted copies (preview, open, links); the oldest go first. */
+    const val BUDGET = 512L * 1024 * 1024
+
     private val root get() = File(MegaGlassApp.graph.context.cacheDir, "preview")
 
     private val locks = Array(64) { Mutex() }
@@ -167,7 +171,11 @@ object PreviewCache {
                 VerifiedFiles.forget(target)
                 val downloaded = if (folderLink) stream(handle, target, size, onProgress) else transfer(handle, target, onProgress)
                 if (downloaded.length() != size) throw IOException("Downloaded file is incomplete")
+                // The SDK sets the date of the cloud file. The size limit needs the download time:
+                // it removes the oldest copies first and keeps the copies of the last minutes.
+                downloaded.setLastModified(System.currentTimeMillis())
                 VerifiedFiles.mark(downloaded)
+                trimImageCache(root, BUDGET)
                 downloaded
             }
         }
@@ -294,13 +302,10 @@ object StreamServer {
         return true
     }
 
+    /** A later hold takes a new reference at once, so that a pending stop cannot take its server. */
     fun releasePlayback() {
-        releaser.execute {
-            synchronized(this) {
-                playbackHolds.forEach(::releaseNow)
-                playbackHolds.clear()
-            }
-        }
+        val held = synchronized(this) { playbackHolds.toList().also { playbackHolds.clear() } }
+        held.forEach(::release)
     }
 
     fun link(api: MegaApiJava, handle: Long): String? = api.getNodeByHandle(handle)?.let(api::httpServerGetLocalLink)

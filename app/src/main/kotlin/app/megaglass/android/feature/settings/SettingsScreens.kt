@@ -356,7 +356,7 @@ fun StorageSettingsScreen() {
 
     LaunchedEffect(reload) {
         withContext(Dispatchers.IO) {
-            cacheSize = graph.images.sizeOnDisk() + listOf("open", "preview", "links").sumOf { name ->
+            cacheSize = graph.images.sizeOnDisk() + listOf("open", "preview", "links", "uploads").sumOf { name ->
                 File(graph.context.cacheDir, name).walkTopDown().filter { it.isFile }.sumOf { it.length() }
             }
             offlineSize = graph.offline.sizeOnDisk()
@@ -406,6 +406,8 @@ fun StorageSettingsScreen() {
                                 // Files in "open" can be in use by the app that is viewing them; they are copies only.
                                 if (graph.transfers.state.value.isIdle) {
                                     listOf("open", "preview", "links").forEach { File(graph.context.cacheDir, it).deleteRecursively() }
+                                    // Copies of failed and cancelled uploads: Retry cannot use them after this.
+                                    graph.files.cleanUploadTemp(graph.transfers.uploadingPaths(), all = true)
                                 }
                                 coil3.SingletonImageLoader.get(graph.context).memoryCache?.clear()
                             }
