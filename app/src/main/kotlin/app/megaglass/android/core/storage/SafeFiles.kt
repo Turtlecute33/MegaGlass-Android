@@ -5,6 +5,21 @@ import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
+private fun Char.isDirectionMark() =
+    this == '\u061C' || this in '\u200B'..'\u200F' || this in '\u202A'..'\u202E' || this in '\u2060'..'\u2069' || this == '\uFEFF'
+
+private fun Char.isControl() = this <= '\u001F' || this in '\u007F'..'\u009F' || this == '\u2028' || this == '\u2029'
+
+/**
+ * Whoever uploads a file chooses its name. Direction marks can show "invoice<U+202E>fdp.apk" as
+ * "invoicekpa.pdf", and control characters and line breaks can hide a part of a name. Names on
+ * screen and on disk drop the marks and replace the controls with U+FFFD.
+ */
+fun displayName(name: String): String {
+    if (name.none { it.isDirectionMark() || it.isControl() }) return name
+    return buildString { for (c in name) if (!c.isDirectionMark()) append(if (c.isControl()) '\uFFFD' else c) }
+}
+
 /**
  * Names supplied by cloud nodes and document providers are single path components. A name
  * longer than the 255 bytes that Android file systems allow is cut, with space left for the
@@ -12,7 +27,7 @@ import java.nio.file.StandardCopyOption
  */
 fun localFileName(name: String): String =
     shortName(
-        name.replace('/', '_').replace('\\', '_').replace('\u0000', '_')
+        displayName(name).replace('/', '_').replace('\\', '_')
             .takeUnless { it.isEmpty() || it == "." || it == ".." } ?: "file",
     )
 

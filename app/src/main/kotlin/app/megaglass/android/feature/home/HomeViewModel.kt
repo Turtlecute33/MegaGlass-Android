@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.core.mega.RecentBucket
 import app.megaglass.android.core.mega.await
+import app.megaglass.android.core.util.whileObserved
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,7 +43,7 @@ class HomeViewModel : ViewModel() {
         refresh()
         loadName()
         loadStorage()
-        viewModelScope.launch { graph.nodes.changes.debounce(1000).collect { loadRecents() } }
+        viewModelScope.launch { graph.nodes.changes.whileObserved(_state.subscriptionCount).debounce(1000).collect { loadRecents() } }
         viewModelScope.launch { graph.mega.account.debounce(1000).collect { loadStorage() } }
         viewModelScope.launch {
             // The own handle takes the SDK lock: not on the main thread.

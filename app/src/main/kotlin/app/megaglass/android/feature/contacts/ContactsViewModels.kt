@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 import nz.mega.sdk.MegaApiJava
 import nz.mega.sdk.MegaContactRequest
 import nz.mega.sdk.MegaError
+import nz.mega.sdk.MegaUser
 
 @Immutable
 data class ContactRequestItem(
@@ -190,7 +191,8 @@ class ContactDetailViewModel(private val email: String) : ViewModel() {
     private fun groups(hex: String?): List<String> = hex.orEmpty().uppercase().chunked(4)
 
     fun load() = viewModelScope.launch {
-        val user = withContext(Dispatchers.IO) { api.getContact(email) }
+        // getContact also returns people who are no longer contacts.
+        val user = withContext(Dispatchers.IO) { api.getContact(email)?.takeIf { it.visibility == MegaUser.VISIBILITY_VISIBLE } }
         if (user == null) {
             _state.update { it.copy(loading = false, contact = null) }
             return@launch

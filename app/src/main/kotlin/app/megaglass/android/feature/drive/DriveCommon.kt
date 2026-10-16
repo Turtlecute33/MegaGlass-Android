@@ -87,9 +87,9 @@ fun ViewOptionsActions(folderSort: SortOrder? = null, onFolderSort: (SortOrder) 
     }
 }
 
-/** Clickable folder chain under the app bar. */
+/** Clickable folder chain under the app bar. [rootLabel] names the first folder; null keeps its own name. */
 @Composable
-fun Breadcrumbs(path: List<Crumb>, rootLabel: String, onClick: (Crumb) -> Unit, modifier: Modifier = Modifier) {
+fun Breadcrumbs(path: List<Crumb>, rootLabel: String?, onClick: (Crumb) -> Unit, modifier: Modifier = Modifier) {
     if (path.size < 2) return
     LazyRow(modifier, contentPadding = PaddingValues(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         itemsIndexed(path, key = { _, c -> c.handle }) { i, crumb ->
@@ -98,7 +98,7 @@ fun Breadcrumbs(path: List<Crumb>, rootLabel: String, onClick: (Crumb) -> Unit, 
                 val last = i == path.lastIndex
                 TextButton(onClick = { onClick(crumb) }, enabled = !last) {
                     Text(
-                        if (i == 0) rootLabel else crumb.name,
+                        if (i == 0 && rootLabel != null) rootLabel else crumb.name,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.labelLarge,
@@ -129,7 +129,7 @@ fun SelectionToolbar(
                 if (allOwn && selected.size == 1) add(NodeAction.GET_LINK)
                 if (allOwn) add(NodeAction.MOVE)
                 add(NodeAction.COPY)
-                if (allOwn || anyFull) add(NodeAction.RUBBISH)
+                if ((allOwn || anyFull) && selected.none { it.isShareRoot }) add(NodeAction.RUBBISH)
             }
         }
     }

@@ -100,13 +100,7 @@ private fun DriveFolder(mode: DriveMode, handle: Long) {
         if (fabOpen) fabOpen = false else vm.clearSelection()
     }
 
-    val rootTitle = stringResource(
-        when (mode) {
-            DriveMode.CLOUD -> R.string.cloud_drive
-            DriveMode.RUBBISH -> R.string.rubbish_bin
-            DriveMode.BACKUPS -> R.string.backups
-        },
-    )
+    val rootTitle = stringResource(mode.title)
     val title = if (state.isRoot) rootTitle else state.title
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val isTopLevelTab = mode == DriveMode.CLOUD && state.isRoot
@@ -157,14 +151,12 @@ private fun DriveFolder(mode: DriveMode, handle: Long) {
                         },
                         scrollBehavior = scroll,
                     )
-                    Breadcrumbs(state.path, rootTitle, onClick = { crumb ->
-                        val root = crumb == state.path.first()
+                    // The first folder is the top of a section, or the folder of an incoming share.
+                    Breadcrumbs(state.path, state.top?.let { stringResource(it.title) }, onClick = { crumb ->
+                        val section = state.top
                         nav.popToOrNavigate(
-                            when (mode) {
-                                DriveMode.RUBBISH -> Rubbish(if (root) app.megaglass.android.ui.nav.ROOT else crumb.handle)
-                                DriveMode.BACKUPS -> Backups(if (root) app.megaglass.android.ui.nav.ROOT else crumb.handle)
-                                DriveMode.CLOUD -> Folder(if (root && crumb.handle == graph.nodes.rootHandle) app.megaglass.android.ui.nav.ROOT else crumb.handle)
-                            },
+                            if (crumb == state.path.first() && section != null) section.route(app.megaglass.android.ui.nav.ROOT)
+                            else mode.route(crumb.handle),
                         )
                     })
                 }
@@ -297,6 +289,12 @@ private fun DriveFolder(mode: DriveMode, handle: Long) {
             onDismiss = { confirmEmpty = false },
         )
     }
+}
+
+private fun DriveMode.route(handle: Long) = when (this) {
+    DriveMode.CLOUD -> Folder(handle)
+    DriveMode.RUBBISH -> Rubbish(handle)
+    DriveMode.BACKUPS -> Backups(handle)
 }
 
 @Composable

@@ -2,14 +2,17 @@ package app.megaglass.android.feature.drive
 
 import app.megaglass.android.core.util.catching
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.megaglass.android.MegaGlassApp
+import app.megaglass.android.R
 import app.megaglass.android.core.mega.Crumb
 import app.megaglass.android.core.mega.NodeItem
 import app.megaglass.android.core.storage.FolderSorts
 import app.megaglass.android.core.storage.SortOrder
 import app.megaglass.android.ui.nav.ROOT
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,9 +24,10 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import nz.mega.sdk.MegaShare
 
-enum class DriveMode { CLOUD, RUBBISH, BACKUPS }
+enum class DriveMode(@StringRes val title: Int) { CLOUD(R.string.cloud_drive), RUBBISH(R.string.rubbish_bin), BACKUPS(R.string.backups) }
 
 data class FolderState(
     val handle: Long = ROOT,
@@ -36,6 +40,8 @@ data class FolderState(
     val access: Int = MegaShare.ACCESS_OWNER,
     val isRoot: Boolean = true,
     val sortOrder: SortOrder = FolderSorts.DEFAULT,
+    /** The section at the start of [path]; null inside an incoming share. */
+    val top: DriveMode? = null,
 ) {
     val canWrite get() = access >= MegaShare.ACCESS_READWRITE
     val selectedItems get() = items.orEmpty().filter { it.handle in selection }
@@ -89,7 +95,8 @@ class FolderViewModel(private val mode: DriveMode, requested: Long) : ViewModel(
                 Triple(items, path, self)
             }.onSuccess { (items, path, self) ->
                 val handles = items.mapTo(HashSet()) { it.handle }
-                val isRoot = handle == nodes.rootHandle || handle == nodes.rubbishHandle || handle == nodes.vaultHandle
+                val top = section(path.firstOrNull()?.handle)
+                val isRoot = top != null && path.size == 1
                 _state.update { st ->
                     st.copy(
                         handle = handle,
@@ -99,14 +106,26 @@ class FolderViewModel(private val mode: DriveMode, requested: Long) : ViewModel(
                         error = null,
                         refreshing = false,
                         isRoot = isRoot,
+                        top = top,
                         access = if (mode == DriveMode.BACKUPS) MegaShare.ACCESS_READ else self?.access ?: MegaShare.ACCESS_OWNER,
                         // Drop selected items that disappeared.
                         selection = st.selection.intersect(handles),
                     )
                 }
             }.onFailure { e ->
-                _state.update { it.copy(error = e.message, refreshing = false, items = it.items ?: emptyList()) }
+                // The folder itself is gone (deleted, or the share ended): its old items must not stay.
+                _state.update { it.copy(error = e.message, refreshing = false, items = emptyList(), selection = emptySet()) }
             }
+        }
+    }
+
+    /** The section whose top folder is [top]; null for an incoming share. */
+    private suspend fun section(top: Long?): DriveMode? = withContext(Dispatchers.IO) {
+        when (top) {
+            nodes.rootHandle -> DriveMode.CLOUD
+            nodes.rubbishHandle -> DriveMode.RUBBISH
+            nodes.vaultHandle -> DriveMode.BACKUPS
+            else -> null
         }
     }
 

@@ -24,6 +24,18 @@ class SafeFilesTest {
         assertEquals(name, localFileName(name))
     }
 
+    @Test fun remoteNamesLoseDirectionMarksAndControls() {
+        assertEquals("invoicefdp.apk", displayName("invoice\u202Efdp.apk"))
+        assertEquals("ab.txt", displayName("a\u061C\u200B\u200C\u200D\u200E\u200F\u202A\u202B\u202C\u202D\u202E\u2060\u2061\u2064\u2066\u2067\u2068\u2069\uFEFFb.txt"))
+        assertEquals("a\uFFFDb\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD.txt", displayName("a\nb\u0000\u001B\u007F\u0085\u009F.txt"))
+        assertEquals("invoice.pdf\uFFFD.apk", displayName("invoice.pdf\u2028.apk"))
+        val plain = "日本語 è 🐈 + # %.txt"
+        assertSame(plain, displayName(plain))
+        // The same rules give the names on disk.
+        assertEquals("photogpj.apk", localFileName("photo\u202Egpj.apk"))
+        assertEquals("file", localFileName("\u202E\u200F"))
+    }
+
     @Test fun namesLongerThanTheFileSystemAllowsAreCutAndKeepTheirExtension() {
         val name = "日本語".repeat(40) + ".jpg"
         val safe = localFileName(name)

@@ -75,6 +75,7 @@ import app.megaglass.android.feature.contacts.Contact
 import app.megaglass.android.feature.contacts.ContactAvatar
 import app.megaglass.android.feature.contacts.ContactDirectory
 import app.megaglass.android.feature.contacts.EmailAvatar
+import app.megaglass.android.ui.components.ConfirmDialog
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.NodeThumbnail
 import app.megaglass.android.ui.components.rememberDialogAllowed
@@ -141,7 +142,7 @@ private class ShareFolderModel(private val handle: Long, private val scope: Coro
     fun setAccess(member: ShareMember, access: Int) = scope.launch {
         busy = true
         catching {
-            val node = api.getNodeByHandle(handle) ?: return@catching
+            val node = withContext(Dispatchers.IO) { api.getNodeByHandle(handle) } ?: return@catching
             api.await { share(node, member.email, access, it) }
         }.onFailure { graph.messenger.show(error(it)) }
         busy = false
@@ -212,6 +213,18 @@ fun ShareFolderSheet(handle: Long, onDismiss: () -> Unit) {
 @Composable
 private fun Members(model: ShareFolderModel, onAdd: () -> Unit) {
     val members = model.members
+    var removing by remember { mutableStateOf<ShareMember?>(null) }
+    removing?.let { member ->
+        ConfirmDialog(
+            title = stringResource(R.string.share_remove_title),
+            text = stringResource(R.string.share_remove_text, member.name, model.folder?.name.orEmpty()),
+            confirmLabel = stringResource(R.string.share_remove_access),
+            destructive = true,
+            icon = R.drawable.ic_person_remove,
+            onConfirm = { model.setAccess(member, MegaShare.ACCESS_UNKNOWN) },
+            onDismiss = { removing = null },
+        )
+    }
     Column {
         if (members == null) {
             Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) { LoadingIndicator() }
@@ -225,7 +238,9 @@ private fun Members(model: ShareFolderModel, onAdd: () -> Unit) {
         )
         LazyColumn(Modifier.heightIn(max = 420.dp)) {
             items(members, key = { it.email }) { member ->
-                MemberRow(member, enabled = !model.busy, onAccess = { model.setAccess(member, it) })
+                MemberRow(member, enabled = !model.busy, onAccess = {
+                    if (it == MegaShare.ACCESS_UNKNOWN) removing = member else model.setAccess(member, it)
+                })
             }
         }
         FilledTonalButton(

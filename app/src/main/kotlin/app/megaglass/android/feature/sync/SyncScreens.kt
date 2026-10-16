@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -64,7 +65,9 @@ import app.megaglass.android.ui.components.rememberStorageAccess
 import app.megaglass.android.ui.nav.Folder
 import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.theme.AppTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /** Add-sync flow: local folder first, then the cloud folder, then the name. */
@@ -187,7 +190,8 @@ fun SyncsScreen(vm: SyncViewModel = viewModel()) {
             var name by remember(s) { mutableStateOf(File(s.local).name) }
             var busy by remember(s) { mutableStateOf(false) }
             var error by remember(s) { mutableStateOf<String?>(null) }
-            val remotePath = remember(s) { graph.mega.api.getNodePathByHandle(s.remote).orEmpty() }
+            // The SDK lock: not on the main thread.
+            val remotePath by produceState("", s) { value = withContext(Dispatchers.IO) { graph.mega.api.getNodePathByHandle(s.remote).orEmpty() } }
             if (rememberDialogAllowed()) AlertDialog(
                 onDismissRequest = { if (!busy) step = null },
                 icon = { Ic(R.drawable.ic_cloud_sync) },

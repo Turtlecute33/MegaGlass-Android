@@ -58,6 +58,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import nz.mega.sdk.MegaUser
 import nz.mega.sdk.MegaUserAlert
 
 @Immutable
@@ -129,7 +130,13 @@ class NotificationsViewModel : ViewModel() {
             MegaUserAlert.TYPE_CONTACTCHANGE_CONTACTESTABLISHED,
             MegaUserAlert.TYPE_UPDATEDPENDINGCONTACTINCOMING_ACCEPTED,
             MegaUserAlert.TYPE_UPDATEDPENDINGCONTACTOUTGOING_ACCEPTED,
-            -> nav.navigate(item.email?.takeIf { api.getContact(it) != null }?.let { ContactDetail(it) } ?: Contacts)
+            -> viewModelScope.launch {
+                // getContact also returns people who are no longer contacts.
+                val email = item.email?.takeIf { e ->
+                    withContext(Dispatchers.IO) { api.getContact(e)?.visibility == MegaUser.VISIBILITY_VISIBLE }
+                }
+                nav.navigate(email?.let { ContactDetail(it) } ?: Contacts)
+            }
             MegaUserAlert.TYPE_NEWSHARE,
             MegaUserAlert.TYPE_NEWSHAREDNODES,
             MegaUserAlert.TYPE_UPDATEDSHAREDNODES,

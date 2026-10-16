@@ -72,6 +72,7 @@ import app.megaglass.android.ui.nav.Folder
 import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.nav.MediaSource
 import app.megaglass.android.ui.nav.NodeInfo
+import app.megaglass.android.ui.nav.Rubbish
 import app.megaglass.android.ui.nav.Versions
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -99,6 +100,7 @@ data class NodeInfoState(
     val owner: String? = null,
     val description: String = "",
     val mimeType: String = "",
+    val inRubbish: Boolean = false,
 )
 
 private class InfoRow(val icon: Int, val label: String, val value: String, val onClick: (() -> Unit)? = null)
@@ -129,6 +131,7 @@ class NodeInfoViewModel(private val handle: Long) : ViewModel() {
                 owner = if (node.isInShare) api.getUserFromInShare(node, true)?.email else null,
                 description = node.description.orEmpty(),
                 mimeType = if (item.isFolder) "" else FileType.mimeType(item.name),
+                inRubbish = api.isInRubbish(node),
             )
         }
         if (loaded == null) {
@@ -155,7 +158,13 @@ fun NodeInfoScreen(route: NodeInfo) {
     val offline by graph.offline.handles.collectAsStateWithLifecycle()
     val item = state.item
     val own = (item?.access ?: MegaShare.ACCESS_OWNER) >= MegaShare.ACCESS_OWNER
-    val actions = rememberNodeActions(if (own) NodeContext.CLOUD else NodeContext.INCOMING)
+    val actions = rememberNodeActions(
+        when {
+            state.inRubbish -> NodeContext.RUBBISH
+            own -> NodeContext.CLOUD
+            else -> NodeContext.INCOMING
+        },
+    )
 
     Scaffold(
         topBar = {
@@ -163,7 +172,7 @@ fun NodeInfoScreen(route: NodeInfo) {
                 title = { Text(stringResource(R.string.action_info)) },
                 navigationIcon = { BackButton { nav.back() } },
                 actions = {
-                    if (item != null && own) {
+                    if (item != null && own && !state.inRubbish) {
                         IconAction(
                             if (item.isFavourite) R.drawable.ic_star_fill else R.drawable.ic_star,
                             stringResource(if (item.isFavourite) R.string.action_unfavourite else R.string.action_favourite),
@@ -179,7 +188,7 @@ fun NodeInfoScreen(route: NodeInfo) {
             state.missing -> EmptyState(R.drawable.ic_error, stringResource(R.string.item_not_found), Modifier.padding(padding))
             item == null -> LoadingBox(Modifier.padding(padding))
             else -> {
-                val rows = detailRows(state, item) { nav.navigate(Folder(item.parentHandle)) }
+                val rows = detailRows(state, item) { nav.navigate(if (state.inRubbish) Rubbish(item.parentHandle) else Folder(item.parentHandle)) }
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = padding.calculateTopPadding(), bottom = 48.dp)) {
                     item(key = "header") { Header(item) }
                     item(key = "details") {
@@ -199,7 +208,7 @@ fun NodeInfoScreen(route: NodeInfo) {
                     }
                     item(key = "sharing") {
                         SectionHeader(stringResource(R.string.sharing))
-                        LinkRow(state.link, item, actions)
+                        LinkRow(state.link, item, actions, canCreate = !state.inRubbish)
                         state.shares.forEach { s ->
                             ListItem(
                                 leadingContent = { Ic(R.drawable.ic_person) },
@@ -304,10 +313,10 @@ private fun InfoGroup(rows: List<InfoRow>) {
 }
 
 @Composable
-private fun LinkRow(link: String?, item: NodeItem, actions: NodeActionsState) {
+private fun LinkRow(link: String?, item: NodeItem, actions: NodeActionsState, canCreate: Boolean) {
     ListItem(
         onClick = { actions.run(NodeAction.GET_LINK, listOf(item)) },
-        enabled = item.access >= MegaShare.ACCESS_OWNER,
+        enabled = canCreate && item.access >= MegaShare.ACCESS_OWNER,
         leadingContent = { Ic(R.drawable.ic_link) },
         supportingContent = { Text(link ?: stringResource(R.string.no_link), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         trailingContent = if (link != null) {

@@ -3,13 +3,18 @@ package app.megaglass.android.core.mega
 import androidx.compose.runtime.Immutable
 import app.megaglass.android.core.storage.SortOrder
 import app.megaglass.android.core.storage.availableName
+import app.megaglass.android.core.storage.displayName
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import nz.mega.sdk.MegaApiJava
+import nz.mega.sdk.MegaCancelToken
 import nz.mega.sdk.MegaError
 import nz.mega.sdk.MegaNode
 import nz.mega.sdk.MegaSearchFilter
@@ -93,7 +98,7 @@ class NodeRepository(private val mega: Mega) {
         val out = ArrayList<Crumb>()
         var n: MegaNode? = api.getNodeByHandle(handle)
         while (n != null) {
-            out += Crumb(n.handle, n.name ?: "")
+            out += Crumb(n.handle, displayName(n.name ?: ""))
             if (n.isInShare) break
             n = api.getParentNode(n)
         }
@@ -156,6 +161,13 @@ class NodeRepository(private val mega: Mega) {
 
     suspend fun deletePermanently(handles: Collection<Long>) = forEach(handles) { node ->
         api.await { remove(node, it) }
+    }
+
+    /** Deletes items in the Rubbish bin; nothing when one of them is no longer there (restored meanwhile). */
+    suspend fun deleteFromRubbish(handles: Collection<Long>) = io {
+        val selected = handles.distinct().map(::require)
+        if (selected.any { !api.isInRubbish(it) }) throw MegaException(MegaError.API_EARGS, "An item is no longer in the rubbish bin")
+        batched(selected) { node -> api.await { remove(node, it) } }
     }
 
     /** Moves items out of the Rubbish bin to where they were, or to Cloud drive. */
@@ -275,15 +287,15 @@ class NodeRepository(private val mega: Mega) {
         if (!showHidden) filter.bySensitivity(MegaSearchFilter.BOOL_FILTER_ONLY_TRUE)
         if (modifiedAfter > 0) filter.byModificationTime(modifiedAfter, Long.MAX_VALUE / 1000)
         val page = if (limit > 0) nz.mega.sdk.MegaSearchPage.createInstance(0, limit) else null
-        api.search(filter, order.sdkOrder, null, page)
+        cancellable { token -> api.search(filter, order.sdkOrder, token, page) }
             // SEARCH_TARGET_ALL also covers the Rubbish bin; deleted items do not belong in the results.
             .filter { parent != null || scope != SearchScope.ALL || !api.isInRubbish(it) }
             .map { it.toItem(api) }
             .sortedFor(order)
     }
 
-    suspend fun favourites(showHidden: Boolean): List<NodeItem> =
-        search("", scope = SearchScope.CLOUD, favouritesOnly = true, showHidden = showHidden, order = SortOrder.MODIFIED_DESC)
+    suspend fun favourites(order: SortOrder, showHidden: Boolean): List<NodeItem> =
+        search("", scope = SearchScope.CLOUD, favouritesOnly = true, showHidden = showHidden, order = order)
 
     suspend fun recents(days: Long = 30, maxNodes: Long = 500, showHidden: Boolean): List<RecentBucket> = io {
         val request = api.await { getRecentActionsAsync(days, maxNodes, !showHidden, it) }
@@ -315,6 +327,18 @@ class NodeRepository(private val mega: Mega) {
             .filter { showHidden || !it.isMarkedSensitive && !api.isSensitiveInherited(it) }
             .map { it.toItem(api) }
             .sortedFor(order)
+    }
+
+    /**
+     * Runs a blocking SDK query that takes a cancel token. The SDK holds its lock for the whole
+     * query, so a query that nobody waits for any more (a cancelled coroutine) must stop.
+     */
+    private suspend fun <T> cancellable(query: (MegaCancelToken) -> T): T = coroutineScope {
+        val token = MegaCancelToken.createInstance()
+        val watcher = launch(start = CoroutineStart.UNDISPATCHED) {
+            try { awaitCancellation() } finally { token.cancel() }
+        }
+        try { query(token) } finally { watcher.cancel() }
     }
 
     /** Runs [action] for every node concurrently; the SDK pipelines the requests. */

@@ -136,7 +136,7 @@ fun NodeItem.folderIcon(): Int = when {
     else -> R.drawable.ic_folder_fill
 }
 
-/** Thumbnail if the node has one, otherwise the type icon. */
+/** Thumbnail if the node has one (see showsThumbnail), otherwise the type icon. */
 @Composable
 fun NodeThumbnail(
     item: NodeItem,
@@ -145,7 +145,7 @@ fun NodeThumbnail(
     folderLink: Boolean = false,
     cornerFraction: Float = 0.28f,
 ) {
-    if (item.isFolder || !item.hasThumbnail) {
+    if (item.isFolder || !item.showsThumbnail) {
         FileTypeIcon(item.type, modifier, size, if (item.isFolder) item.folderIcon() else null)
         return
     }
@@ -209,7 +209,7 @@ fun NodeRow(
         leadingContent = {
             Box {
                 NodeThumbnail(item, size = 44.dp, folderLink = folderLink)
-                if (item.isVideo && item.hasThumbnail) {
+                if (item.isVideo && item.showsThumbnail) {
                     Ic(R.drawable.ic_play_circle_fill, null, Modifier.size(18.dp).align(Alignment.Center), Color.White)
                 }
             }
@@ -256,7 +256,7 @@ fun NodeTile(
     ) {
         Column {
             Box(Modifier.fillMaxWidth().aspectRatio(1f).padding(6.dp)) {
-                if (item.isFolder || !item.hasThumbnail) {
+                if (item.isFolder || !item.showsThumbnail) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         FileTypeIcon(item.type, size = 72.dp, override = if (item.isFolder) item.folderIcon() else null)
                     }

@@ -250,12 +250,14 @@ fun DeviceCentreScreen() {
                         DeviceList(list, unnamed, padding) { openDevice = it.id }
                     } else {
                         BackupList(device, padding) { entry ->
-                            if (entry.root == MegaApiJava.INVALID_HANDLE || graph.mega.api.getNodeByHandle(entry.root) == null) {
-                                graph.messenger.show(resources.getString(R.string.device_folder_missing))
-                            } else if (entry.type == MegaApiJava.BACKUP_TYPE_BACKUP_UPLOAD) {
-                                nav.navigate(Backups(entry.root))
-                            } else {
-                                nav.navigate(Folder(entry.root))
+                            scope.launch {
+                                if (entry.root == MegaApiJava.INVALID_HANDLE || graph.nodes.node(entry.root) == null) {
+                                    graph.messenger.show(resources.getString(R.string.device_folder_missing))
+                                } else if (entry.type == MegaApiJava.BACKUP_TYPE_BACKUP_UPLOAD) {
+                                    nav.navigate(Backups(entry.root))
+                                } else {
+                                    nav.navigate(Folder(entry.root))
+                                }
                             }
                         }
                     }

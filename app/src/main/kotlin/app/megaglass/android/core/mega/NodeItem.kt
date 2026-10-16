@@ -1,6 +1,7 @@
 package app.megaglass.android.core.mega
 
 import androidx.compose.runtime.Immutable
+import app.megaglass.android.core.storage.displayName
 import app.megaglass.android.core.util.FileType
 import nz.mega.sdk.MegaApiJava
 import nz.mega.sdk.MegaNode
@@ -45,12 +46,14 @@ data class NodeItem(
     val isVideo get() = type == FileType.VIDEO
     val canWrite get() = access >= MegaShare.ACCESS_READWRITE
     val canManage get() = access >= MegaShare.ACCESS_FULL
+    /** The uploader chooses the thumbnail: on other types it could show a file as something it is not. */
+    val showsThumbnail get() = hasThumbnail && (type == FileType.IMAGE || type == FileType.VIDEO || type == FileType.AUDIO || type == FileType.PDF)
 }
 
 /** Maps a node on the calling (background) thread. Folder counts cost two extra SDK calls. */
 fun MegaNode.toItem(api: MegaApiJava, withCounts: Boolean = true, access: Int? = null, owner: String? = null): NodeItem {
     val folder = isFolder
-    val nodeName = name ?: ""
+    val nodeName = displayName(name ?: "")
     return NodeItem(
         handle = handle,
         parentHandle = parentHandle,

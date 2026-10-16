@@ -10,6 +10,7 @@ import app.megaglass.android.R
 import app.megaglass.android.core.mega.NodeItem
 import app.megaglass.android.core.mega.dateComparator
 import app.megaglass.android.core.mega.toItem
+import app.megaglass.android.core.util.whileObserved
 import app.megaglass.android.feature.contacts.ContactDirectory
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -63,7 +64,7 @@ class SharedViewModel : ViewModel() {
     init {
         load()
         viewModelScope.launch {
-            merge(graph.mega.nodes.map { }, directory.changes).debounce(250).collect { load() }
+            merge(graph.mega.nodes.map { }, directory.changes).whileObserved(_state.subscriptionCount).debounce(250).collect { load() }
         }
         viewModelScope.launch {
             graph.settings.state.distinctUntilChangedBy { it.sortOrder to it.showHidden }.drop(1).collect { load() }

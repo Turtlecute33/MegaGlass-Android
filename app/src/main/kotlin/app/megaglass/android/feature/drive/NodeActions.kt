@@ -74,6 +74,7 @@ import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.nav.NodeInfo
 import app.megaglass.android.ui.nav.Versions
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import nz.mega.sdk.MegaApiJava
 import nz.mega.sdk.MegaNode
@@ -133,12 +134,14 @@ fun actionsFor(item: NodeItem, context: NodeContext, versions: Int, api: MegaApi
     list += NodeAction.COPY
     if (!item.isFolder && versions > 1) list += NodeAction.VERSIONS
     if (own) list += if (item.isSensitive) NodeAction.UNHIDE else NodeAction.HIDE
-    if (item.isInShare && item.parentHandle == MegaApiJava.INVALID_HANDLE) {
-        list += NodeAction.LEAVE_SHARE
-    }
-    if (own || full) list += NodeAction.RUBBISH
+    if (item.isShareRoot) list += NodeAction.LEAVE_SHARE
+    // The SDK cannot move the root of an incoming share; Leave share removes it.
+    if ((own || full) && !item.isShareRoot) list += NodeAction.RUBBISH
     return list
 }
+
+/** The top folder of an incoming share. */
+internal val NodeItem.isShareRoot get() = isInShare && parentHandle == MegaApiJava.INVALID_HANDLE
 
 /**
  * Node actions with their dialogs, shared by every screen that lists cloud nodes.
@@ -176,7 +179,11 @@ class NodeActionsState internal constructor(
         }
     }
 
-    private fun launch(block: suspend () -> Unit) = scope.launch {
+    /**
+     * App scope: a batch must not stop after its first requests when the user leaves the screen,
+     * and its result or error must still show.
+     */
+    private fun launch(block: suspend () -> Unit) = graph.scope.launch(Dispatchers.Main) {
         catching { block() }.onFailure { messenger.show(it.message ?: str(R.string.error_title)) }
     }
 
@@ -244,7 +251,7 @@ class NodeActionsState internal constructor(
         val text = appContext.resources.getQuantityString(R.plurals.moved_to_rubbish, items.size, items.size)
         // From an incoming share the SDK copies the items to the Rubbish bin and deletes the
         // originals, so the handles change and an undo cannot find them.
-        if (context == NodeContext.INCOMING) {
+        if (items.any { it.access < MegaShare.ACCESS_OWNER }) {
             messenger.show(text)
             return@launch
         }
@@ -260,7 +267,7 @@ class NodeActionsState internal constructor(
     internal fun confirmed(action: NodeAction, items: List<NodeItem>) = launch {
         val handles = items.map { it.handle }
         when (action) {
-            NodeAction.DELETE -> nodes.deletePermanently(handles)
+            NodeAction.DELETE -> nodes.deleteFromRubbish(handles)
             // Removing the root of an incoming share leaves the share.
             NodeAction.LEAVE_SHARE -> nodes.deletePermanently(handles)
             else -> Unit
@@ -280,6 +287,8 @@ class NodeActionsState internal constructor(
     }
 
     internal fun rename(item: NodeItem, name: String) = launch { nodes.rename(item.handle, name) }
+
+    internal fun setLabel(item: NodeItem, label: Int) = launch { nodes.setLabel(listOf(item.handle), label) }
 
     internal fun copyText(text: String) {
         copySensitive(appContext, text)
@@ -357,7 +366,6 @@ private fun NodeSheet(item: NodeItem, state: NodeActionsState, onDismiss: () -> 
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val offline by graph.offline.handles.collectAsStateWithLifecycle()
     val actions = remember(item, state.sheetVersions) { actionsFor(item, state.context, state.sheetVersions, graph.mega.api) }
-    val scope = rememberCoroutineScope()
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding()) {
             Row(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -370,7 +378,7 @@ private fun NodeSheet(item: NodeItem, state: NodeActionsState, onDismiss: () -> 
             }
             if (item.access >= MegaShare.ACCESS_OWNER && state.context != NodeContext.RUBBISH && state.context != NodeContext.BACKUPS) {
                 LabelRow(item.label) { label ->
-                    scope.launch { catching { graph.nodes.setLabel(listOf(item.handle), label) } }
+                    state.setLabel(item, label)
                     onDismiss()
                 }
             }

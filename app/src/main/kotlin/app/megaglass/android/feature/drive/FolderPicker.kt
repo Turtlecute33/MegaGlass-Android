@@ -86,8 +86,11 @@ fun FolderPickerDialog(
     LaunchedEffect(Unit) {
         if (start != null && start != graph.nodes.rootHandle) {
             val chain = graph.nodes.path(start)
-            if (chain.isNotEmpty() && chain.first().handle == graph.nodes.rootHandle) {
-                stack = chain.drop(1).mapNotNull { graph.nodes.item(it.handle) }
+            // Not inside a folder that is being moved or copied.
+            if (chain.isNotEmpty() && chain.first().handle == graph.nodes.rootHandle && chain.none { it.handle in exclude }) {
+                val opened = chain.drop(1).mapNotNull { graph.nodes.item(it.handle) }
+                // The user may have opened a folder meanwhile.
+                if (stack.isEmpty() && tab == 0) stack = opened
             }
         }
     }
@@ -153,7 +156,7 @@ fun FolderPickerDialog(
                     Spacer(Modifier.width(12.dp))
                     Button(
                         onClick = { target?.let { onPick(it); onDismiss() } },
-                        enabled = target != null && canWrite,
+                        enabled = target != null && canWrite && stack.none { it.handle in exclude },
                         modifier = Modifier.padding(end = 16.dp),
                     ) { Text(confirmLabel) }
                 }

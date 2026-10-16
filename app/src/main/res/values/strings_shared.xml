@@ -40,6 +40,8 @@
     <string name="share_folder_title">Share folder</string>
     <string name="share_add_people">Add people</string>
     <string name="share_remove_access">Remove access</string>
+    <string name="share_remove_title">Remove access?</string>
+    <string name="share_remove_text">%1$s loses access to %2$s. You can share the folder with this person again.</string>
     <string name="share_email_or_name">E-mail or contact name</string>
     <string name="share_invite_new">Not a contact yet. We send an invitation.</string>
     <string name="share_action">Share</string>

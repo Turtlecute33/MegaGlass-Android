@@ -31,7 +31,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.mega.NodeItem
-import app.megaglass.android.core.storage.SortOrder
+import app.megaglass.android.core.util.whileObserved
 import app.megaglass.android.ui.components.BackButton
 import app.megaglass.android.ui.components.EmptyState
 import app.megaglass.android.ui.components.LoadingBox
@@ -62,7 +62,7 @@ class NodeQueryViewModel(private val query: suspend () -> List<NodeItem>) : View
         viewModelScope.launch {
             graph.settings.state.distinctUntilChangedBy { it.sortOrder to it.showHidden }.collect { load() }
         }
-        viewModelScope.launch { graph.nodes.changes.debounce(500).collect { load() } }
+        viewModelScope.launch { graph.nodes.changes.whileObserved(_state.subscriptionCount).debounce(500).collect { load() } }
     }
 
     private suspend fun load() {
@@ -84,7 +84,7 @@ fun CategoryScreen(route: Category) {
     val vm: NodeQueryViewModel = viewModel(key = "category:${route.category}") {
         NodeQueryViewModel {
             val s = graph.settings.current
-            graph.nodes.search("", category = route.category, order = if (s.sortOrder == SortOrder.NAME_ASC) SortOrder.MODIFIED_DESC else s.sortOrder, showHidden = s.showHidden)
+            graph.nodes.search("", category = route.category, order = s.sortOrder, showHidden = s.showHidden)
         }
     }
     val title = stringResource(
@@ -102,7 +102,7 @@ fun CategoryScreen(route: Category) {
 fun FavouritesScreen() {
     val graph = MegaGlassApp.graph
     val vm: NodeQueryViewModel = viewModel(key = "favourites") {
-        NodeQueryViewModel { graph.nodes.favourites(graph.settings.current.showHidden) }
+        NodeQueryViewModel { graph.settings.current.let { graph.nodes.favourites(it.sortOrder, it.showHidden) } }
     }
     NodeListScreen(vm, stringResource(R.string.favourites), R.drawable.ic_star, stringResource(R.string.favourites_empty))
 }

@@ -5,7 +5,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -68,6 +70,57 @@ class InvalidationsTest {
         } finally {
             collector.cancelAndJoin()
             owner.cancelAndJoin()
+        }
+    }
+
+    @Test fun changesWaitUntilAScreenObservesAndThenGiveOneReload() = runBlocking {
+        val changes = MutableSharedFlow<Int>(extraBufferCapacity = 16)
+        val observers = MutableStateFlow(0)
+        val reloads = Channel<Unit>(Channel.UNLIMITED)
+        suspend fun settle() = repeat(20) { yield() }
+        val collector = launch { changes.whileObserved(observers).collect { reloads.send(Unit) } }
+        try {
+            settle()
+            // Nobody looks: no reload.
+            changes.emit(1)
+            changes.emit(2)
+            settle()
+            assertTrue(reloads.tryReceive().isFailure)
+            // A screen comes back: one reload for both changes.
+            observers.value = 1
+            settle()
+            assertTrue(reloads.tryReceive().isSuccess)
+            assertTrue(reloads.tryReceive().isFailure)
+            // While it looks, a change reloads.
+            changes.emit(3)
+            settle()
+            assertTrue(reloads.tryReceive().isSuccess)
+            // Back again without a change: no reload.
+            observers.value = 0
+            settle()
+            observers.value = 1
+            settle()
+            assertTrue(reloads.tryReceive().isFailure)
+        } finally {
+            collector.cancelAndJoin()
+        }
+    }
+
+    @Test fun aScreenThatLooksFromTheStartReloadsOnlyOnChanges() = runBlocking {
+        val changes = MutableSharedFlow<Int>(extraBufferCapacity = 16)
+        val observers = MutableStateFlow(1)
+        val reloads = Channel<Unit>(Channel.UNLIMITED)
+        suspend fun settle() = repeat(20) { yield() }
+        val collector = launch { changes.whileObserved(observers).collect { reloads.send(Unit) } }
+        try {
+            settle()
+            assertTrue(reloads.tryReceive().isFailure)
+            changes.emit(1)
+            settle()
+            assertTrue(reloads.tryReceive().isSuccess)
+            assertTrue(reloads.tryReceive().isFailure)
+        } finally {
+            collector.cancelAndJoin()
         }
     }
 }
