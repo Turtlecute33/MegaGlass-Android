@@ -53,6 +53,12 @@ if(VCPKG_TARGET_IS_ANDROID)
     if(VCPKG_DETECTED_CMAKE_ANDROID_ARCH STREQUAL "arm" AND NOT VCPKG_DETECTED_CMAKE_ANDROID_ARM_NEON)
         vcpkg_list(APPEND CONFIGURE_OPTIONS no-asm)
     endif()
+    # MegaGlass: the library records its compiler command, its module and engine folders, and
+    # the build date. Fixed values keep build machine paths out of it and make it reproducible.
+    # The static build loads no modules or engines from these folders.
+    vcpkg_replace_string("${SOURCE_PATH}/crypto/build.info" [["$(CC) $(LIB_CFLAGS) $(CPPFLAGS_Q)"]] [["clang"]])
+    set(ENV{SOURCE_DATE_EPOCH} 0)
+    vcpkg_list(APPEND MAKEFILE_OPTIONS OPTIONS "MODULESDIR=/nonexistent/ossl-modules" "ENGINESDIR=/nonexistent/engines-3")
 elseif(VCPKG_TARGET_IS_LINUX)
     if(VCPKG_TARGET_ARCHITECTURE MATCHES "arm64")
         set(OPENSSL_ARCH linux-aarch64)

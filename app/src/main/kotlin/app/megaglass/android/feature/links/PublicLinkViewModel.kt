@@ -14,7 +14,9 @@ import app.megaglass.android.core.mega.await
 import app.megaglass.android.core.mega.awaitResult
 import app.megaglass.android.core.mega.keepAlive
 import app.megaglass.android.core.mega.sortedFor
+import app.megaglass.android.core.mega.showsUploaderImage
 import app.megaglass.android.core.mega.toItem
+import app.megaglass.android.core.storage.displayName
 import app.megaglass.android.core.storage.localFileName
 import app.megaglass.android.core.storage.VerifiedFiles
 import app.megaglass.android.core.storage.ensureDirectory
@@ -235,7 +237,7 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
                 .reversed()
         }
         _folder.value = FolderBrowse(stack = start)
-        _ui.value = LinkUi.FolderLink(root.name.orEmpty())
+        _ui.value = LinkUi.FolderLink(displayName(root.name.orEmpty()))
         loadChildren()
     }
 
@@ -259,17 +261,21 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
             }.awaitAll().filterNotNull()
         }
         nodes.forEach { (eid, node) -> albumNodes[eid] = node }
-        _ui.value = LinkUi.AlbumLink(setName, nodes.map { (eid, node) -> node.toPublicItem(eid) })
+        _ui.value = LinkUi.AlbumLink(displayName(setName), nodes.map { (eid, node) -> node.toPublicItem(eid) })
     }
 
-    private fun MegaNode.toPublicItem(id: Long) = PublicItem(
-        id = id,
-        name = name.orEmpty(),
-        size = size,
-        type = FileType.of(name.orEmpty(), isFolder),
-        modified = modificationTime,
-        hasImage = hasThumbnail() || hasPreview(),
-    )
+    /** A stranger chooses the name and the images of a link. */
+    private fun MegaNode.toPublicItem(id: Long): PublicItem {
+        val type = FileType.of(name.orEmpty(), isFolder)
+        return PublicItem(
+            id = id,
+            name = displayName(name.orEmpty()),
+            size = size,
+            type = type,
+            modified = modificationTime,
+            hasImage = (hasThumbnail() || hasPreview()) && type.showsUploaderImage,
+        )
+    }
 
     // Folder link browsing
 
@@ -327,13 +333,16 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
 
     // Actions
 
-    fun importTo(target: Long) = viewModelScope.launch {
+    /** In the app scope: the copies continue, and the result shows, when the user leaves the screen. */
+    fun importTo(target: Long) = graph.scope.launch(Dispatchers.Main) {
         catching {
             val parent = withContext(Dispatchers.IO) { api.getNodeByHandle(target) }
                 ?: throw MegaException(MegaError.API_ENOENT, "The destination folder is no longer available")
             when (val ui = _ui.value) {
                 is LinkUi.FileLink -> {
-                    if (withContext(Dispatchers.IO) { api.getChildNode(parent, ui.item.name) } != null) {
+                    // The import keeps the name of the node, not the name on screen.
+                    val name = fileNode?.name ?: ui.item.name
+                    if (withContext(Dispatchers.IO) { api.getChildNode(parent, name) } != null) {
                         throw MegaException(MegaError.API_EEXIST, "The destination already contains an item named ${ui.item.name}")
                     }
                     api.await { importFileLink(link.url, parent, it) }
@@ -364,11 +373,13 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
         val dir = graph.files.downloadDir(graph.settings.current)
         val count = withContext(Dispatchers.IO) {
             val items = MegaDownloadItemList.createInstance()
+            // The files get safe names on disk: the person who shared them chose the names.
             when (val ui = _ui.value) {
-                is LinkUi.FileLink -> fileNode?.let { items.add(it, dir.absolutePath + File.separator, null, Purpose.DOWNLOAD) }
+                is LinkUi.FileLink -> fileNode?.let { items.add(it, dir.absolutePath + File.separator, localFileName(it.name ?: "file"), Purpose.DOWNLOAD) }
                 is LinkUi.AlbumLink -> {
                     val albumDir = File(dir, safeName(ui.name.ifBlank { "Album" })).apply { mkdirs() }
-                    ui.items.mapNotNull { albumNodes[it.id] }.forEach { items.add(it, albumDir.absolutePath + File.separator, null, Purpose.DOWNLOAD) }
+                    ui.items.mapNotNull { albumNodes[it.id] }
+                        .forEach { items.add(it, albumDir.absolutePath + File.separator, localFileName(it.name ?: "file"), Purpose.DOWNLOAD) }
                 }
                 is LinkUi.FolderLink -> folderTargets().forEach { addTree(it, dir, items) }
                 else -> Unit
@@ -398,7 +409,7 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
             val (current, parent) = queue.removeFirst()
             if (current.isFile) {
                 val authorized = folderApi.authorizeNode(current) ?: throw java.io.IOException("Cannot access linked file")
-                out.add(authorized, parent.absolutePath + File.separator, null, Purpose.DOWNLOAD)
+                out.add(authorized, parent.absolutePath + File.separator, localFileName(current.name ?: "file"), Purpose.DOWNLOAD)
                 continue
             }
             val name = safeName(current.name.orEmpty().ifBlank { "Folder" })

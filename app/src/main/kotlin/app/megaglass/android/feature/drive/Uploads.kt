@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -22,6 +23,7 @@ import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.storage.LocalSource
 import app.megaglass.android.core.storage.NoSpaceException
+import app.megaglass.android.core.storage.displayName
 import app.megaglass.android.ui.components.TextInputDialog
 import app.megaglass.android.ui.components.invalidNameError
 import app.megaglass.android.ui.components.rememberStorageAccess
@@ -59,21 +61,24 @@ suspend fun uploadUris(uris: List<Uri>, parent: Long, shared: Boolean) {
     var unreadable = 0
     var noSpace = 0
     // Each file starts when its copy is ready, so that it does not wait for the copies of the
-    // other files, and the transfer job keeps the app running while they are made.
-    for (uri in uris.distinct()) {
-        val result = catching { graph.files.resolveForUpload(uri, shared) }
-        val source = result.getOrNull()
-        if (source == null) {
-            if (result.exceptionOrNull() is NoSpaceException) noSpace++ else unreadable++
-            continue
-        }
-        try {
-            check(graph.session.isReady && graph.mega.api.myUserHandle == account) { "The account changed while preparing this upload" }
-            graph.transfers.upload(listOf(source), parent)
-            started++
-        } catch (e: Exception) {
-            if (source.temporary) withContext(Dispatchers.IO) { File(source.path).parentFile?.deleteRecursively() }
-            throw e
+    // other files. The transfer job starts now, while the app is visible, and keeps the app
+    // running while the copies are made.
+    graph.transfers.preparing {
+        for (uri in uris.distinct()) {
+            val result = catching { graph.files.resolveForUpload(uri, shared) }
+            val source = result.getOrNull()
+            if (source == null) {
+                if (result.exceptionOrNull() is NoSpaceException) noSpace++ else unreadable++
+                continue
+            }
+            try {
+                check(graph.session.isReady && graph.mega.api.myUserHandle == account) { "The account changed while preparing this upload" }
+                graph.transfers.upload(listOf(source), parent)
+                started++
+            } catch (e: Exception) {
+                if (source.temporary) withContext(Dispatchers.IO) { File(source.path).parentFile?.deleteRecursively() }
+                throw e
+            }
         }
     }
     if (unreadable > 0) graph.messenger.show(resources.getQuantityString(R.plurals.upload_unreadable, unreadable, unreadable))
@@ -183,11 +188,19 @@ fun rememberUploader(parent: Long): Uploader {
 
 @Composable
 fun UploadDestinationDialog(uris: List<Uri>, onDismiss: () -> Unit) {
+    val graph = MegaGlassApp.graph
+    // The names of the shared files, so that the user sees what the other app sends.
+    val names by produceState<String?>(null, uris) {
+        value = withContext(Dispatchers.IO) {
+            uris.distinct().joinToString(", ") { uri -> displayName(graph.files.displayName(uri) ?: uri.lastPathSegment ?: "?") }
+        }
+    }
     // The app scope: the dialog leaves the composition before large files finish copying.
     FolderPickerDialog(
         title = pluralStringResource(R.plurals.upload_items, uris.size, uris.size),
         confirmLabel = stringResource(R.string.upload_here),
         onPick = { target -> launchUpload { uploadUris(uris, target, shared = true) } },
         onDismiss = onDismiss,
+        detail = names,
     )
 }

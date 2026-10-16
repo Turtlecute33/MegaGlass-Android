@@ -92,11 +92,11 @@ composeCompiler {
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
 
-// The APK records HEAD as its source revision, so a release build needs a clean tree.
+// The APK records HEAD as its source revision, so a release build needs a clean tree. A git
+// error stops the build too, and untracked files count whatever the user's git settings are.
 val checkReleaseTree = tasks.register("checkReleaseTree") {
     val status = providers.exec {
-        commandLine("git", "status", "--porcelain")
-        isIgnoreExitValue = true
+        commandLine("git", "status", "--porcelain", "--untracked-files=normal")
     }.standardOutput.asText
     doLast {
         if (status.get().isNotBlank()) throw GradleException("Commit all changes before a release build.")

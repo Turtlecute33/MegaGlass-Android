@@ -19,6 +19,11 @@ for port in (root / "scripts/ports").glob("*/vcpkg.json"):
     if versions.get(expected["name"]) != expected["version"]:
         raise SystemExit(f"Native dependency {expected['name']} was not rebuilt to {expected['version']}")
 versions["libSha256"] = hashlib.sha256(binary.read_bytes()).hexdigest()
+# The SDK patches in this binary: build-sdk.sh checks that each one is applied.
+patches = hashlib.sha256()
+for patch in sorted(root.glob("patches/mega-sdk-*.patch")):
+    patches.update(patch.read_bytes())
+versions["patchesSha256"] = patches.hexdigest()
 versions["sdkRevision"] = subprocess.check_output(
     ["git", "-C", str(root / "Vendor/mega-sdk"), "rev-parse", "HEAD"], text=True
 ).strip()

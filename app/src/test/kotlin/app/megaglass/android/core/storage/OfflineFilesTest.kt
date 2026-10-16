@@ -39,6 +39,26 @@ class OfflineFilesTest {
         assertEquals(0, reopened.entry("node")!!.length())
     }
 
+    @Test fun copiesWithNamesThatTheDisplayRulesChangeStayAvailable() {
+        val store = OfflineFiles(temp.root)
+        val name = "report\u200F\u2066draft\uFEFF.txt"
+        File(store.stage("first", "node"), name).writeText("kept")
+        store.commit("first", "node")
+        val reopened = OfflineFiles(temp.root)
+        assertEquals(setOf("node"), reopened.keys())
+        assertEquals("kept", reopened.entry("node")!!.readText())
+    }
+
+    @Test fun completionMarkersCannotNameAnotherPath() {
+        val dir = File(temp.root, "node").apply { mkdirs() }
+        File(temp.root, "outside").writeText("secret")
+        File(dir, "data").mkdir()
+        for (name in listOf("", ".", "..", "../../outside", "a\u0000b")) {
+            File(dir, ".complete").writeText(name)
+            assertNull(OfflineFiles(temp.root).entry("node"))
+        }
+    }
+
     @Test fun failedReplacementKeepsAnExistingOfflineCopy() {
         val store = OfflineFiles(temp.root)
         File(store.stage("first", "node"), "file").writeText("original")

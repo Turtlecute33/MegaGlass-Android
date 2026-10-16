@@ -53,7 +53,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -125,18 +124,10 @@ fun AudioPlayerScreen(route: AudioPlayer) {
             if (list.any { !it.isLocal } && !StreamServer.holdForPlayback(api)) return@withContext null
             list.zip(PlaybackQueue.add(list)).mapIndexed { i, (e, id) ->
                 // Artwork: the cached thumbnail; the start item loads its thumbnail now.
-                val art = if (e.hasThumbnail && !hidden) {
-                    val image = NodeImage(e.handle, folderLink = e.folderLink)
-                    val file = graph.images.file(image).takeIf { it.length() > 0 }
-                        ?: if (i == index) catching { graph.images.load(image) }.getOrNull() else null
-                    file?.let(Uri::fromFile)
+                val art = if (hidden) null else cachedArt(e) ?: if (e.hasThumbnail && i == index) {
+                    catching { graph.images.load(NodeImage(e.handle, folderLink = e.folderLink)) }.getOrNull()?.let(Uri::fromFile)
                 } else null
-                val metadata = if (hidden) hiddenMetadata(appName) else MediaMetadata.Builder()
-                    .setTitle(e.title)
-                    .setDisplayTitle(e.title)
-                    .setArtworkUri(art)
-                    .setIsPlayable(true)
-                    .build()
+                val metadata = if (hidden) hiddenMetadata(appName) else trackMetadata(e, art)
                 MediaItem.Builder()
                     .setMediaId(id)
                     .setUri(e.file?.let(Uri::fromFile) ?: PlaybackQueue.uri(id))
@@ -301,26 +292,8 @@ private fun AudioContent(player: Player) {
     }
 }
 
-private val MediaEntry.title get() = name.substringBeforeLast('.')
-
 /** The name in the app, also when the session shows a neutral title (app lock). */
 private fun MediaItem.title(): String = PlaybackQueue[mediaId]?.title ?: mediaMetadata.title?.toString().orEmpty()
-
-/**
- * A neutral title for the system controls. Empty values also replace the tags of the file
- * (artist, album, embedded cover), which the player adds to the metadata.
- */
-private fun hiddenMetadata(title: String) = MediaMetadata.Builder()
-    .setTitle(title)
-    .setDisplayTitle(title)
-    .setArtist("")
-    .setAlbumTitle("")
-    .setAlbumArtist("")
-    .setSubtitle("")
-    .setDescription("")
-    .setArtworkData(ByteArray(0), MediaMetadata.PICTURE_TYPE_FRONT_COVER)
-    .setIsPlayable(true)
-    .build()
 
 @Composable
 private fun Artwork(item: MediaItem?, modifier: Modifier) {

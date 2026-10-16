@@ -238,7 +238,9 @@ class Session(
             else withTimeoutOrNull(LOGOUT_TIMEOUT_MS) { catching { api.await { logout(it) } } }
             if (remote?.isSuccess != true) {
                 withTimeoutOrNull(LOGOUT_TIMEOUT_MS) { catching { api.await { localLogout(it) } } }
-                if (!localOnly) _notice.value = SERVER_SESSION_ACTIVE
+                // ESID: the session ended on the server already (for example, from another device).
+                val endedOnServer = (remote?.exceptionOrNull() as? MegaException)?.code == MegaError.API_ESID
+                if (!localOnly && !endedOnServer) _notice.value = SERVER_SESSION_ACTIVE
             }
             clearLocal()
         }

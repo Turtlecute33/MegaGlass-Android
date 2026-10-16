@@ -113,7 +113,8 @@ fun LockScreen() {
             // Keystore not available: the passcode still works.
             val cipher = catching { withContext(Dispatchers.IO) { graph.lock.biometricCipher() } }.getOrElse { return@launch }
             if (cipher == null) {
-                // The biometrics of the device changed. Only the owner, with the passcode, can turn it on again.
+                // The key is missing (an earlier version) or invalid (the biometrics of the device
+                // changed). Only the owner, with the passcode, can turn it on again.
                 biometricNotice = true
                 graph.scope.launch { graph.lock.setBiometric(false) }
                 return@launch
@@ -133,11 +134,10 @@ fun LockScreen() {
         biometricSignal?.cancel()
         graph.scope.launch(Dispatchers.Main) {
             try {
-                graph.session.logout()
-                val removed = graph.session.state.value == SessionState.LoggedOut && withContext(Dispatchers.IO) {
-                    java.io.File(graph.context.filesDir, "pending-uploads").deleteRecursively()
-                }
-                if (removed) graph.lock.setPasscode(null)
+                // Photos that did not upload go first: a logout moves them to the gallery.
+                val removed = withContext(Dispatchers.IO) { graph.files.capturesDir.deleteRecursively() }
+                if (removed) graph.session.logout()
+                if (removed && graph.session.state.value == SessionState.LoggedOut) graph.lock.setPasscode(null)
                 else checkError = graph.context.getString(R.string.lock_cleanup_failed)
             } finally { wiping = false }
         }

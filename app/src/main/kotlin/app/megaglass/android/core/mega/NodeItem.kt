@@ -46,9 +46,11 @@ data class NodeItem(
     val isVideo get() = type == FileType.VIDEO
     val canWrite get() = access >= MegaShare.ACCESS_READWRITE
     val canManage get() = access >= MegaShare.ACCESS_FULL
-    /** The uploader chooses the thumbnail: on other types it could show a file as something it is not. */
-    val showsThumbnail get() = hasThumbnail && (type == FileType.IMAGE || type == FileType.VIDEO || type == FileType.AUDIO || type == FileType.PDF)
+    val showsThumbnail get() = hasThumbnail && type.showsUploaderImage
 }
+
+/** The uploader chooses thumbnails and previews: on other types they could show a file as something it is not. */
+val FileType.showsUploaderImage get() = this == FileType.IMAGE || this == FileType.VIDEO || this == FileType.AUDIO || this == FileType.PDF
 
 /** Maps a node on the calling (background) thread. Folder counts cost two extra SDK calls. */
 fun MegaNode.toItem(api: MegaApiJava, withCounts: Boolean = true, access: Int? = null, owner: String? = null): NodeItem {

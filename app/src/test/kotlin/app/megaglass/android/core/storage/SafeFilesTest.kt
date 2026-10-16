@@ -26,7 +26,10 @@ class SafeFilesTest {
 
     @Test fun remoteNamesLoseDirectionMarksAndControls() {
         assertEquals("invoicefdp.apk", displayName("invoice\u202Efdp.apk"))
-        assertEquals("ab.txt", displayName("a\u061C\u200B\u200C\u200D\u200E\u200F\u202A\u202B\u202C\u202D\u202E\u2060\u2061\u2064\u2066\u2067\u2068\u2069\uFEFFb.txt"))
+        assertEquals("ab.txt", displayName("a\u061C\u200B\u200E\u200F\u202A\u202B\u202C\u202D\u202E\u2060\u2061\u2064\u2066\u2067\u2068\u2069\uFEFFb.txt"))
+        // Joiners do not change the direction: Persian names and emoji sequences keep them.
+        val joined = "\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645 \uD83D\uDC68\u200D\uD83D\uDCBB.txt"
+        assertSame(joined, displayName(joined))
         assertEquals("a\uFFFDb\uFFFD\uFFFD\uFFFD\uFFFD\uFFFD.txt", displayName("a\nb\u0000\u001B\u007F\u0085\u009F.txt"))
         assertEquals("invoice.pdf\uFFFD.apk", displayName("invoice.pdf\u2028.apk"))
         val plain = "日本語 è 🐈 + # %.txt"
@@ -50,6 +53,13 @@ class SafeFilesTest {
         val safe = localFileName("🐈".repeat(80))
         assertTrue(safe.toByteArray(Charsets.UTF_8).size <= 240)
         assertEquals("🐈".repeat(safe.length / 2), safe)
+    }
+
+    @Test fun cloudNamesKeepEverythingButSeparators() {
+        val name = "a\u200Fb\u202E\u2066c\u001B" + "\u65E5".repeat(100) + ".txt"
+        assertEquals(name, pathComponent(name))
+        assertEquals("a_b_c_d", pathComponent("a/b\\c\u0000d"))
+        for (bad in listOf("", ".", "..")) assertEquals("file", pathComponent(bad))
     }
 
     @Test fun namesThatFitAreKept() {

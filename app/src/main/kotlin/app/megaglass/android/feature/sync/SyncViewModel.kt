@@ -10,6 +10,7 @@ import app.megaglass.android.R
 import app.megaglass.android.core.mega.MegaException
 import app.megaglass.android.core.mega.await
 import app.megaglass.android.core.mega.keepAlive
+import app.megaglass.android.core.storage.displayName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -99,7 +100,8 @@ class SyncViewModel : ViewModel() {
             name = name ?: File(localFolder.orEmpty()).name,
             localPath = localFolder.orEmpty(),
             remoteHandle = megaHandle,
-            remotePath = api.getNodePathByHandle(megaHandle) ?: lastKnownMegaFolder.orEmpty(),
+            // Shared folders in the path have names that others chose.
+            remotePath = displayName(api.getNodePathByHandle(megaHandle) ?: lastKnownMegaFolder.orEmpty()),
             state = when (run) {
                 MegaSync.SyncRunningState.RUNSTATE_RUNNING.swigValue() -> SyncRunState.RUNNING
                 MegaSync.SyncRunningState.RUNSTATE_SUSPENDED.swigValue() -> SyncRunState.PAUSED

@@ -95,6 +95,10 @@ class AppGraph(val context: Context) {
         settings.update { it.copy(cameraUploads = false, cuSince = 0) }
         CameraUploads.cancel(context)
         transfers.endSession()
+        // Photos from "Take photo" that did not upload belong to the user of this device, not to
+        // the account: they go to the gallery now, not with the session of the next account.
+        val saved = files.rescueCaptures(emptySet(), System.currentTimeMillis())
+        if (saved > 0) messenger.show(context.resources.getQuantityString(R.plurals.captures_saved, saved, saved))
         opener.clear()
         context.stopService(Intent(context, PlaybackService::class.java))
         StreamServer.releasePlayback()

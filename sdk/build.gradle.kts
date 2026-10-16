@@ -40,6 +40,7 @@ tasks.named("preBuild") {
     val nativeLib = file("src/main/jniLibs/arm64-v8a/libmega.so")
     val provenance = file("src/main/assets/mega-build.properties")
     val sdkVersion = rootProject.file("scripts/sdk-version.sh")
+    val patches = rootProject.file("patches")
     doFirst {
         if (!nativeLib.exists()) {
             throw GradleException("libmega.so is missing. Run scripts/bootstrap-sdk.sh and scripts/build-sdk.sh.")
@@ -56,6 +57,13 @@ tasks.named("preBuild") {
         val sdkCommit = Regex("SDK_COMMIT=\"([0-9a-f]{40})\"").find(sdkVersion.readText())?.groupValues?.get(1)
         if (sdkCommit == null || versions.getProperty("sdkRevision") != sdkCommit) {
             throw GradleException("libmega.so was not built from the pinned MEGA SDK. Run scripts/bootstrap-sdk.sh and scripts/build-sdk.sh.")
+        }
+        // Same hash as scripts/native-provenance.py: the SDK patches, sorted by name.
+        val patchDigest = MessageDigest.getInstance("SHA-256")
+        patches.listFiles { f -> f.name.startsWith("mega-sdk-") && f.name.endsWith(".patch") }.orEmpty()
+            .sortedBy { it.name }.forEach { patchDigest.update(it.readBytes()) }
+        if (patchDigest.digest().joinToString("") { "%02x".format(it) } != versions.getProperty("patchesSha256")) {
+            throw GradleException("libmega.so was not built with the current SDK patches. Run scripts/bootstrap-sdk.sh and scripts/build-sdk.sh.")
         }
         val digest = MessageDigest.getInstance("SHA-256")
         nativeLib.inputStream().use { input ->

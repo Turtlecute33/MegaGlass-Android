@@ -57,6 +57,7 @@ import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.media.NodeImage
 import app.megaglass.android.core.mega.MegaException
+import app.megaglass.android.core.transfers.AlreadyPreparingException
 import app.megaglass.android.core.transfers.Purpose
 import app.megaglass.android.core.util.FileType
 import app.megaglass.android.feature.drive.NodeActionsHost
@@ -74,6 +75,7 @@ import app.megaglass.android.ui.nav.VideoPlayer
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.saket.telephoto.zoomable.ZoomSpec
@@ -252,9 +254,14 @@ private fun ImagePage(entry: MediaEntry, onTap: () -> Unit) {
         if (!fetch) return@LaunchedEffect
         loading = true
         try {
-            catching { PreviewCache.fetch(entry.handle, entry.name, entry.size, entry.folderLink) }
-                .onSuccess { original = it }
-                .onFailure { failed = true }
+            var result = catching { PreviewCache.fetch(entry.handle, entry.name, entry.size, entry.folderLink) }
+            // The download of an earlier visit to this page was cancelled, but has not ended yet.
+            var tries = 0
+            while (result.exceptionOrNull() is AlreadyPreparingException && tries++ < 20) {
+                delay(500)
+                result = catching { PreviewCache.fetch(entry.handle, entry.name, entry.size, entry.folderLink) }
+            }
+            result.onSuccess { original = it }.onFailure { failed = true }
         } finally {
             loading = false
         }

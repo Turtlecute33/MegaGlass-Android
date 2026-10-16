@@ -61,7 +61,7 @@ import nz.mega.sdk.MegaShare
 /**
  * Full-screen folder chooser (move, copy, upload, import). Shows Cloud drive and the incoming
  * shares the user can write to. [exclude] hides folders that cannot be the target (the items
- * being moved).
+ * being moved). [detail] shows below the title, for example the names of the items.
  */
 @Composable
 fun FolderPickerDialog(
@@ -71,6 +71,7 @@ fun FolderPickerDialog(
     onDismiss: () -> Unit,
     exclude: Set<Long> = emptySet(),
     start: Long? = null,
+    detail: String? = null,
 ) {
     if (!rememberDialogAllowed()) return
     val graph = MegaGlassApp.graph
@@ -141,6 +142,16 @@ fun FolderPickerDialog(
                             }
                         },
                     )
+                    if (!detail.isNullOrEmpty()) {
+                        Text(
+                            detail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp),
+                        )
+                    }
                     if (stack.isEmpty()) {
                         SecondaryTabRow(selectedTabIndex = tab) {
                             Tab(tab == 0, { tab = 0 }, text = { Text(stringResource(R.string.cloud_drive)) })

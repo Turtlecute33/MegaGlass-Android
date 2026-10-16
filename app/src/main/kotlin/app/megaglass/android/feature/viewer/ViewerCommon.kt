@@ -261,6 +261,8 @@ object PreviewCache {
 object StreamServer {
     private val refs = HashMap<MegaApiJava, Int>()
     private val playbackHolds = HashSet<MegaApiJava>()
+    /** Guards [playbackHolds] only, never during SDK calls: the player releases on the main thread. */
+    private val holdsLock = Any()
     /** Releases run here: a stop waits for open connections and the server thread, which must not block the main thread. */
     private val releaser = Executors.newSingleThreadExecutor()
 
@@ -296,15 +298,15 @@ object StreamServer {
     /** Keeps the server of [api] running while background playback uses it. */
     @Synchronized
     fun holdForPlayback(api: MegaApiJava): Boolean {
-        if (api in playbackHolds) return api.httpServerIsRunning() != 0
+        if (synchronized(holdsLock) { api in playbackHolds }) return api.httpServerIsRunning() != 0
         if (!acquire(api)) return false
-        playbackHolds += api
+        synchronized(holdsLock) { playbackHolds += api }
         return true
     }
 
     /** A later hold takes a new reference at once, so that a pending stop cannot take its server. */
     fun releasePlayback() {
-        val held = synchronized(this) { playbackHolds.toList().also { playbackHolds.clear() } }
+        val held = synchronized(holdsLock) { playbackHolds.toList().also { playbackHolds.clear() } }
         held.forEach(::release)
     }
 

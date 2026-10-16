@@ -5,8 +5,11 @@ import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
+// The joiners U+200C and U+200D stay: they do not change the direction, and Persian text and
+// emoji sequences need them.
 private fun Char.isDirectionMark() =
-    this == '\u061C' || this in '\u200B'..'\u200F' || this in '\u202A'..'\u202E' || this in '\u2060'..'\u2069' || this == '\uFEFF'
+    this == '\u061C' || this == '\u200B' || this in '\u200E'..'\u200F' || this in '\u202A'..'\u202E' ||
+        this in '\u2060'..'\u2069' || this == '\uFEFF'
 
 private fun Char.isControl() = this <= '\u001F' || this in '\u007F'..'\u009F' || this == '\u2028' || this == '\u2029'
 
@@ -21,15 +24,19 @@ fun displayName(name: String): String {
 }
 
 /**
- * Names supplied by cloud nodes and document providers are single path components. A name
+ * [name] as a single path component, with no other change: the name of an upload in the cloud.
+ * An edited file must keep its exact name, so that its upload replaces it.
+ */
+fun pathComponent(name: String): String =
+    name.replace('/', '_').replace('\\', '_').replace('\u0000', '_')
+        .takeUnless { it.isEmpty() || it == "." || it == ".." } ?: "file"
+
+/**
+ * Names supplied by cloud nodes and document providers, for files on this device. A name
  * longer than the 255 bytes that Android file systems allow is cut, with space left for the
  * " (1)" of a name collision; the extension stays.
  */
-fun localFileName(name: String): String =
-    shortName(
-        displayName(name).replace('/', '_').replace('\\', '_')
-            .takeUnless { it.isEmpty() || it == "." || it == ".." } ?: "file",
-    )
+fun localFileName(name: String): String = shortName(pathComponent(displayName(name)))
 
 private const val MAX_NAME_BYTES = 255
 private const val SHORT_NAME_BYTES = 240

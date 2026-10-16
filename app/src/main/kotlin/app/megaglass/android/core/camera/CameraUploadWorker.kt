@@ -23,6 +23,7 @@ import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.mega.SessionState
 import app.megaglass.android.core.storage.LocalSource
+import app.megaglass.android.core.storage.isContentUri
 import app.megaglass.android.core.transfers.Purpose
 import app.megaglass.android.core.transfers.TransferStatus
 import kotlinx.coroutines.CancellationException
@@ -120,6 +121,9 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                     }.sortedBy { it.added }
                 }
 
+                // Earlier versions uploaded from the file path, with the location data. Such uploads,
+                // resumed from the SDK queue, stop; this run queues their media again without it.
+                withContext(Dispatchers.IO) { graph.transfers.cancelUploads(Purpose.CAMERA) { !isContentUri(it) } }
                 val inQueue = graph.transfers.uploadingPaths()
                 val handled = prefs.handled
                 val selection = withContext(Dispatchers.IO) {
@@ -249,12 +253,15 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
             if (!File(m.path).exists()) { skipped += m; continue }
             val source = redacted(m)
             if (source == null) { unreadable += m; continue }
-            // In the queue from an earlier run, which can be from a version that read the path.
-            if (source in inQueue || m.path in inQueue) { busy += m; continue }
+            // In the queue from an earlier run.
+            if (source in inQueue) { busy += m; continue }
             // The fingerprint of what is uploaded: without the location data.
             val fingerprint = api.getFingerprint(source)
             if (fingerprint == null) { unreadable += m; continue }
+            // Earlier versions uploaded the original file, which has another fingerprint. The file
+            // is read only on this device for it.
             val existing = api.getNodeByFingerprint(fingerprint, parent)
+                ?: if (File(m.path).canRead()) api.getFingerprint(m.path)?.let { api.getNodeByFingerprint(it, parent) } else null
             if (existing != null && (m.added <= marker || !api.isInRubbish(existing))) { skipped += m; continue }
             var name = if (keepNames) m.name else datedName(m)
             // A name that is in the folder already gets a suffix: with the same name the upload

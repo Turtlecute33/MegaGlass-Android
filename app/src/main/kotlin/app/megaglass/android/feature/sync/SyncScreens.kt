@@ -52,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
+import app.megaglass.android.core.storage.displayName
 import app.megaglass.android.feature.drive.FolderPickerDialog
 import app.megaglass.android.feature.settings.NoticeCard
 import app.megaglass.android.feature.settings.SettingsScaffold
@@ -191,7 +192,7 @@ fun SyncsScreen(vm: SyncViewModel = viewModel()) {
             var busy by remember(s) { mutableStateOf(false) }
             var error by remember(s) { mutableStateOf<String?>(null) }
             // The SDK lock: not on the main thread.
-            val remotePath by produceState("", s) { value = withContext(Dispatchers.IO) { graph.mega.api.getNodePathByHandle(s.remote).orEmpty() } }
+            val remotePath by produceState("", s) { value = withContext(Dispatchers.IO) { displayName(graph.mega.api.getNodePathByHandle(s.remote).orEmpty()) } }
             if (rememberDialogAllowed()) AlertDialog(
                 onDismissRequest = { if (!busy) step = null },
                 icon = { Ic(R.drawable.ic_cloud_sync) },

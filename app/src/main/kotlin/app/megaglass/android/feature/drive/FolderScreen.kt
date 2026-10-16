@@ -151,12 +151,14 @@ private fun DriveFolder(mode: DriveMode, handle: Long) {
                         },
                         scrollBehavior = scroll,
                     )
-                    // The first folder is the top of a section, or the folder of an incoming share.
+                    // The first folder is the top of a section, or the folder of an incoming share. Each
+                    // crumb opens in the section of the path, which can differ from this screen (a
+                    // folder restored from the Rubbish bin).
                     Breadcrumbs(state.path, state.top?.let { stringResource(it.title) }, onClick = { crumb ->
                         val section = state.top
                         nav.popToOrNavigate(
                             if (crumb == state.path.first() && section != null) section.route(app.megaglass.android.ui.nav.ROOT)
-                            else mode.route(crumb.handle),
+                            else (section ?: mode).route(crumb.handle),
                         )
                     })
                 }

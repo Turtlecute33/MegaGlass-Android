@@ -5,8 +5,11 @@ import app.megaglass.android.core.util.catching
 import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Environment
+import android.os.Process
 import android.os.storage.StorageManager
 import android.provider.DocumentsContract
 import android.provider.MediaStore
@@ -70,7 +73,14 @@ class LocalFiles(private val context: Context) {
     suspend fun resolveForUpload(uri: Uri, shared: Boolean): LocalSource? = withContext(Dispatchers.IO) {
         if (uri.scheme != ContentResolver.SCHEME_CONTENT) return@withContext null
         // "userId@authority" also names the app's own provider.
-        if (uri.authority?.substringAfterLast('@') == context.packageName + ".files") return@withContext null
+        val authority = uri.authority?.substringAfterLast('@')
+        if (authority == context.packageName + ".files") return@withContext null
+        // This app can read all of MediaStore, so a MediaStore URI alone proves nothing. Android
+        // always records a grant for a real share of such a URI (the provider forces URI
+        // permissions); a URI that the sender only wrote into the intent has none.
+        if (shared && authority == MediaStore.AUTHORITY &&
+            context.checkUriPermission(uri, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION) != PackageManager.PERMISSION_GRANTED
+        ) return@withContext null
         val name = displayName(uri) ?: "file-${System.currentTimeMillis()}"
         if (!shared) realPath(uri)?.let { path ->
             val f = File(path)
@@ -80,7 +90,7 @@ class LocalFiles(private val context: Context) {
         val target = File(dir, localFileName(name))
         try {
             // A copy that cannot fit fails now, not after it has filled the storage.
-            size(uri)?.let { if (it > freeSpace(dir)) throw NoSpaceException() }
+            size(uri)?.let { reserve(dir, it) }
             context.contentResolver.openInputStream(uri)?.use { input ->
                 target.outputStream().use { input.copyTo(it, 1 shl 20) }
             } ?: throw IOException("Cannot read shared file")
@@ -91,10 +101,15 @@ class LocalFiles(private val context: Context) {
         }
     }
 
-    /** Free space for [dir], with the cached data that Android can remove for it. */
-    private fun freeSpace(dir: File): Long {
+    /** Makes [bytes] free for [dir]: Android removes cached data for it when necessary. */
+    private fun reserve(dir: File, bytes: Long) {
         val storage = context.getSystemService(StorageManager::class.java)
-        return storage.getAllocatableBytes(storage.getUuidForPath(dir))
+        val volume = storage.getUuidForPath(dir)
+        try {
+            storage.allocateBytes(volume, bytes)
+        } catch (_: IOException) {
+            throw NoSpaceException()
+        }
     }
 
     private fun size(uri: Uri): Long? = catching {
@@ -153,7 +168,8 @@ class LocalFiles(private val context: Context) {
                 }
                 id?.toLongOrNull()?.let { dataColumn(android.content.ContentUris.withAppendedId(base, it)) }?.let { return it }
             }
-            dataColumn(uri)?.let { return it }
+            // Only MediaStore: the _data value of another provider can name any file.
+            if (uri.authority == MediaStore.AUTHORITY) dataColumn(uri)?.let { return it }
         }
         return null
     }
@@ -185,11 +201,12 @@ class LocalFiles(private val context: Context) {
     val capturesDir: File get() = File(context.filesDir, "pending-uploads")
 
     /**
-     * Moves the photos of earlier runs that no upload reads ([inUse]) to the gallery: their
-     * upload failed, was cancelled, or never started. Returns how many it moved.
+     * Moves the photos that no upload reads ([inUse]) to the gallery: their upload failed, was
+     * cancelled, or never started. Only photos of earlier runs, unless [before] is later.
+     * Returns how many it moved.
      */
-    fun rescueCaptures(inUse: Set<String>): Int =
-        leftoverCaptures(capturesDir, inUse, startedAt).count { catching { moveToGallery(it) }.isSuccess }
+    fun rescueCaptures(inUse: Set<String>, before: Long = startedAt): Int =
+        leftoverCaptures(capturesDir, inUse, before).count { catching { moveToGallery(it) }.isSuccess }
 
     /** Moves a photo from [capturesDir] to Pictures/MegaGlass, where the user owns it. */
     fun moveToGallery(photo: File) {

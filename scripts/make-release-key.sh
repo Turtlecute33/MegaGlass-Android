@@ -33,10 +33,24 @@ if [[ ! -d "${KEYSTORE:h}" ]]; then
   chmod 700 "${KEYSTORE:h}"
 fi
 
+# A run that stops before keystore.properties is written removes what it made: the checks above
+# found none of it, and no release can be signed with a key that has no keystore.properties.
+created=()
+cleanup() {
+  for item in $created; do
+    security delete-generic-password -s "$item" -a "$USER" > /dev/null 2>&1 || true
+  done
+  rm -f "$KEYSTORE" "$ROOT/keystore.properties"
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM HUP
+
 export MG_STORE_PASS="$(openssl rand -base64 32)"
 export MG_KEY_PASS="$MG_STORE_PASS"   # PKCS12 keystores use one password for store and key.
 security add-generic-password -s "$STORE_ITEM" -a "$USER" -w "$MG_STORE_PASS"
+created+=("$STORE_ITEM")
 security add-generic-password -s "$KEY_ITEM" -a "$USER" -w "$MG_KEY_PASS"
+created+=("$KEY_ITEM")
 
 keytool -genkeypair -v -storetype PKCS12 -keystore "$KEYSTORE" -alias "$ALIAS" \
   -keyalg EC -groupname secp256r1 -validity 10000 -dname "CN=MegaGlass" \
@@ -50,5 +64,6 @@ keyAlias=$ALIAS
 storePasswordKeychain=$STORE_ITEM
 keyPasswordKeychain=$KEY_ITEM
 PROPS
+trap - EXIT
 print "Release key created: $KEYSTORE (passwords in Keychain: $STORE_ITEM, $KEY_ITEM)"
 print "Back up the keystore and its Keychain items together. Without both, no update can be signed."

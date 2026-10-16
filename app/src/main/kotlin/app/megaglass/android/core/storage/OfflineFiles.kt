@@ -29,7 +29,7 @@ internal class OfflineFiles(private val root: File) {
         val marker = File(dir, ".complete")
         if (!marker.isFile) return null
         val name = runCatching { marker.readText() }.getOrNull() ?: return null
-        if (name != localFileName(name)) return null
+        if (!isSingleComponent(name)) return null
         return File(File(dir, "data"), name).takeIf { it.exists() }
     }
 
@@ -72,7 +72,7 @@ internal class OfflineFiles(private val root: File) {
             // ".previous-<key>-<36-character UUID>"
             val key = backup.name.removePrefix(PREVIOUS).dropLast(37)
             val target = File(root, key)
-            if (key.isNotEmpty() && !key.startsWith('.') && key == localFileName(key) && !target.exists()) {
+            if (!key.startsWith('.') && isSingleComponent(key) && !target.exists()) {
                 if (!backup.renameTo(target)) throw IOException("Cannot restore offline copy")
             } else {
                 backup.deleteRecursively()
@@ -85,5 +85,8 @@ internal class OfflineFiles(private val root: File) {
         private const val PREVIOUS = ".previous-"
 
         fun isSafeId(id: String) = id.matches(Regex("[A-Za-z0-9_-]+"))
+
+        /** Only the structure: copies of earlier versions keep names that the current rules would change. */
+        fun isSingleComponent(name: String) = name.isNotEmpty() && name != "." && name != ".." && '/' !in name && '\u0000' !in name
     }
 }

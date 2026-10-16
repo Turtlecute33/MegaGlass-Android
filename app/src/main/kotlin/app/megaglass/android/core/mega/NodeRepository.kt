@@ -326,7 +326,7 @@ class NodeRepository(private val mega: Mega) {
                 timestamp = b.timestamp,
                 userEmail = b.userEmail?.takeIf { it != me },
                 parentHandle = b.parentHandle,
-                parentName = parent?.name ?: "",
+                parentName = displayName(parent?.name ?: ""),
                 isUpdate = b.isUpdate,
                 isMedia = b.isMedia,
                 nodes = items,

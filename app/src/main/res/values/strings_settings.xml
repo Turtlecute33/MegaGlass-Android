@@ -170,7 +170,7 @@
     <string name="lock_use_biometric">Unlock with biometrics</string>
     <string name="lock_biometric_title">Unlock MegaGlass</string>
     <string name="lock_use_passcode">Use passcode</string>
-    <string name="lock_biometric_reset">Biometric unlock is off because the fingerprints or faces on this device changed. Enter your passcode, then turn it on again in Settings.</string>
+    <string name="lock_biometric_reset">Biometric unlock is off. Enter your passcode, then turn it on again in Settings.</string>
 
     <!-- About -->
     <string name="about_privacy">MegaGlass has no ads and no third-party analytics. The MEGA SDK sends some diagnostic events, such as errors and timings, to MEGA. Files are encrypted on this device before they are uploaded. The app connects only to MEGA.</string>

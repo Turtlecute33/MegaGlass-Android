@@ -34,7 +34,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +54,7 @@ import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.mega.FolderInfo
 import app.megaglass.android.core.mega.NodeItem
+import app.megaglass.android.core.mega.showsUploaderImage
 import app.megaglass.android.core.media.NodeImage
 import app.megaglass.android.core.util.FileType
 import app.megaglass.android.core.util.Format
@@ -273,7 +273,7 @@ fun accessLabel(access: Int): String = stringResource(
 @Composable
 private fun Header(item: NodeItem) {
     Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        if (!item.isFolder && item.hasPreview) {
+        if (!item.isFolder && item.hasPreview && item.type.showsUploaderImage) {
             val context = LocalContext.current
             AsyncImage(
                 model = remember(item.handle) { ImageRequest.Builder(context).data(NodeImage(item.handle, preview = true)).build() },
@@ -347,7 +347,6 @@ private fun DescriptionEditor(initial: String, onSave: (String) -> Unit) {
 fun VersionsScreen(route: Versions) {
     val graph = MegaGlassApp.graph
     val nav = LocalNavigator.current
-    val scope = rememberCoroutineScope()
     var versions by remember { mutableStateOf<List<NodeItem>?>(null) }
     var reload by remember { mutableIntStateOf(0) }
     var confirmAll by remember { mutableStateOf(false) }
@@ -360,8 +359,9 @@ fun VersionsScreen(route: Versions) {
         versions?.firstOrNull()?.let { anchor = it.handle }
     }
     LaunchedEffect(Unit) { graph.nodes.changes.debounce(300).collect { reload++ } }
+    // App scope: "Delete previous versions" must not stop halfway when the user leaves the screen.
     val act = { block: suspend () -> Unit ->
-        scope.launch {
+        graph.scope.launch(Dispatchers.Main) {
             catching { block() }.onFailure { graph.messenger.show(it.message ?: "") }
             reload++
         }

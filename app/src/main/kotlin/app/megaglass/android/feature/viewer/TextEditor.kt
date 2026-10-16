@@ -129,6 +129,11 @@ class TextEditorModel : ViewModel() {
     var saving by mutableStateOf(false)
     /** Set by Save in the leave dialog: the editor closes when the save succeeds. */
     var closeAfterSave = false
+    /** The entry left the back stack: a save that ends later must not close another editor of the same file. */
+    var cleared = false
+        private set
+
+    override fun onCleared() { cleared = true }
 }
 
 @Composable
@@ -229,7 +234,7 @@ fun TextEditorScreen(route: TextEditor) {
                         code == MegaError.API_ENOENT || code == MegaError.API_OK && !request.flag
                     }.getOrDefault(false)
                     graph.messenger.show(resources.getString(if (versioned) R.string.editor_saved_version else R.string.editor_saved, savedTitle))
-                    if (m.closeAfterSave && !dirty) nav.backFrom(route)
+                    if (m.closeAfterSave && !m.cleared && !dirty) nav.backFrom(route)
                 }.onFailure { graph.messenger.show(it.message ?: resources.getString(R.string.error_title)) }
             } finally {
                 sessionMonitor.cancel()
@@ -324,6 +329,7 @@ fun TextEditorScreen(route: TextEditor) {
                 TextButton(onClick = {
                     askDiscard = false
                     dirty = false
+                    m.closeAfterSave = false
                     nav.back()
                 }) { Text(stringResource(R.string.editor_discard)) }
             },

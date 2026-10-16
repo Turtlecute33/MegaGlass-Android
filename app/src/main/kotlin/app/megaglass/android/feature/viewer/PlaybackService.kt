@@ -7,6 +7,7 @@ import android.os.Process
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSpec
@@ -18,6 +19,15 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import app.megaglass.android.MainActivity
 import app.megaglass.android.MegaGlassApp
+import app.megaglass.android.R
+import app.megaglass.android.core.media.NodeImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -29,6 +39,7 @@ import java.util.concurrent.ConcurrentHashMap
 class PlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
+    private val scope = MainScope()
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {
@@ -68,6 +79,20 @@ class PlaybackService : MediaSessionService() {
                     }
             })
             .build()
+        // The app lock can change while the queue plays: the system controls follow it.
+        scope.launch {
+            MegaGlassApp.graph.settings.state.map { it.passcodeHash != null }.distinctUntilChanged().collect { hidden ->
+                val ids = (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
+                val art = if (hidden) emptyMap() else withContext(Dispatchers.IO) { ids.associateWith { PlaybackQueue[it]?.let(::cachedArt) } }
+                val appName = getString(R.string.app_name)
+                for (i in 0 until player.mediaItemCount) {
+                    val item = player.getMediaItemAt(i)
+                    val entry = PlaybackQueue[item.mediaId] ?: continue
+                    val metadata = if (hidden) hiddenMetadata(appName) else trackMetadata(entry, art[item.mediaId])
+                    player.replaceMediaItem(i, item.buildUpon().setMediaMetadata(metadata).build())
+                }
+            }
+        }
     }
 
     /** A cloud track gets its link on the SDK server only when the player loads it. */
@@ -90,6 +115,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        scope.cancel()
         session?.run {
             player.release()
             release()
@@ -100,6 +126,38 @@ class PlaybackService : MediaSessionService() {
         super.onDestroy()
     }
 }
+
+/** The name of a track without its extension. */
+internal val MediaEntry.title get() = name.substringBeforeLast('.')
+
+/** What the system controls show for [entry]: its name and [art] (the thumbnail file). */
+internal fun trackMetadata(entry: MediaEntry, art: Uri?): MediaMetadata = MediaMetadata.Builder()
+    .setTitle(entry.title)
+    .setDisplayTitle(entry.title)
+    .setArtworkUri(art)
+    .setIsPlayable(true)
+    .build()
+
+/**
+ * A neutral title for the system controls (app lock). Empty values also replace the tags of the
+ * file (artist, album, embedded cover), which the player adds to the metadata.
+ */
+internal fun hiddenMetadata(title: String): MediaMetadata = MediaMetadata.Builder()
+    .setTitle(title)
+    .setDisplayTitle(title)
+    .setArtist("")
+    .setAlbumTitle("")
+    .setAlbumArtist("")
+    .setSubtitle("")
+    .setDescription("")
+    .setArtworkData(ByteArray(0), MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+    .setIsPlayable(true)
+    .build()
+
+/** The thumbnail of [entry] when it is in the cache. Reads the disk. */
+internal fun cachedArt(entry: MediaEntry): Uri? =
+    if (!entry.hasThumbnail) null
+    else MegaGlassApp.graph.images.file(NodeImage(entry.handle, folderLink = entry.folderLink)).takeIf { it.length() > 0 }?.let(Uri::fromFile)
 
 /**
  * The tracks of the audio queue, in memory. Media items carry only random ids: the session

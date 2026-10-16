@@ -150,8 +150,9 @@ fun MainScaffold(nav: AppNavigator) {
                     }
                 },
             )
+            // Also in the text editor: a save waits for paused uploads, which Transfers resumes.
             TransferPill(
-                visible = !fullScreen && route != Transfers,
+                visible = (!fullScreen || route is TextEditor) && route != Transfers,
                 onClick = { nav.navigate(Transfers) },
                 modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
             )
