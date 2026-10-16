@@ -63,7 +63,7 @@ private fun replaceKey(url: String, key: String): String {
  */
 fun findMegaLink(text: String): String? =
     text.split(Regex("\\s+"))
-        .map { it.trimStart('(', '[', '<', '"', '\'').trimEnd('.', ',', ';', ':', ')', ']', '>', '"', '\'') }
+        .map { it.trimStart('(', '[', '<', '"', '\'', '“', '‘', '«', '‹').trimEnd('.', ',', ';', ':', ')', ']', '>', '"', '\'', '”', '’', '»', '›') }
         .firstOrNull { it.isNotEmpty() && parseMegaLink(it) !is MegaLink.Invalid }
 
 /**

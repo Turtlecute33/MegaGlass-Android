@@ -33,6 +33,8 @@ class MegaLinkTest {
         assertEquals("https://mega.nz/folder/h#k", findMegaLink("Open https://mega.nz/folder/h#k."))
         assertEquals("https://mega.nz/folder/h#k_-", findMegaLink("\"https://mega.nz/folder/h#k_-\","))
         assertEquals("https://mega.nz/#F!h!k", findMegaLink("<https://mega.nz/#F!h!k>"))
+        assertEquals("https://mega.nz/file/h#k", findMegaLink("Here: “https://mega.nz/file/h#k”"))
+        assertEquals("https://mega.nz/folder/h#k", findMegaLink("«https://mega.nz/folder/h#k»"))
         assertNull(findMegaLink("(https://mega.nz.evil.test/file/h#k)"))
     }
 
