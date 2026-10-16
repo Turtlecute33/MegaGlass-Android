@@ -92,6 +92,18 @@ composeCompiler {
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
 
+// The APK records HEAD as its source revision, so a release build needs a clean tree.
+val checkReleaseTree = tasks.register("checkReleaseTree") {
+    val status = providers.exec {
+        commandLine("git", "status", "--porcelain")
+        isIgnoreExitValue = true
+    }.standardOutput.asText
+    doLast {
+        if (status.get().isNotBlank()) throw GradleException("Commit all changes before a release build.")
+    }
+}
+tasks.named { it == "preReleaseBuild" }.configureEach { dependsOn(checkReleaseTree) }
+
 dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:runner:1.7.0")

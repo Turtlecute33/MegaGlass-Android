@@ -664,7 +664,8 @@ public final class FileWrapper {
         return context.getContentResolver();
     }
 
+    // Exception messages contain paths and content URIs, so log only the exception type.
     private static void warn(String operation, Exception e) {
-        Log.w(TAG, operation + " failed: " + e);
+        Log.w(TAG, operation + " failed: " + e.getClass().getSimpleName());
     }
 }

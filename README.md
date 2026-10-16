@@ -60,6 +60,9 @@ scripts/build-sdk.sh          # builds libmega.so (arm64-v8a) and the Java bindi
 The first SDK build compiles all native dependencies with vcpkg and takes a while. Later builds
 use them again.
 
+A release build stops if the git tree has changes that are not committed, because the APK
+records the commit that it was built from. Commit (and tag) the version change first.
+
 <details>
 <summary><b>Native SDK changes</b></summary>
 

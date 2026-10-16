@@ -39,15 +39,23 @@ dependencies {
 tasks.named("preBuild") {
     val nativeLib = file("src/main/jniLibs/arm64-v8a/libmega.so")
     val provenance = file("src/main/assets/mega-build.properties")
+    val sdkVersion = rootProject.file("scripts/sdk-version.sh")
     doFirst {
         if (!nativeLib.exists()) {
             throw GradleException("libmega.so is missing. Run scripts/bootstrap-sdk.sh and scripts/build-sdk.sh.")
         }
         if (!provenance.exists()) throw GradleException("Native build provenance is missing. Rebuild with scripts/build-sdk.sh.")
         val versions = Properties().apply { provenance.inputStream().use { load(it) } }
-        val expected = mapOf("openssl" to "3.6.5", "curl" to "8.23.0", "libsodium" to "1.0.22", "zlib" to "1.3.2", "sqlite3" to "3.53.4")
+        val expected = mapOf(
+            "openssl" to "3.6.5", "curl" to "8.23.0", "libsodium" to "1.0.22", "zlib" to "1.3.2", "sqlite3" to "3.53.4",
+            "libmediainfo" to "26.10",
+        )
         if (expected.any { (name, version) -> versions.getProperty(name) != version }) {
             throw GradleException("Native dependencies are out of date. Rebuild with scripts/build-sdk.sh.")
+        }
+        val sdkCommit = Regex("SDK_COMMIT=\"([0-9a-f]{40})\"").find(sdkVersion.readText())?.groupValues?.get(1)
+        if (sdkCommit == null || versions.getProperty("sdkRevision") != sdkCommit) {
+            throw GradleException("libmega.so was not built from the pinned MEGA SDK. Run scripts/bootstrap-sdk.sh and scripts/build-sdk.sh.")
         }
         val digest = MessageDigest.getInstance("SHA-256")
         nativeLib.inputStream().use { input ->

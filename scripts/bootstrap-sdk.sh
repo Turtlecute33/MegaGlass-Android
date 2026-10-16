@@ -2,10 +2,8 @@
 # Fetches the MEGA SDK and vcpkg at pinned commits and applies the local patches.
 set -euo pipefail
 
-SDK_REPO="https://github.com/meganz/sdk.git"
-SDK_COMMIT="7e4519cc1d8c42312444482766b761c899894e6f" # v10.21.0
-
 ROOT="${0:A:h:h}"
+source "$ROOT/scripts/sdk-version.sh"
 VENDOR="$ROOT/Vendor"
 SDK_DIR="$VENDOR/mega-sdk"
 VCPKG_DIR="$VENDOR/vcpkg"
