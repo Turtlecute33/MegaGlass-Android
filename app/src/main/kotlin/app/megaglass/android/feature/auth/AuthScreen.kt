@@ -105,7 +105,8 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
                 Column(Modifier.widthIn(max = 440.dp).fillMaxWidth()) {
                     when (step) {
                         AuthStep.WELCOME -> Welcome(notice, onLogin = { vm.go(AuthStep.LOGIN) }, onSignup = { vm.go(AuthStep.SIGNUP) })
-                        AuthStep.LOGIN -> Login(state, vm)
+                        // The step of an earlier login stays: a notice after logout can also show here.
+                        AuthStep.LOGIN -> Login(state, notice, vm)
                         AuthStep.TWO_FACTOR -> TwoFactor(state, vm)
                         AuthStep.SIGNUP -> Signup(state, vm)
                         AuthStep.CONFIRM_EMAIL -> Info(
@@ -264,7 +265,7 @@ private fun PasswordField(
 }
 
 @Composable
-private fun Login(state: AuthState, vm: AuthViewModel) {
+private fun Login(state: AuthState, notice: String?, vm: AuthViewModel) {
     var email by rememberSaveable { mutableStateOf(state.email) }
     var password by remember { mutableStateOf("") }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -276,6 +277,10 @@ private fun Login(state: AuthState, vm: AuthViewModel) {
         }
     }
     Title(stringResource(R.string.auth_login_title), stringResource(R.string.auth_login_subtitle))
+    if (notice != null) {
+        NoticeCard(R.drawable.ic_warning, notice)
+        Spacer(Modifier.height(24.dp))
+    }
     EmailField(email, { email = it })
     Spacer(Modifier.height(12.dp))
     PasswordField(password, { password = it }, stringResource(R.string.auth_password), onDone = submit)
