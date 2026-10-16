@@ -64,6 +64,10 @@ class Session(
 
     val isReady get() = _state.value == SessionState.Ready
 
+    private val _notice = MutableStateFlow<String?>(null)
+    /** Shown on the login screen: the last logout could not end the session on the server. */
+    val notice: StateFlow<String?> = _notice.asStateFlow()
+
     @Volatile private var startJob: Job? = null
     private val lifecycle = Mutex()
     @Volatile private var authJob: Job? = null
@@ -76,6 +80,12 @@ class Session(
             }
         }
         scope.launch {
+            // The saved session stays valid, so Retry logs in again.
+            mega.sdkLoggedOut.collect { code ->
+                _state.compareAndSet(SessionState.Ready, SessionState.Failed(if (code == MegaError.API_ESSL) INTERCEPTED else SDK_LOGGED_OUT))
+            }
+        }
+        scope.launch {
             mega.events.collect { event ->
                 if (event.type == MegaEvent.EVENT_ACCOUNT_BLOCKED) {
                     _state.value = SessionState.Blocked(event.text ?: "This account is blocked.")
@@ -83,7 +93,7 @@ class Session(
             }
         }
         scope.launch {
-            settings.state.distinctUntilChangedBy { it.fastTransfers to it.httpsTransfers }
+            settings.state.distinctUntilChangedBy { it.fastTransfers }
                 .collect { applyTransferSettings(it) }
         }
     }
@@ -135,6 +145,7 @@ class Session(
     suspend fun login(email: String, password: String, pin: String? = null) = scope.async(Dispatchers.IO, start = CoroutineStart.LAZY) {
         lifecycle.withLock {
             check(_state.value == SessionState.LoggedOut) { "Another session operation is in progress" }
+            _notice.value = null
             _state.value = SessionState.Loading(SessionState.Stage.LOGIN, null)
             try {
                 val sent = withTimeoutOrNull(LOGIN_TIMEOUT_MS) {
@@ -222,8 +233,13 @@ class Session(
         startJob?.cancelAndJoin()
         authJob?.cancelAndJoin()
         lifecycle.withLock {
-            val remote = if (localOnly) null else withTimeoutOrNull(LOGOUT_TIMEOUT_MS) { catching { api.await { logout(it) } } }
-            if (remote?.isSuccess != true) withTimeoutOrNull(LOGOUT_TIMEOUT_MS) { catching { api.await { localLogout(it) } } }
+            // Without a login in the SDK (for example after a failed resume) a logout cannot reach the server.
+            val remote = if (localOnly || api.isLoggedIn == 0) null
+            else withTimeoutOrNull(LOGOUT_TIMEOUT_MS) { catching { api.await { logout(it) } } }
+            if (remote?.isSuccess != true) {
+                withTimeoutOrNull(LOGOUT_TIMEOUT_MS) { catching { api.await { localLogout(it) } } }
+                if (!localOnly) _notice.value = SERVER_SESSION_ACTIVE
+            }
             clearLocal()
         }
     }.await()
@@ -247,7 +263,6 @@ class Session(
         val up = if (s.fastTransfers) 8 else 3
         api.setMaxConnections(MegaTransfer.TYPE_DOWNLOAD, down)
         api.setMaxConnections(MegaTransfer.TYPE_UPLOAD, up)
-        api.useHttpsOnly(s.httpsTransfers)
     }
 
     private companion object {
@@ -255,5 +270,11 @@ class Session(
         const val LOGIN_TIMEOUT_MS = 90_000L
         const val FETCH_STALL_MS = 180_000L
         const val TIMED_OUT = "Connection timed out. Try again."
+        const val INTERCEPTED = "The secure connection to MEGA failed. The network can block or change the " +
+            "connection, for example a Wi-Fi login page. Try again, or use a different network."
+        const val SDK_LOGGED_OUT = "The connection to MEGA stopped because of an error. Try again."
+        const val SERVER_SESSION_ACTIVE = "The session could not be ended on the MEGA server. You are logged out on " +
+            "this device, but the session stays active on the server until it expires. To end it now, close it in " +
+            "MEGA on the web (Settings > Security > Session history)."
     }
 }

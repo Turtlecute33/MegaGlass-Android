@@ -2,6 +2,8 @@ package app.megaglass.android
 
 import android.app.Application
 import android.content.Context
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import app.megaglass.android.core.FileOpener
 import app.megaglass.android.core.camera.CameraUploads
@@ -54,7 +56,10 @@ class AppGraph(val context: Context) {
         listOf(File(context.cacheDir, "uploads"), File(context.cacheDir, "camera"), File(context.cacheDir, "edit"), File(context.filesDir, "pending-uploads")),
     )
     val offline = OfflineStore(context, transfers, scope, mega.events.filter { it.type == MegaEvent.EVENT_NODES_CURRENT })
-    val session = Session(mega, SessionStore(context), settings, scope, onLoggedOut = ::clearUserData, onReady = { transfers.beginSession() })
+    val session = Session(
+        mega, SessionStore(context), settings, scope, onLoggedOut = ::clearUserData,
+        onReady = { transfers.beginSession(); mega.holdSyncsWithoutAccess() },
+    )
     val messenger = Messenger()
     val opener = FileOpener(context, transfers, files, messenger, scope)
     val lock = AppLock(settings)
@@ -99,6 +104,7 @@ class AppGraph(val context: Context) {
         File(context.cacheDir, "uploads").deleteRecursively()
         File(context.cacheDir, "avatar").deleteRecursively()
         coil3.SingletonImageLoader.get(context).memoryCache?.clear()
+        mega.clearCaches()
     }
 }
 
@@ -110,6 +116,12 @@ class MegaGlassApp : Application(), SingletonImageLoader.Factory {
         mega.privacy.android.data.filewrapper.FileWrapper.init(this)
         graph = AppGraph(this)
         ProcessLifecycleOwner.get().lifecycle.addObserver(graph.lock)
+        // All-files access can change while the app is in the background.
+        ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onResume(owner: LifecycleOwner) {
+                graph.scope.launch(Dispatchers.IO) { graph.mega.holdSyncsWithoutAccess() }
+            }
+        })
         graph.session.start()
     }
 

@@ -45,6 +45,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.megaglass.android.MegaGlassApp
@@ -90,6 +92,8 @@ fun SyncsScreen(vm: SyncViewModel = viewModel()) {
         else step = AddStep.PickCloud(path)
     }
     val startAdd = { storage.ensure { if (storage.granted) pickLocal.launch(null) else graph.messenger.show(resources.getString(R.string.sync_needs_access)) } }
+    // All-files access can change in the system settings.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.load() }
 
     val syncs = state.syncs
     SettingsScaffold(
@@ -105,6 +109,25 @@ fun SyncsScreen(vm: SyncViewModel = viewModel()) {
     ) {
         item(key = "info") {
             NoticeCard(R.drawable.ic_cloud_sync, stringResource(R.string.sync_info), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        }
+        if (state.accessMissing) {
+            item(key = "access") {
+                Card(
+                    onClick = { storage.ensure { vm.load() } },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Ic(R.drawable.ic_sd_card, null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            stringResource(R.string.sync_access_paused),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
         }
         if (state.stalled) {
             item(key = "stalled") {
@@ -143,7 +166,8 @@ fun SyncsScreen(vm: SyncViewModel = viewModel()) {
                     activity = state.activity[item.backupId],
                     onOpenCloud = { nav.navigate(Folder(item.remoteHandle)) },
                     onPause = { vm.pause(item) },
-                    onResume = { vm.resume(item) },
+                    // Resume only with all-files access (see Mega.holdSyncsWithoutAccess).
+                    onResume = { if (item.needsAccess) storage.ensure { vm.resume(item) } else vm.resume(item) },
                     onRemove = { removing = item },
                 )
             }
@@ -282,7 +306,7 @@ private fun SyncCard(
                 Box {
                     IconAction(R.drawable.ic_more_vert, stringResource(R.string.more), { menu = true })
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        if (item.state == SyncRunState.PAUSED) {
+                        if (item.state == SyncRunState.PAUSED || item.state == SyncRunState.DISABLED) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.sync_resume)) },
                                 leadingIcon = { Ic(R.drawable.ic_play_arrow) },

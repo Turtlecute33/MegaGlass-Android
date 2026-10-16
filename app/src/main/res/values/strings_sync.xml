@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Sync -->
-    <string name="sync_info">Sync keeps a folder on this device and a cloud folder the same in both directions. It runs while MegaGlass is open or in the background.</string>
+    <string name="sync_info">Sync keeps a folder on this device and a cloud folder the same in both directions. It runs only while MegaGlass is open. Changes that you make while the app is closed sync the next time you open it.</string>
     <string name="sync_add">Add sync</string>
     <string name="sync_needs_access">To sync a folder, allow access to all files.</string>
+    <string name="sync_access_paused">Sync is paused. Without access to all files, Android hides files from MegaGlass, and sync would remove them from the cloud. Tap here to allow access, then resume the sync.</string>
+    <string name="sync_access_paused_short">Sync is paused because MegaGlass has no access to all files.</string>
+    <string name="sync_access_open">Open</string>
     <string name="sync_pick_cloud">Sync with this cloud folder</string>
     <string name="sync_use_folder">Use this folder</string>
     <string name="sync_confirm_title">Start sync</string>

@@ -261,12 +261,6 @@ fun TransferSettingsScreen() {
             stringResource(if (settings.fastTransfers) R.string.settings_fast_on else R.string.settings_fast_off),
             settings.fastTransfers,
         ) { on -> updateSettings { it.copy(fastTransfers = on) } },
-        SettingRow.Toggle(
-            R.drawable.ic_lock,
-            stringResource(R.string.settings_https),
-            stringResource(R.string.settings_https_summary),
-            settings.httpsTransfers,
-        ) { on -> updateSettings { it.copy(httpsTransfers = on) } },
     )
     val location = settings.downloadDir?.takeIf { graph.files.hasAllFilesAccess } ?: graph.files.defaultDownloadDir().absolutePath
     val locationRows = listOf(

@@ -17,6 +17,9 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
@@ -171,9 +174,63 @@ public final class FileWrapper {
         }
     }
 
+    /**
+     * True when a plain path is in shared storage (/storage or /sdcard), outside the folders of
+     * the app {@code packageName} there (Android/data, Android/media and Android/obb).
+     */
+    public static boolean isSharedStorage(String path, String packageName) {
+        if (path == null || !isPath(path)) {
+            return false;
+        }
+        Path p;
+        try {
+            p = Paths.get(path).normalize();
+        } catch (InvalidPathException e) {
+            return true;
+        }
+        if (!p.isAbsolute() || p.getNameCount() == 0) {
+            return false;
+        }
+        String top = p.getName(0).toString();
+        int root;
+        if (top.equals("sdcard")) {
+            root = 1;
+        } else if (top.equals("storage") && p.getNameCount() > 1) {
+            // /storage/emulated/<user> and /storage/self/primary, or /storage/<volume>.
+            String volume = p.getName(1).toString();
+            root = volume.equals("emulated") || volume.equals("self") ? 3 : 2;
+        } else {
+            return top.equals("storage");
+        }
+        if (p.getNameCount() < root + 3 || !p.getName(root).toString().equalsIgnoreCase("Android")) {
+            return true;
+        }
+        String area = p.getName(root + 1).toString();
+        boolean own = (area.equalsIgnoreCase("data") || area.equalsIgnoreCase("media") || area.equalsIgnoreCase("obb"))
+                && p.getName(root + 2).toString().equalsIgnoreCase(packageName);
+        return !own;
+    }
+
+    /**
+     * Without all-files access, Android lists the folders of shared storage but hides most of
+     * their files. A sync would take the hidden files as deleted, so such a folder is not read.
+     */
+    private boolean hidesFiles() {
+        Context context = appContext;
+        if (context == null || !isSharedStorage(file.getAbsolutePath(), context.getPackageName())
+                || Environment.isExternalStorageManager()) {
+            return false;
+        }
+        Log.w(TAG, "Folder in shared storage not read: no all-files access");
+        return true;
+    }
+
     /** Paths or URIs of the children, or null if this is not a readable folder. */
     public List<String> getChildrenUris() {
         if (file != null) {
+            if (hidesFiles()) {
+                return null;
+            }
             String[] names = file.list();
             if (names == null) {
                 return null;
@@ -473,6 +530,9 @@ public final class FileWrapper {
     }
 
     private List<ChildMetadata> listFiles() {
+        if (hidesFiles()) {
+            return null;
+        }
         String[] names = file.list();
         if (names == null) {
             return null;

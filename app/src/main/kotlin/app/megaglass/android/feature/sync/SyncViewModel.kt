@@ -6,6 +6,8 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.megaglass.android.MegaGlassApp
+import app.megaglass.android.R
+import app.megaglass.android.core.mega.MegaException
 import app.megaglass.android.core.mega.await
 import app.megaglass.android.core.mega.keepAlive
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +35,8 @@ data class SyncItem(
     val state: SyncRunState,
     /** Readable SDK error, or null when the sync has no error. */
     val error: String?,
+    /** The local folder is in shared storage: the sync must not run without all-files access. */
+    val needsAccess: Boolean,
 )
 
 @Immutable
@@ -45,6 +49,8 @@ data class SyncsState(
     val syncs: List<SyncItem>? = null,
     val activity: Map<Long, SyncActivity> = emptyMap(),
     val stalled: Boolean = false,
+    /** Some syncs are paused because all-files access is missing. */
+    val accessMissing: Boolean = false,
 )
 
 /** Two-way syncs of this device. The SDK runs them while the app process is alive. */
@@ -82,7 +88,8 @@ class SyncViewModel : ViewModel() {
             val list = api.syncs
             list.keepAlive { (0 until it.size()).map { i -> it.get(i).toItem() } } to api.isSyncStalled
         }
-        _state.update { it.copy(syncs = items, stalled = stalled) }
+        val accessMissing = !graph.files.hasAllFilesAccess && items.any { it.needsAccess }
+        _state.update { it.copy(syncs = items, stalled = stalled, accessMissing = accessMissing) }
     }
 
     private fun MegaSync.toItem(): SyncItem {
@@ -101,6 +108,7 @@ class SyncViewModel : ViewModel() {
                 else -> SyncRunState.DISABLED
             },
             error = if (error != 0) MegaSync.getMegaSyncErrorCode(error) else null,
+            needsAccess = graph.mega.needsAllFilesAccess(localFolder),
         )
     }
 
@@ -108,7 +116,14 @@ class SyncViewModel : ViewModel() {
 
     fun pause(item: SyncItem) = act(item) { api.await { graph.mega.api.setSyncState(item.backupId, MegaSync.SyncRunningState.RUNSTATE_SUSPENDED, it) } }
 
-    fun resume(item: SyncItem) = act(item) { api.await { graph.mega.api.setSyncState(item.backupId, MegaSync.SyncRunningState.RUNSTATE_RUNNING, it) } }
+    fun resume(item: SyncItem) {
+        // Without all-files access the sync would see hidden files as deleted (see Mega.holdSyncsWithoutAccess).
+        if (item.needsAccess && !graph.files.hasAllFilesAccess) {
+            graph.messenger.show(graph.context.getString(R.string.sync_needs_access))
+            return
+        }
+        act(item) { api.await { graph.mega.api.setSyncState(item.backupId, MegaSync.SyncRunningState.RUNSTATE_RUNNING, it) } }
+    }
 
     fun remove(item: SyncItem) = act(item) { api.await { graph.mega.api.removeSync(item.backupId, it) } }
 
@@ -117,7 +132,7 @@ class SyncViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 catching { withContext(Dispatchers.IO) { block() } }
-                    .onFailure { graph.messenger.show(it.message ?: "Sync operation failed") }
+                    .onFailure { graph.messenger.show(it.syncMessage() ?: "Sync operation failed") }
                 load()
             } finally {
                 busy.remove(item.backupId)
@@ -130,7 +145,11 @@ class SyncViewModel : ViewModel() {
         withContext(Dispatchers.IO) {
             api.await { syncFolder(MegaSync.SyncType.TYPE_TWOWAY, localPath, name, remoteHandle, null, it) }
         }
-    }.fold(onSuccess = { load(); null }, onFailure = { it.message })
+    }.fold(onSuccess = { load(); null }, onFailure = { load(); it.syncMessage() })
+
+    /** The sync reason of a failed sync request (for example "Active sync below path"), else the API error. */
+    private fun Throwable.syncMessage(): String? =
+        (this as? MegaException)?.syncError?.takeIf { it != 0 }?.let(MegaSync::getMegaSyncErrorCode) ?: message
 
     /** Items that the sync cannot resolve alone (name clashes, permissions, ...). */
     suspend fun stalls(): List<StallItem> = withContext(Dispatchers.IO) {

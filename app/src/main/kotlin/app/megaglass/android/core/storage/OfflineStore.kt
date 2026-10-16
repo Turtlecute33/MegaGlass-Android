@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
@@ -87,7 +88,8 @@ class OfflineStore(
             }
         }
         scope.launch(Dispatchers.IO) {
-            transfersResumed.collect { catching { reconcile() } }
+            // Conflated: a slow reconcile must not hold back the shared SDK event flow.
+            transfersResumed.conflate().collect { catching { reconcile() } }
         }
     }
 

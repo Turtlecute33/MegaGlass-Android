@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.megaglass.android.R
+import app.megaglass.android.feature.settings.NoticeCard
 import app.megaglass.android.ui.components.BackButton
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.theme.AppTheme
@@ -81,6 +82,7 @@ import app.megaglass.android.ui.theme.AppTheme
 @Composable
 fun AuthScreen(vm: AuthViewModel = viewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val notice by MegaGlassApp.graph.session.notice.collectAsStateWithLifecycle()
     BackHandler(enabled = state.step != AuthStep.WELCOME) { vm.back() }
 
     Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
@@ -102,7 +104,7 @@ fun AuthScreen(vm: AuthViewModel = viewModel()) {
                 }
                 Column(Modifier.widthIn(max = 440.dp).fillMaxWidth()) {
                     when (step) {
-                        AuthStep.WELCOME -> Welcome(onLogin = { vm.go(AuthStep.LOGIN) }, onSignup = { vm.go(AuthStep.SIGNUP) })
+                        AuthStep.WELCOME -> Welcome(notice, onLogin = { vm.go(AuthStep.LOGIN) }, onSignup = { vm.go(AuthStep.SIGNUP) })
                         AuthStep.LOGIN -> Login(state, vm)
                         AuthStep.TWO_FACTOR -> TwoFactor(state, vm)
                         AuthStep.SIGNUP -> Signup(state, vm)
@@ -143,7 +145,7 @@ private fun Hero() {
 }
 
 @Composable
-private fun Welcome(onLogin: () -> Unit, onSignup: () -> Unit) {
+private fun Welcome(notice: String?, onLogin: () -> Unit, onSignup: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 96.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Hero()
         Spacer(Modifier.height(32.dp))
@@ -155,6 +157,10 @@ private fun Welcome(onLogin: () -> Unit, onSignup: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
+        if (notice != null) {
+            Spacer(Modifier.height(24.dp))
+            NoticeCard(R.drawable.ic_warning, notice)
+        }
         Spacer(Modifier.height(64.dp))
         Button(onClick = onLogin, modifier = Modifier.fillMaxWidth().height(56.dp), shapes = ButtonDefaults.shapes()) {
             Text(stringResource(R.string.auth_login), style = MaterialTheme.typography.titleMedium)

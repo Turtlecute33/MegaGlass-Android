@@ -13,24 +13,49 @@ public class MegaGlassApi extends MegaApiJava {
         super(appKey, userAgent, basePath, new AndroidGfxProcessor());
     }
 
-    /** Transfer file data over HTTPS only. The data is end-to-end encrypted either way. */
-    public void useHttpsOnly(boolean httpsOnly) {
-        megaApi.useHttpsOnly(httpsOnly);
-    }
-
-    public boolean usingHttpsOnly() {
-        return megaApi.usingHttpsOnly();
-    }
-
     /** Parallel connections per transfer for one direction (MegaTransfer.TYPE_DOWNLOAD or TYPE_UPLOAD). */
     public void setMaxConnections(int direction, int connections) {
         megaApi.setMaxConnections(direction, connections);
+    }
+
+    /** Receives each sync that the SDK adds or loads. */
+    public interface SyncAddedListener {
+        void onSyncAdded(MegaSync sync);
+    }
+
+    /** The SDK keeps only a weak reference to a listener object. */
+    private MegaListener syncAdded;
+
+    /**
+     * MegaApiJava does not forward onSyncAdded. The SDK loads the saved syncs when the nodes are
+     * fetched and resumes them later, when the nodes are current; {@code listener} runs between
+     * the two, on the SDK thread. The sync object is valid only during the call.
+     */
+    public void setSyncAddedListener(SyncAddedListener listener) {
+        MegaListener forwarding = new MegaListener() {
+            @Override
+            public void onSyncAdded(MegaApi api, MegaSync sync) {
+                if (sync == null) return;
+                try {
+                    listener.onSyncAdded(sync);
+                } catch (RuntimeException e) {
+                    android.util.Log.w("MegaGlassApi", "onSyncAdded failed: " + e.getClass().getSimpleName());
+                }
+            }
+        };
+        syncAdded = forwarding;
+        megaApi.addListener(forwarding);
     }
 
     /** These SDK operations have no per-request listener overload in MegaApiJava. */
     public void setSyncState(long backupId, MegaSync.SyncRunningState state,
                              MegaRequestListenerInterface listener) {
         megaApi.setSyncRunState(backupId, state, requestListener(listener));
+    }
+
+    /** Same as above, without waiting for the result. */
+    public void setSyncState(long backupId, MegaSync.SyncRunningState state) {
+        megaApi.setSyncRunState(backupId, state);
     }
 
     public void removeSync(long backupId, MegaRequestListenerInterface listener) {

@@ -38,8 +38,6 @@
     <string name="settings_fast_transfers">Fast transfers</string>
     <string name="settings_fast_on">8 parallel connections for each file</string>
     <string name="settings_fast_off">4 connections for downloads, 3 for uploads</string>
-    <string name="settings_https">Use HTTPS for transfers</string>
-    <string name="settings_https_summary">File data is end-to-end encrypted in all cases. HTTPS also hides the transfer from your network, but it is a little slower.</string>
     <string name="settings_downloads">Downloads</string>
     <string name="settings_download_location">Download location</string>
     <string name="settings_location_default">Default (Download/MegaGlass)</string>

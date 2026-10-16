@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -44,7 +45,8 @@ class HomeViewModel : ViewModel() {
         viewModelScope.launch { graph.nodes.changes.debounce(1000).collect { loadRecents() } }
         viewModelScope.launch { graph.mega.account.debounce(1000).collect { loadStorage() } }
         viewModelScope.launch {
-            graph.mega.users.filter { api.myUserHandleBinary in it || it.isEmpty() }.collect { loadName() }
+            // The own handle takes the SDK lock: not on the main thread.
+            graph.mega.users.filter { api.myUserHandleBinary in it || it.isEmpty() }.flowOn(Dispatchers.IO).collect { loadName() }
         }
         viewModelScope.launch {
             graph.settings.state.distinctUntilChangedBy { it.showHidden }.drop(1).collect { loadRecents() }

@@ -48,8 +48,6 @@ data class AppSettings(
     val downloadDir: String? = null,
     /** 8 parallel connections per direction instead of the SDK mobile defaults (4 down, 3 up). */
     val fastTransfers: Boolean = true,
-    /** Transfer data over HTTPS. File data is end-to-end encrypted either way. */
-    val httpsTransfers: Boolean = false,
     val cameraUploads: Boolean = false,
     val cuIncludeVideos: Boolean = true,
     val cuWifiOnly: Boolean = true,
@@ -85,7 +83,6 @@ class Settings(context: Context, scope: CoroutineScope) {
         val showHidden = booleanPreferencesKey("show_hidden")
         val downloadDir = stringPreferencesKey("download_dir")
         val fastTransfers = booleanPreferencesKey("fast_transfers")
-        val httpsTransfers = booleanPreferencesKey("https_transfers")
         val cameraUploads = booleanPreferencesKey("camera_uploads")
         val cuIncludeVideos = booleanPreferencesKey("cu_videos")
         val cuWifiOnly = booleanPreferencesKey("cu_wifi_only")
@@ -113,7 +110,6 @@ class Settings(context: Context, scope: CoroutineScope) {
             showHidden = this[K.showHidden] ?: d.showHidden,
             downloadDir = this[K.downloadDir],
             fastTransfers = this[K.fastTransfers] ?: d.fastTransfers,
-            httpsTransfers = this[K.httpsTransfers] ?: d.httpsTransfers,
             cameraUploads = this[K.cameraUploads] ?: d.cameraUploads,
             cuIncludeVideos = this[K.cuIncludeVideos] ?: d.cuIncludeVideos,
             cuWifiOnly = this[K.cuWifiOnly] ?: d.cuWifiOnly,
@@ -140,7 +136,6 @@ class Settings(context: Context, scope: CoroutineScope) {
         this[K.showHidden] = s.showHidden
         if (s.downloadDir != null) this[K.downloadDir] = s.downloadDir else remove(K.downloadDir)
         this[K.fastTransfers] = s.fastTransfers
-        this[K.httpsTransfers] = s.httpsTransfers
         this[K.cameraUploads] = s.cameraUploads
         this[K.cuIncludeVideos] = s.cuIncludeVideos
         this[K.cuWifiOnly] = s.cuWifiOnly

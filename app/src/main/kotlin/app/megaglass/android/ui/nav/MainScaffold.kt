@@ -85,6 +85,18 @@ fun MainScaffold(nav: AppNavigator) {
         }
     }
 
+    // Syncs paused without all-files access, also before this screen showed.
+    val pausedText = stringResource(R.string.sync_access_paused_short)
+    val openLabel = stringResource(R.string.sync_access_open)
+    LaunchedEffect(Unit) {
+        graph.mega.syncsPausedForAccess.collect { paused ->
+            if (!paused) return@collect
+            graph.mega.syncsPausedForAccess.value = false
+            val result = snackbar.showSnackbar(pausedText, openLabel, duration = SnackbarDuration.Long)
+            if (result == SnackbarResult.ActionPerformed) nav.navigate(Syncs)
+        }
+    }
+
     // Badge on the account tab: unread notifications and incoming contact requests.
     var badge by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {

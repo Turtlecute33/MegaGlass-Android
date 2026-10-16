@@ -159,10 +159,22 @@ class NodeRepository(private val mega: Mega) {
     }
 
     /** Moves items out of the Rubbish bin to where they were, or to Cloud drive. */
-    suspend fun restore(handles: Collection<Long>) = forEach(handles) { node ->
-        val original = api.getNodeByHandle(node.restoreHandle)
-        val dest = original?.takeIf { !api.isInRubbish(it) } ?: api.rootNode
-        api.await { moveNode(node, dest, it) }
+    suspend fun restore(handles: Collection<Long>) = io {
+        val used = HashMap<Long, MutableSet<String>>()
+        val planned = handles.distinct().map(::require).map { node ->
+            val original = api.getNodeByHandle(node.restoreHandle)
+            val dest = original?.takeIf { !api.isInRubbish(it) } ?: require(rootHandle)
+            // Into an incoming share the SDK uses copy-delete, which replaces a file of the same
+            // name there. Restore under a distinct name, as moveToRubbish does.
+            val name = if (api.getAccess(dest) < MegaShare.ACCESS_OWNER) {
+                val taken = used.getOrPut(dest.handle) { HashSet() }
+                availableName(node.name.orEmpty(), node.isFolder) { it in taken || api.getChildNode(dest, it) != null }.also { taken += it }
+            } else null
+            Triple(node, dest, name)
+        }
+        batched(planned) { (node, dest, name) ->
+            if (name != null) api.await { moveNode(node, dest, name, it) } else api.await { moveNode(node, dest, it) }
+        }
     }
 
     suspend fun emptyRubbish() {
