@@ -46,6 +46,9 @@ class TransferJobService : JobService() {
             // Give the SDK a moment to register the transfers that were just queued.
             transfers.state.sample(1000).collect { state ->
                 if (state.isIdle) {
+                    // The snapshot can miss a transfer that started just now. That transfer found
+                    // this job running and did not schedule another one.
+                    if (!transfers.isIdleNow) return@collect
                     jobFinished(params, false)
                     s.cancel()
                     return@collect
@@ -62,8 +65,11 @@ class TransferJobService : JobService() {
     override fun onStopJob(params: JobParameters): Boolean {
         scope?.cancel()
         scope = null
-        // The SDK keeps the queue; the next transfer action schedules a new job.
-        return false
+        // The system stopped the job (for example, the network was lost): it runs again when it
+        // can, because the SDK continues the queue. The user or the app stopped it: it ends.
+        return !MegaGlassApp.graph.transfers.isIdleNow &&
+            params.stopReason != JobParameters.STOP_REASON_USER &&
+            params.stopReason != JobParameters.STOP_REASON_CANCELLED_BY_APP
     }
 
     companion object {

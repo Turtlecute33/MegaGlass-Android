@@ -3,21 +3,34 @@ package app.megaglass.android.core.storage
 import app.megaglass.android.core.util.catching
 
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
+import android.os.storage.StorageManager
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.system.ErrnoException
+import android.system.OsConstants
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.util.UUID
 
-/** [temporary] sources are private copies removed only after a successful upload. */
-data class LocalSource(val path: String, val name: String, val temporary: Boolean)
+/**
+ * [path] is a file path or a content:// URI, which the SDK reads through FileWrapper.
+ * [temporary] sources are private copies removed only after a successful upload.
+ */
+data class LocalSource(val path: String, val name: String, val temporary: Boolean) {
+    val isContentUri: Boolean get() = isContentUri(path)
+}
+
+/** The device has not enough free space for a private copy. */
+class NoSpaceException : IOException("Not enough free space")
 
 /** Local file system helpers: real paths for content URIs, download folders, sharing. */
 class LocalFiles(private val context: Context) {
@@ -62,15 +75,29 @@ class LocalFiles(private val context: Context) {
         val dir = File(uploadTmpDir, UUID.randomUUID().toString()).apply { mkdirs() }
         val target = File(dir, localFileName(name))
         try {
+            // A copy that cannot fit fails now, not after it has filled the storage.
+            size(uri)?.let { if (it > freeSpace(dir)) throw NoSpaceException() }
             context.contentResolver.openInputStream(uri)?.use { input ->
                 target.outputStream().use { input.copyTo(it, 1 shl 20) }
-            } ?: throw java.io.IOException("Cannot read shared file")
+            } ?: throw IOException("Cannot read shared file")
             LocalSource(target.absolutePath, target.name, temporary = true)
         } catch (e: Exception) {
             dir.deleteRecursively()
-            throw e
+            throw if ((e.cause as? ErrnoException)?.errno == OsConstants.ENOSPC) NoSpaceException() else e
         }
     }
+
+    /** Free space for [dir], with the cached data that Android can remove for it. */
+    private fun freeSpace(dir: File): Long {
+        val storage = context.getSystemService(StorageManager::class.java)
+        return storage.getAllocatableBytes(storage.getUuidForPath(dir))
+    }
+
+    private fun size(uri: Uri): Long? = catching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+        }
+    }.getOrNull()
 
     /** A file in the private storage of this app: a share from another app must not upload it. */
     private fun isPrivate(file: File): Boolean {
@@ -148,6 +175,40 @@ class LocalFiles(private val context: Context) {
      */
     fun cleanUploadTemp(inUse: Set<String>, all: Boolean = false) {
         removeUploadCopies(uploadTmpDir, inUse, if (all) System.currentTimeMillis() - 120_000 else startedAt)
+    }
+
+    /** Photos from "Take photo", a folder each, until their upload succeeds. */
+    val capturesDir: File get() = File(context.filesDir, "pending-uploads")
+
+    /**
+     * Moves the photos of earlier runs that no upload reads ([inUse]) to the gallery: their
+     * upload failed, was cancelled, or never started. Returns how many it moved.
+     */
+    fun rescueCaptures(inUse: Set<String>): Int =
+        leftoverCaptures(capturesDir, inUse, startedAt).count { catching { moveToGallery(it) }.isSuccess }
+
+    /** Moves a photo from [capturesDir] to Pictures/MegaGlass, where the user owns it. */
+    fun moveToGallery(photo: File) {
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, photo.name)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType(photo))
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/MegaGlass")
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), values)
+            ?: throw IOException("Cannot save the photo")
+        try {
+            (resolver.openOutputStream(uri) ?: throw IOException("Cannot save the photo")).use { out ->
+                photo.inputStream().use { it.copyTo(out) }
+            }
+            resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+        } catch (e: Exception) {
+            catching { resolver.delete(uri, null, null) }
+            throw e
+        }
+        photo.delete()
+        photo.parentFile?.delete()
     }
 
     /** content:// URI for a local file, for sharing and "open with". */

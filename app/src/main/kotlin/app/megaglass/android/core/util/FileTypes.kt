@@ -19,7 +19,8 @@ enum class FileType {
             put(SPREADSHEET, "xls", "xlsx", "ods", "csv", "tsv", "numbers")
             put(PRESENTATION, "ppt", "pptx", "odp", "key")
             put(ARCHIVE, "zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "xz", "zst", "iso", "dmg")
-            put(CODE, "kt", "kts", "java", "c", "h", "cpp", "hpp", "cc", "py", "js", "ts", "tsx", "jsx", "go", "rs",
+            // "ts" is a video (MPEG transport stream) above.
+            put(CODE, "kt", "kts", "java", "c", "h", "cpp", "hpp", "cc", "py", "js", "tsx", "jsx", "go", "rs",
                 "swift", "rb", "php", "sh", "zsh", "bash", "html", "htm", "css", "scss", "xml", "json", "yaml", "yml",
                 "toml", "gradle", "sql", "lua", "dart", "cs", "m", "mm", "pl", "r", "ini", "conf", "cfg")
             put(TEXT, "txt", "md", "markdown", "log", "srt", "vtt", "nfo", "rst", "tex")

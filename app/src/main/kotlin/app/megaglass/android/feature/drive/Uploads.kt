@@ -2,6 +2,7 @@ package app.megaglass.android.feature.drive
 
 import app.megaglass.android.core.util.catching
 
+import android.content.ActivityNotFoundException
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.storage.LocalSource
+import app.megaglass.android.core.storage.NoSpaceException
 import app.megaglass.android.ui.components.TextInputDialog
 import app.megaglass.android.ui.components.invalidNameError
 import app.megaglass.android.ui.components.rememberStorageAccess
@@ -51,20 +53,32 @@ class Uploader internal constructor(
  */
 suspend fun uploadUris(uris: List<Uri>, parent: Long, shared: Boolean) {
     val graph = MegaGlassApp.graph
+    val resources = graph.context.resources
     val account = graph.mega.api.myUserHandle
-    val sources = mutableListOf<LocalSource>()
+    var started = 0
     var unreadable = 0
+    var noSpace = 0
+    // Each file starts when its copy is ready, so that it does not wait for the copies of the
+    // other files, and the transfer job keeps the app running while they are made.
     for (uri in uris.distinct()) {
-        val source = catching { graph.files.resolveForUpload(uri, shared) }.getOrNull()
-        if (source == null) unreadable++ else sources += source
+        val result = catching { graph.files.resolveForUpload(uri, shared) }
+        val source = result.getOrNull()
+        if (source == null) {
+            if (result.exceptionOrNull() is NoSpaceException) noSpace++ else unreadable++
+            continue
+        }
+        try {
+            check(graph.session.isReady && graph.mega.api.myUserHandle == account) { "The account changed while preparing this upload" }
+            graph.transfers.upload(listOf(source), parent)
+            started++
+        } catch (e: Exception) {
+            if (source.temporary) withContext(Dispatchers.IO) { File(source.path).parentFile?.deleteRecursively() }
+            throw e
+        }
     }
-    if (unreadable > 0) graph.messenger.show(graph.context.resources.getQuantityString(R.plurals.upload_unreadable, unreadable, unreadable))
-    if (sources.isEmpty()) return
-    check(graph.session.isReady && graph.mega.api.myUserHandle == account) { "The account changed while preparing this upload" }
-    graph.transfers.upload(sources, parent)
-    graph.messenger.show(
-        graph.context.resources.getQuantityString(R.plurals.upload_started, sources.size, sources.size),
-    )
+    if (unreadable > 0) graph.messenger.show(resources.getQuantityString(R.plurals.upload_unreadable, unreadable, unreadable))
+    if (noSpace > 0) graph.messenger.show(resources.getQuantityString(R.plurals.upload_no_space, noSpace, noSpace))
+    if (started > 0) graph.messenger.show(resources.getQuantityString(R.plurals.upload_started, started, started))
 }
 
 /**
@@ -107,7 +121,13 @@ fun rememberUploader(parent: Long): Uploader {
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val f = photoPath?.let(::File)
         if (ok && f != null && f.length() > 0) {
-            launchUpload { graph.transfers.upload(listOf(LocalSource(f.absolutePath, f.name, temporary = true)), target) }
+            graph.scope.launch {
+                catching { graph.transfers.upload(listOf(LocalSource(f.absolutePath, f.name, temporary = true)), target) }.onFailure { e ->
+                    // The photo is in no other place: it goes to the gallery.
+                    val saved = withContext(Dispatchers.IO) { catching { graph.files.moveToGallery(f) }.isSuccess }
+                    graph.messenger.show(if (saved) resources.getString(R.string.photo_saved_to_gallery) else e.message ?: resources.getString(R.string.error_title))
+                }
+            }
         } else if (f != null) {
             f.delete()
             f.parentFile?.delete()
@@ -144,11 +164,17 @@ fun rememberUploader(parent: Long): Uploader {
                 // A captured photo is the only original until its upload succeeds. Cache
                 // eviction and a second capture must not remove or replace it. A folder for each
                 // capture keeps the file name (the cloud name) clean.
-                val dir = File(context.filesDir, "pending-uploads/" + java.util.UUID.randomUUID()).apply { mkdirs() }
+                val dir = File(graph.files.capturesDir, java.util.UUID.randomUUID().toString()).apply { mkdirs() }
                 val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
                 val f = File(dir, "IMG_$stamp.jpg")
                 photoPath = f.absolutePath
-                camera.launch(graph.files.shareUri(f))
+                try {
+                    camera.launch(graph.files.shareUri(f))
+                } catch (_: ActivityNotFoundException) {
+                    dir.deleteRecursively()
+                    photoPath = null
+                    graph.messenger.show(resources.getString(R.string.no_camera_app))
+                }
             },
             newText = { askTextName = true },
         )

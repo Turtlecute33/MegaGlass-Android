@@ -4,6 +4,10 @@
         <item quantity="one">Could not read %d selected file.</item>
         <item quantity="other">Could not read %d selected files.</item>
     </plurals>
+    <plurals name="upload_no_space">
+        <item quantity="one">Not enough free space on this phone to upload %d selected file.</item>
+        <item quantity="other">Not enough free space on this phone to upload %d selected files.</item>
+    </plurals>
     <string name="share_nothing">Nothing to upload</string>
     <string name="cloud_drive">Cloud drive</string>
     <string name="incoming_shares">Incoming shares</string>
@@ -19,6 +23,12 @@
     <string name="upload_files">Upload files</string>
     <string name="upload_folder">Upload folder</string>
     <string name="take_photo">Take photo</string>
+    <string name="no_camera_app">No app can take photos</string>
+    <string name="photo_saved_to_gallery">Could not upload the photo. It is saved in Pictures/MegaGlass.</string>
+    <plurals name="captures_saved">
+        <item quantity="one">%d photo that did not upload is saved in Pictures/MegaGlass.</item>
+        <item quantity="other">%d photos that did not upload are saved in Pictures/MegaGlass.</item>
+    </plurals>
     <string name="no_folders_here">No folders here</string>
     <string name="move_here">Move here</string>
     <string name="copy_here">Copy here</string>

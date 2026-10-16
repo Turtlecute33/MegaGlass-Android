@@ -6,6 +6,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -43,21 +44,27 @@ import java.util.Locale
 
 /**
  * Uploads new photos and videos from the camera folders (DCIM) to the camera uploads folder.
- * Files are read from their real path (no copies); a file is skipped when a node with the same
- * fingerprint already exists in the cloud. A marker (MediaStore DATE_ADDED) keeps later runs short.
+ * Files are read through redacted MediaStore URIs (no copies, no location data); a file is
+ * skipped when a node with the same fingerprint already exists in the cloud. A marker
+ * (MediaStore DATE_ADDED) keeps later runs short.
  */
 class CameraUploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
-    private data class Media(val id: Long, val path: String, val name: String, val added: Long, val taken: Long) {
+    private data class Media(val id: Long, val uri: Uri, val path: String, val name: String, val added: Long, val taken: Long) {
         val key get() = "$added:$id"
     }
 
+    /** [source] is what the SDK reads, [name] the name in the cloud. */
+    private class Upload(val media: Media, val source: String, val name: String)
+
     private class Selection(
-        val upload: List<Pair<Media, String>>,
+        val upload: List<Upload>,
         /** In the cloud already, or gone from the device. */
         val handled: List<Media>,
         /** Exists but cannot be read now: the marker stays before it, so that a later run tries again. */
         val unreadable: List<Media>,
+        /** Media of an earlier run that is still uploading: a second upload would fail as a duplicate. */
+        val busy: List<Media>,
     )
 
     override suspend fun doWork(): Result {
@@ -113,21 +120,20 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                     }.sortedBy { it.added }
                 }
 
-                // Media of an earlier run that is still uploading: a second upload would fail as a duplicate.
                 val inQueue = graph.transfers.uploadingPaths()
-                val busy = media.filter { it.path in inQueue }
                 val handled = prefs.handled
                 val selection = withContext(Dispatchers.IO) {
-                    selectNew(media - busy.toSet(), folder, settings.cuKeepFileNames, prefs.marker, handled)
+                    selectNew(media, folder, settings.cuKeepFileNames, prefs.marker, handled, inQueue)
                 }
                 val pending = selection.upload
+                val busy = selection.busy
 
                 val uploaded = mutableSetOf<String>()
                 val failed = mutableSetOf<String>()
                 if (pending.isNotEmpty()) coroutineScope {
                     catching { setForeground(foregroundInfo(0, pending.size)) }
                     CameraUploads.setStatus(CuStatus.Uploading(0, pending.size))
-                    val paths = pending.map { it.first.path }.toSet()
+                    val paths = pending.map { it.source }.toSet()
                     // Listen before starting (undispatched: subscribed at once), so that no finish event is missed.
                     val collector = async(start = CoroutineStart.UNDISPATCHED) {
                         graph.transfers.completed
@@ -143,7 +149,7 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                     }
                     queued = true
                     graph.transfers.upload(
-                        pending.map { (m, name) -> LocalSource(m.path, name, temporary = false) },
+                        pending.map { LocalSource(it.source, it.name, temporary = false) },
                         folder,
                         Purpose.CAMERA,
                     )
@@ -152,12 +158,12 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                 }
 
                 // The marker moves up to just before the oldest media that did not upload.
-                val missing = pending.map { it.first }.filter { it.path !in uploaded } + busy + selection.unreadable
+                val missing = pending.filter { it.source !in uploaded }.map { it.media } + busy + selection.unreadable
                 val oldestMissing = missing.minOfOrNull { it.added }
                 (oldestMissing?.minus(1) ?: media.maxOfOrNull { it.added })?.let { prefs.marker = maxOf(prefs.marker, it) }
                 // The rescan window finds this media again. Remembered, it is not uploaded again
                 // after the user deletes it from the cloud.
-                val done = selection.handled + pending.map { it.first }.filter { it.path in uploaded }
+                val done = selection.handled + pending.filter { it.source in uploaded }.map { it.media }
                 val windowStart = prefs.marker - RESCAN_WINDOW_S
                 prefs.handled = (handled.orEmpty() + done.map { it.key })
                     .filterTo(HashSet()) { (it.substringBefore(':').toLongOrNull() ?: 0) >= windowStart }
@@ -177,7 +183,7 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
         } catch (e: CancellationException) {
             // Wi-Fi or charging was lost: the queued uploads stop too, so that the settings also
             // hold for them. The next run queues them again. After other stops (time limit) the
-            // queue continues.
+            // queue continues, and CameraUploads stops it when the settings no longer hold.
             if (queued && (stopReason in CONSTRAINT_STOPS || !graph.settings.current.cameraUploads)) {
                 withContext(NonCancellable) { graph.transfers.cancelUploads(Purpose.CAMERA) }
             }
@@ -193,7 +199,7 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
         CameraUploads.setStatus(CuStatus.Idle(prefs.lastRun))
     }
 
-    /** Media in DCIM added after [since] (seconds). */
+    /** Media in DCIM added after [since] (seconds), without screenshots and screen recordings. */
     private fun query(uri: Uri, since: Long): List<Media> {
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
@@ -204,7 +210,9 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
             MediaStore.MediaColumns.RELATIVE_PATH,
         )
         val selection = "${MediaStore.MediaColumns.DATE_ADDED} > ? AND ${MediaStore.MediaColumns.SIZE} > 0 AND " +
-            "${MediaStore.MediaColumns.IS_PENDING} = 0 AND ${MediaStore.MediaColumns.RELATIVE_PATH} LIKE 'DCIM/%'"
+            "${MediaStore.MediaColumns.IS_PENDING} = 0 AND ${MediaStore.MediaColumns.RELATIVE_PATH} LIKE 'DCIM/%' AND " +
+            // Samsung and Xiaomi save them in DCIM/Screenshots, DCIM/Screen recordings and DCIM/ScreenRecorder.
+            "${MediaStore.MediaColumns.RELATIVE_PATH} NOT LIKE 'DCIM/Screen%'"
         val out = ArrayList<Media>()
         val cursor: Cursor = applicationContext.contentResolver.query(
             uri, projection, selection, arrayOf(since.toString()), "${MediaStore.MediaColumns.DATE_ADDED} ASC",
@@ -212,7 +220,8 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
         cursor.use { c ->
             while (c.moveToNext()) {
                 val path = c.getString(1) ?: continue
-                out += Media(c.getLong(0), path, c.getString(2) ?: File(path).name, c.getLong(3), c.getLong(4))
+                val id = c.getLong(0)
+                out += Media(id, ContentUris.withAppendedId(uri, id), path, c.getString(2) ?: File(path).name, c.getLong(3), c.getLong(4))
             }
         }
         return out
@@ -224,18 +233,26 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
      * media up to [marker] counts as handled. Other media up to [marker] is new to this app
      * (published late), but is skipped when a copy is in the Rubbish bin.
      */
-    private fun selectNew(media: List<Media>, folder: Long, keepNames: Boolean, marker: Long, handled: Set<String>?): Selection {
+    private fun selectNew(
+        media: List<Media>, folder: Long, keepNames: Boolean, marker: Long, handled: Set<String>?, inQueue: Set<String>,
+    ): Selection {
         val api = MegaGlassApp.graph.mega.api
-        val parent = api.getNodeByHandle(folder) ?: return Selection(emptyList(), emptyList(), emptyList())
+        val parent = api.getNodeByHandle(folder) ?: return Selection(emptyList(), emptyList(), emptyList(), emptyList())
         val used = HashSet<String>()
-        val out = ArrayList<Pair<Media, String>>()
+        val out = ArrayList<Upload>()
         val skipped = ArrayList<Media>()
         val unreadable = ArrayList<Media>()
+        val busy = ArrayList<Media>()
         for (m in media) {
             if (handled?.contains(m.key) ?: (m.added <= marker)) { skipped += m; continue }
             // A MediaStore row of a deleted file: there is nothing to upload.
             if (!File(m.path).exists()) { skipped += m; continue }
-            val fingerprint = api.getFingerprint(m.path)
+            val source = redacted(m)
+            if (source == null) { unreadable += m; continue }
+            // In the queue from an earlier run, which can be from a version that read the path.
+            if (source in inQueue || m.path in inQueue) { busy += m; continue }
+            // The fingerprint of what is uploaded: without the location data.
+            val fingerprint = api.getFingerprint(source)
             if (fingerprint == null) { unreadable += m; continue }
             val existing = api.getNodeByFingerprint(fingerprint, parent)
             if (existing != null && (m.added <= marker || !api.isInRubbish(existing))) { skipped += m; continue }
@@ -251,10 +268,17 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                 n++
             }
             used += name
-            out += m to name
+            out += Upload(m, source, name)
         }
-        return Selection(out, skipped, unreadable)
+        return Selection(out, skipped, unreadable, busy)
     }
+
+    /**
+     * A URI of [m] that Android always reads without the location data (photo EXIF, video
+     * metadata). A path read, or a plain MediaStore URI, keeps it for an app with all-files access.
+     */
+    private fun redacted(m: Media): String? =
+        catching { MediaStore.getRedactedUri(applicationContext.contentResolver, m.uri) }.getOrNull()?.toString()
 
     /** "2026-10-14 13.05.22.jpg", the naming scheme of MEGA camera uploads. */
     private fun datedName(m: Media): String {

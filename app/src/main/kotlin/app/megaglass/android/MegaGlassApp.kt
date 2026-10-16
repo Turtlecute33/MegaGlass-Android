@@ -70,10 +70,16 @@ class AppGraph(val context: Context) {
         transfers.retryOffline = { offline.makeAvailable(listOf(it)) }
         CameraUploads.install(this)
         // The SDK resumes the uploads of an earlier run when the nodes are current; the copies
-        // that no upload reads are left over from failed or cancelled uploads.
+        // that no upload reads are left over from failed or cancelled uploads, or from a stop
+        // while the camera was open.
         scope.launch(Dispatchers.IO, start = CoroutineStart.UNDISPATCHED) {
             mega.events.first { it.type == MegaEvent.EVENT_NODES_CURRENT }
             files.cleanUploadTemp(transfers.uploadingPaths())
+            // The same for photos from "Take photo": no screen shows them, so they go to the
+            // gallery. With the app lock, only after an unlock.
+            lock.locked.first { !it }
+            val saved = files.rescueCaptures(transfers.uploadingPaths())
+            if (saved > 0) messenger.show(context.resources.getQuantityString(R.plurals.captures_saved, saved, saved))
         }
         // Decrypted copies of cloud files stay only up to a size limit.
         scope.launch(Dispatchers.IO) {
@@ -116,8 +122,14 @@ class MegaGlassApp : Application(), SingletonImageLoader.Factory {
         mega.privacy.android.data.filewrapper.FileWrapper.init(this)
         graph = AppGraph(this)
         ProcessLifecycleOwner.get().lifecycle.addObserver(graph.lock)
-        // All-files access can change while the app is in the background.
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
+            // The transfer job can only start while the app is visible. Transfers that continued
+            // without it (the system stopped it) get it back here.
+            override fun onStart(owner: LifecycleOwner) {
+                if (!graph.transfers.isIdleNow) TransferJobService.schedule(this@MegaGlassApp)
+            }
+
+            // All-files access can change while the app is in the background.
             override fun onResume(owner: LifecycleOwner) {
                 graph.scope.launch(Dispatchers.IO) { graph.mega.holdSyncsWithoutAccess() }
             }

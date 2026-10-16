@@ -4,7 +4,11 @@ import app.megaglass.android.core.util.catching
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.os.BatteryManager
 import android.provider.MediaStore
 import androidx.compose.runtime.Immutable
 import androidx.work.Constraints
@@ -22,12 +26,15 @@ import app.megaglass.android.core.mega.SessionState
 import app.megaglass.android.core.mega.await
 import app.megaglass.android.core.mega.awaitResult
 import app.megaglass.android.core.storage.AppSettings
+import app.megaglass.android.core.transfers.Direction
+import app.megaglass.android.core.transfers.Purpose
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
@@ -97,7 +104,30 @@ object CameraUploads {
                     }
                 }
         }
+        // Uploads can outlive their worker (time limit, changed settings) or run without one
+        // (resumed by the SDK after a restart). They also stop when Wi-Fi or charging is lost;
+        // the next run queues them again.
+        graph.scope.launch {
+            graph.transfers.state.sample(POLICY_CHECK_MS).collect { state ->
+                if (state.active.none { it.direction == Direction.UPLOAD && it.purpose == Purpose.CAMERA }) return@collect
+                val s = graph.settings.current
+                if (!s.cameraUploads || (s.cuWifiOnly && isMetered(context)) || (s.cuRequireCharging && !isPluggedIn(context))) {
+                    graph.transfers.cancelUploads(Purpose.CAMERA)
+                }
+            }
+        }
     }
+
+    private const val POLICY_CHECK_MS = 5_000L
+
+    /** Without a network no upload runs, and the next network decides. */
+    private fun isMetered(context: Context): Boolean {
+        val connectivity = context.getSystemService(ConnectivityManager::class.java)
+        return connectivity.activeNetwork != null && connectivity.isActiveNetworkMetered
+    }
+
+    private fun isPluggedIn(context: Context) =
+        context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
 
     fun hasPermission(context: Context, videos: Boolean): Boolean {
         fun granted(p: String) = context.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
@@ -192,7 +222,7 @@ object CameraUploads {
     }
 }
 
-/** Small private state of camera uploads: scan marker, last run, and the location option. */
+/** Small private state of camera uploads: scan marker and last run. */
 internal class CuPrefs(context: Context) {
     private val prefs = context.getSharedPreferences("camera_uploads", Context.MODE_PRIVATE)
 

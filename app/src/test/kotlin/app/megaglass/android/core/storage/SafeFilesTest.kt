@@ -24,6 +24,27 @@ class SafeFilesTest {
         assertEquals(name, localFileName(name))
     }
 
+    @Test fun namesLongerThanTheFileSystemAllowsAreCutAndKeepTheirExtension() {
+        val name = "日本語".repeat(40) + ".jpg"
+        val safe = localFileName(name)
+        assertTrue(safe.toByteArray(Charsets.UTF_8).size <= 240)
+        assertTrue(safe.endsWith(".jpg"))
+        assertTrue(name.startsWith(safe.removeSuffix(".jpg")))
+        assertEquals(safe, localFileName(safe))
+        File(temp.root, safe).writeText("ok")
+    }
+
+    @Test fun cutNamesDoNotSplitCharacters() {
+        val safe = localFileName("🐈".repeat(80))
+        assertTrue(safe.toByteArray(Charsets.UTF_8).size <= 240)
+        assertEquals("🐈".repeat(safe.length / 2), safe)
+    }
+
+    @Test fun namesThatFitAreKept() {
+        val name = "a".repeat(251) + ".txt"
+        assertEquals(name, localFileName(name))
+    }
+
     @Test fun aCompleteLengthDoesNotProveADownloadFinished() {
         val file = temp.newFile("data")
         file.writeText("abcd")
@@ -139,6 +160,38 @@ class SafeFilesTest {
         assertFalse(empty.exists())
         assertTrue(queued.exists())
         assertTrue(preparing.exists())
+    }
+
+    @Test fun leftoverCapturesAreFoundButQueuedAndNewCapturesStay() {
+        val root = temp.newFolder("captures")
+        val start = System.currentTimeMillis()
+        fun capture(dir: String, age: Long, bytes: Int = 4) = File(root, dir).apply { mkdir() }.let { d ->
+            File(d, "IMG.jpg").apply { writeBytes(ByteArray(bytes)); setLastModified(start - age) }.also { d.setLastModified(start - age) }
+        }
+        val failed = capture("failed", 600_000)
+        val queued = capture("queued", 600_000)
+        val current = capture("current", 0)
+        val empty = capture("empty", 600_000, bytes = 0)
+        assertEquals(listOf(failed), leftoverCaptures(root, setOf(queued.absolutePath), start))
+        assertTrue(queued.exists())
+        assertTrue(current.exists())
+        assertFalse(empty.parentFile!!.exists())
+    }
+
+    @Test fun staleImagePartsGoButActiveOnesAndImagesStay() {
+        val now = System.currentTimeMillis()
+        val stale = temp.newFile("img1.part").apply { setLastModified(now - 3_600_000) }
+        val active = temp.newFile("img2.part")
+        val image = temp.newFile("image.jpg").apply { setLastModified(now - 3_600_000) }
+        removeStaleParts(temp.root, now - 600_000)
+        assertFalse(stale.exists())
+        assertTrue(active.exists())
+        assertTrue(image.exists())
+    }
+
+    @Test fun contentUrisAreNotPaths() {
+        assertTrue(isContentUri("content://media/external/images/media/1"))
+        assertFalse(isContentUri("/storage/emulated/0/DCIM/Camera/a.jpg"))
     }
 
     @Test fun anUploadSymlinkCannotDeleteAnOriginalOutsideThePrivateRoot() {

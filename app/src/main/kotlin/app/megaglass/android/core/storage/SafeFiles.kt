@@ -5,10 +5,49 @@ import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
-/** Names supplied by cloud nodes and document providers are single path components. */
+/**
+ * Names supplied by cloud nodes and document providers are single path components. A name
+ * longer than the 255 bytes that Android file systems allow is cut, with space left for the
+ * " (1)" of a name collision; the extension stays.
+ */
 fun localFileName(name: String): String =
-    name.replace('/', '_').replace('\\', '_').replace('\u0000', '_')
-        .takeUnless { it.isEmpty() || it == "." || it == ".." } ?: "file"
+    shortName(
+        name.replace('/', '_').replace('\\', '_').replace('\u0000', '_')
+            .takeUnless { it.isEmpty() || it == "." || it == ".." } ?: "file",
+    )
+
+private const val MAX_NAME_BYTES = 255
+private const val SHORT_NAME_BYTES = 240
+
+private fun utf8Length(codePoint: Int) = when {
+    codePoint < 0x80 -> 1
+    codePoint < 0x800 -> 2
+    codePoint < 0x10000 -> 3
+    else -> 4
+}
+
+private fun utf8Length(s: String) = s.toByteArray(Charsets.UTF_8).size
+
+private fun shortName(name: String): String {
+    if (utf8Length(name) <= MAX_NAME_BYTES) return name
+    val dot = name.lastIndexOf('.')
+    val extension = if (dot > 0 && utf8Length(name.substring(dot)) <= 16) name.substring(dot) else ""
+    val budget = SHORT_NAME_BYTES - utf8Length(extension)
+    val base = StringBuilder()
+    var bytes = 0
+    var i = 0
+    // Cut between code points, so that no character is split.
+    while (i < name.length - extension.length) {
+        val c = name.codePointAt(i)
+        if (bytes + utf8Length(c) > budget) break
+        base.appendCodePoint(c)
+        bytes += utf8Length(c)
+        i += Character.charCount(c)
+    }
+    return base.toString() + extension
+}
+
+fun isContentUri(path: String): Boolean = path.startsWith("content://")
 
 fun File.ensureDirectory(): File = apply {
     if (!isDirectory && !mkdirs()) throw IOException("Cannot create folder: $name")
@@ -46,6 +85,22 @@ fun removeUploadCopies(root: File, inUse: Set<String>, before: Long) {
     }
 }
 
+/**
+ * The photos in [root] (a folder each) that no path in [inUse] reads and that were last written
+ * before [before]. Such folders without a photo are removed: the camera saved nothing.
+ */
+fun leftoverCaptures(root: File, inUse: Set<String>, before: Long): List<File> {
+    val photos = ArrayList<File>()
+    root.listFiles()?.forEach { dir ->
+        val prefix = dir.absolutePath + File.separator
+        if (inUse.any { it == dir.absolutePath || it.startsWith(prefix) }) return@forEach
+        if (!dir.walkTopDown().all { it.lastModified() < before }) return@forEach
+        val saved = dir.listFiles().orEmpty().filter { it.isFile && it.length() > 0 }
+        if (saved.isEmpty()) dir.deleteRecursively() else photos += saved
+    }
+    return photos
+}
+
 /** Commits a completed private file without first deleting the previous copy. */
 fun replaceFile(source: File, target: File) {
     Files.move(source.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
@@ -64,6 +119,14 @@ fun trimImageCache(root: File, budget: Long, now: Long = System.currentTimeMilli
         if (file.delete()) bytes -= size
         if (bytes <= budget) break
     }
+}
+
+/**
+ * Removes the ".part" files in [root] last written before [before]. The SDK writes the file of
+ * a cancelled image request when the request finishes, after its reader has gone.
+ */
+fun removeStaleParts(root: File, before: Long) {
+    root.walkTopDown().filter { it.isFile && it.name.endsWith(".part") && it.lastModified() < before }.forEach { it.delete() }
 }
 
 /** Only app-owned upload copies may be removed after the SDK confirms success. */

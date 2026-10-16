@@ -10,6 +10,7 @@ import app.megaglass.android.core.storage.ensureDirectory
 import app.megaglass.android.core.storage.localFileName
 import app.megaglass.android.core.storage.availableName
 import app.megaglass.android.core.storage.deleteUploadCopy
+import app.megaglass.android.core.storage.isContentUri
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import app.megaglass.android.core.storage.LocalSource
@@ -127,6 +128,9 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
     private val _state = MutableStateFlow(TransfersState())
     val state: StateFlow<TransfersState> = _state.asStateFlow()
 
+    /** Same as `state.value.isIdle`, without the delay of the snapshot. */
+    val isIdleNow: Boolean get() = synchronized(lock) { records.isEmpty() }
+
     private val _completed = MutableSharedFlow<TransferItem>(extraBufferCapacity = 256)
     // SDK callbacks cannot suspend. A single drain preserves completion order without dropping
     // events when an observer is writing metadata or updating a foreground notification.
@@ -174,8 +178,11 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
                     batches += k
                     return@synchronized false
                 }
-                records[k] = Record(transfer.toItem(k), parentOf(api, transfer))
-                if (transfer.folderTransferTag > 0) tokens[key(api, transfer.folderTransferTag)]?.let { tokens[k] = it }
+                val parent = parentOf(api, transfer)
+                records[k] = Record(transfer.toItem(k), parent)
+                // A file of a folder transfer stops with its folder. The files of a batch share
+                // its token too, but each is its own item: Cancel stops only that file (by tag).
+                if (parent != 0) tokens[parent]?.let { tokens[k] = it }
                 records.size == 1
             }
             dirty = true
@@ -427,7 +434,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
             if (!node.isFolder) throw IOException("Upload destination is not a folder")
             sources.forEach { s ->
                 val file = File(s.path)
-                if (!file.exists() || !file.canRead()) throw IOException("Cannot read upload source: ${s.name}")
+                if (!s.isContentUri && (!file.exists() || !file.canRead())) throw IOException("Cannot read upload source: ${s.name}")
             }
             for (s in sources) {
                 val requested = localFileName(s.name)
@@ -543,7 +550,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
             if (item.direction == Direction.DOWNLOAD) {
                 File(item.localPath).parentFile != null && api.getNodeByHandle(item.nodeHandle) != null
             } else {
-                File(item.localPath).exists() && api.getNodeByHandle(item.parentHandle) != null
+                (isContentUri(item.localPath) || File(item.localPath).exists()) && api.getNodeByHandle(item.parentHandle) != null
             }
         }
         if (!ready) return false

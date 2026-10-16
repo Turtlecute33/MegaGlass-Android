@@ -65,7 +65,7 @@
     <string name="cu_existing_all">Upload existing photos and videos</string>
     <string name="cu_existing_new">Only new photos and videos</string>
     <string name="cu_existing_since">Only media from %1$s</string>
-    <string name="cu_footer">Photos and videos from the camera folder (DCIM) are uploaded. They are encrypted on this phone before upload. Without the location permission, Android removes location data from photos before the upload.</string>
+    <string name="cu_footer">Photos and videos from the camera folder (DCIM) are uploaded, but not screenshots and screen recordings. Location data is removed, and they are encrypted on this phone before upload.</string>
     <string name="cu_channel">Camera uploads</string>
     <string name="cu_notification_title">Camera uploads</string>
 </resources>

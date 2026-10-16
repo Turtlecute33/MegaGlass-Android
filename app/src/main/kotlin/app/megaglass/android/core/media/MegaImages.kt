@@ -5,6 +5,7 @@ import app.megaglass.android.core.mega.Mega
 import app.megaglass.android.core.mega.await
 import app.megaglass.android.core.storage.ensureDirectory
 import app.megaglass.android.core.storage.privateCacheKey
+import app.megaglass.android.core.storage.removeStaleParts
 import app.megaglass.android.core.storage.trimImageCache
 import coil3.ImageLoader
 import coil3.decode.DataSource
@@ -105,7 +106,11 @@ class MegaImages(context: Context, private val mega: Mega) {
     fun sizeOnDisk(): Long = root.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
     private fun trim() {
-        if (writes.incrementAndGet() % 64 == 0L) trimImageCache(root, 256L * 1024 * 1024)
+        if (writes.incrementAndGet() % 64 != 0L) return
+        // Image requests take seconds, so an older file is from a cancelled request. A request
+        // that still waits creates its file again when it finishes.
+        removeStaleParts(root, System.currentTimeMillis() - 10 * 60_000)
+        trimImageCache(root, 256L * 1024 * 1024)
     }
 
     private fun result(file: File): FetchResult = SourceFetchResult(
