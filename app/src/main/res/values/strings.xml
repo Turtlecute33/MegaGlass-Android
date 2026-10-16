@@ -55,6 +55,7 @@
     <!-- Transfers notification -->
     <string name="channel_transfers">Transfers</string>
     <string name="notif_transfers_both">%1$d downloads, %2$d uploads</string>
+    <string name="notif_preparing">Preparing transfers</string>
     <plurals name="notif_uploading">
         <item quantity="one">Uploading %d file</item>
         <item quantity="other">Uploading %d files</item>

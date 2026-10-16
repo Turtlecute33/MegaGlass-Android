@@ -28,4 +28,7 @@
     <string name="editor_discard_title">Save your changes?</string>
     <string name="editor_discard_text">If you leave now, your changes are lost.</string>
     <string name="editor_discard">Discard</string>
+    <string name="editor_saving_leave_text">The save continues after you leave. You see a message when it ends.</string>
+    <string name="editor_close_when_saved">Close when saved</string>
+    <string name="editor_leave">Leave</string>
 </resources>

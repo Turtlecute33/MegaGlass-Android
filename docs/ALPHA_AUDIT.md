@@ -139,11 +139,13 @@ and checked before builds. A fresh checkout must run both SDK scripts as documen
   This needs live account/process-kill tests. Local offline clearing/logout intentionally
   removes offline data.
 - Failed captured originals persist under private `files/pending-uploads`, outside cache
-  eviction. Ordinary logout retains them; the explicit passcode wipe removes them. Failed
-  copied-upload sources remain retriable while present; copies that no queued upload reads are
-  removed when the node tree of the next run is current, and by Clear cache. Transfer history
-  is bounded and not a persistent recovery catalogue for every pending original; app-data
-  deletion removes originals.
+  eviction. A logout moves them to Pictures/MegaGlass. Leftovers that no upload or capture
+  of the current process uses move there when the app next comes to the foreground. With
+  the app lock, both moves wait for an unlock. The passcode wipe deletes them first. Failed
+  copied-upload sources remain retriable while present; copies that no queued upload reads
+  are removed when the node tree of the next run is current, and by Clear cache. Transfer
+  history is bounded and not a persistent recovery catalogue for every pending original;
+  app-data deletion removes originals.
 - Completion delivery uses an in-process FIFO mailbox; it is not a durable event log. Under a
   prolonged stalled observer its backlog can grow. Disk-image trimming has a recent-reader
   grace period and is a soft budget. Viewer, open-with and link copies have the same kind of

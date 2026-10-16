@@ -275,7 +275,8 @@ fun UsageBar(fraction: Float, modifier: Modifier = Modifier, height: Dp = 12.dp)
 
 /**
  * Copies a secret (a link with its key, a recovery key); Android 13+ hides it in the clipboard preview.
- * With [expire] the clip is removed after [SECRET_CLIP_MS], unless something else was copied since.
+ * With [expire] the clip is removed after [SECRET_CLIP_MS]. If the app is not in the foreground then,
+ * the clipboard is cleared whatever it holds.
  */
 fun copySensitive(context: Context, text: String, expire: Boolean = false) {
     val clipboard = context.applicationContext.getSystemService(ClipboardManager::class.java)

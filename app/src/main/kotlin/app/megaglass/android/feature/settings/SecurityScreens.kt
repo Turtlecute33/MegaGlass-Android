@@ -234,7 +234,7 @@ fun SecuritySettingsScreen() {
             onConfirm = { pin ->
                 scope.launch {
                     catching {
-                        if (!graph.lock.matches(pin)) {
+                        if (!graph.lock.confirm(pin)) {
                             graph.messenger.show(resources.getString(R.string.security_wrong_passcode))
                             return@catching
                         }

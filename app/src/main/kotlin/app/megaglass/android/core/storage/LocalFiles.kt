@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * [path] is a file path or a content:// URI, which the SDK reads through FileWrapper.
@@ -200,13 +201,27 @@ class LocalFiles(private val context: Context) {
     /** Photos from "Take photo", a folder each, until their upload succeeds. */
     val capturesDir: File get() = File(context.filesDir, "pending-uploads")
 
+    /** Photos from "Take photo" that this process waits for or uploads: they stay for Retry. */
+    private val captures: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /** [photo] belongs to this process: the camera app has it open, or it uploads. */
+    fun claimCapture(photo: File) {
+        captures += photo.absolutePath
+    }
+
     /**
      * Moves the photos that no upload reads ([inUse]) to the gallery: their upload failed, was
-     * cancelled, or never started. Only photos of earlier runs, unless [before] is later.
-     * Returns how many it moved.
+     * cancelled, or never started. Photos of this process ([claimCapture]) stay, and so do photos
+     * of the last minutes: the camera can return them to a new process. With [all] (logout),
+     * every photo goes, and empty folders stay. Returns how many it moved.
      */
-    fun rescueCaptures(inUse: Set<String>, before: Long = startedAt): Int =
-        leftoverCaptures(capturesDir, inUse, before).count { catching { moveToGallery(it) }.isSuccess }
+    @Synchronized
+    fun rescueCaptures(inUse: Set<String>, all: Boolean = false): Int {
+        val now = System.currentTimeMillis()
+        val leftovers = if (all) leftoverCaptures(capturesDir, inUse, now, emptyBefore = 0)
+        else leftoverCaptures(capturesDir, inUse + captures, now - RECENT_CAPTURE_MS, now - OPEN_CAPTURE_MS)
+        return leftovers.count { catching { moveToGallery(it) }.isSuccess }
+    }
 
     /** Moves a photo from [capturesDir] to Pictures/MegaGlass, where the user owns it. */
     fun moveToGallery(photo: File) {
@@ -237,4 +252,11 @@ class LocalFiles(private val context: Context) {
 
     fun mimeType(file: File): String =
         MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "application/octet-stream"
+
+    private companion object {
+        /** A photo saved this recently can still be on its way to the upload. */
+        const val RECENT_CAPTURE_MS = 2 * 60_000L
+        /** A capture folder without a photo this recent: the camera app can still be open. */
+        const val OPEN_CAPTURE_MS = 60 * 60_000L
+    }
 }

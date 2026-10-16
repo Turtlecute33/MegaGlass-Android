@@ -3,6 +3,7 @@ package app.megaglass.android
 import android.app.Application
 import android.content.Context
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import app.megaglass.android.core.FileOpener
@@ -36,8 +37,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import nz.mega.sdk.MegaEvent
 import java.io.File
@@ -61,8 +64,8 @@ class AppGraph(val context: Context) {
         onReady = { transfers.beginSession(); mega.holdSyncsWithoutAccess() },
     )
     val messenger = Messenger()
-    val opener = FileOpener(context, transfers, files, messenger, scope)
     val lock = AppLock(settings)
+    val opener = FileOpener(context, transfers, files, messenger, lock, scope)
 
     init {
         transfers.onActive = { TransferJobService.schedule(context) }
@@ -76,10 +79,15 @@ class AppGraph(val context: Context) {
             mega.events.first { it.type == MegaEvent.EVENT_NODES_CURRENT }
             files.cleanUploadTemp(transfers.uploadingPaths())
             // The same for photos from "Take photo": no screen shows them, so they go to the
-            // gallery. With the app lock, only after an unlock.
-            lock.locked.first { !it }
-            val saved = files.rescueCaptures(transfers.uploadingPaths())
-            if (saved > 0) messenger.show(context.resources.getQuantityString(R.plurals.captures_saved, saved, saved))
+            // gallery. Each time the app comes to the foreground: the camera app can save a photo
+            // after this process started, when the process that waited for it had stopped.
+            // With the app lock, only after an unlock.
+            ProcessLifecycleOwner.get().lifecycle.currentStateFlow
+                .map { it.isAtLeast(Lifecycle.State.STARTED) }.distinctUntilChanged().filter { it }
+                .collect {
+                    lock.locked.first { !it }
+                    showSaved(files.rescueCaptures(transfers.uploadingPaths()))
+                }
         }
         // Decrypted copies of cloud files stay only up to a size limit.
         scope.launch(Dispatchers.IO) {
@@ -96,9 +104,15 @@ class AppGraph(val context: Context) {
         CameraUploads.cancel(context)
         transfers.endSession()
         // Photos from "Take photo" that did not upload belong to the user of this device, not to
-        // the account: they go to the gallery now, not with the session of the next account.
-        val saved = files.rescueCaptures(emptySet(), System.currentTimeMillis())
-        if (saved > 0) messenger.show(context.resources.getQuantityString(R.plurals.captures_saved, saved, saved))
+        // the account: they go to the gallery, not with the session of the next account. With the
+        // app lock, only after an unlock: the gallery is open to anyone who has the phone. The
+        // lock screen also covers the login, so no other account can log in before.
+        if (lock.isEnabled && lock.locked.value) {
+            scope.launch(Dispatchers.IO) {
+                lock.locked.first { !it }
+                showSaved(files.rescueCaptures(emptySet(), all = true))
+            }
+        } else showSaved(files.rescueCaptures(emptySet(), all = true))
         opener.clear()
         context.stopService(Intent(context, PlaybackService::class.java))
         StreamServer.releasePlayback()
@@ -115,6 +129,10 @@ class AppGraph(val context: Context) {
         File(context.cacheDir, "avatar").deleteRecursively()
         coil3.SingletonImageLoader.get(context).memoryCache?.clear()
         mega.clearCaches()
+    }
+
+    private fun showSaved(photos: Int) {
+        if (photos > 0) messenger.show(context.resources.getQuantityString(R.plurals.captures_saved, photos, photos))
     }
 }
 

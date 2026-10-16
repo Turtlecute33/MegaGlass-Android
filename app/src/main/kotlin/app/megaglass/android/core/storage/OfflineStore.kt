@@ -198,10 +198,11 @@ class OfflineStore(
         }
     }
 
+    // Copies of earlier versions can keep raw cloud names: the name on screen drops their marks.
     private fun entry(f: File, handle: Long) = OfflineEntry(
         handle = handle,
         file = f,
-        name = f.name,
+        name = displayName(f.name),
         isFolder = f.isDirectory,
         type = FileType.of(f.name, f.isDirectory),
         size = if (f.isDirectory) f.walkTopDown().filter { it.isFile }.sumOf { it.length() } else f.length(),

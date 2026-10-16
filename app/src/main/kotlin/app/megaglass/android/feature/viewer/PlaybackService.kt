@@ -85,12 +85,14 @@ class PlaybackService : MediaSessionService() {
                 val ids = (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
                 val art = if (hidden) emptyMap() else withContext(Dispatchers.IO) { ids.associateWith { PlaybackQueue[it]?.let(::cachedArt) } }
                 val appName = getString(R.string.app_name)
-                for (i in 0 until player.mediaItemCount) {
+                // One change for the whole queue: each change makes the session send the full queue.
+                val updated = (0 until player.mediaItemCount).map { i ->
                     val item = player.getMediaItemAt(i)
-                    val entry = PlaybackQueue[item.mediaId] ?: continue
+                    val entry = PlaybackQueue[item.mediaId] ?: return@map item
                     val metadata = if (hidden) hiddenMetadata(appName) else trackMetadata(entry, art[item.mediaId])
-                    player.replaceMediaItem(i, item.buildUpon().setMediaMetadata(metadata).build())
+                    item.buildUpon().setMediaMetadata(metadata).build()
                 }
+                if (updated.isNotEmpty()) player.replaceMediaItems(0, updated.size, updated)
             }
         }
     }

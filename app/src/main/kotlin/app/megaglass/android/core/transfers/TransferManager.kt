@@ -17,6 +17,7 @@ import kotlinx.coroutines.sync.withLock
 import app.megaglass.android.core.storage.LocalSource
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -31,6 +32,7 @@ import nz.mega.sdk.MegaApiJava
 import nz.mega.sdk.MegaCancelToken
 import nz.mega.sdk.MegaDownloadItemList
 import nz.mega.sdk.MegaError
+import nz.mega.sdk.MegaEvent
 import nz.mega.sdk.MegaNode
 import nz.mega.sdk.MegaTransfer
 import nz.mega.sdk.MegaTransferListenerInterface
@@ -139,6 +141,13 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
     /** Same as `state.value.isIdle`, without the delay of the snapshot. */
     val isIdleNow: Boolean get() = synchronized(lock) { records.isEmpty() } && pending.get() == 0
 
+    private val _resumed = MutableStateFlow(false)
+    /**
+     * The nodes of the session are current, so the SDK has resumed the queue of an earlier run.
+     * Before that, the queue can look empty although transfers wait to resume.
+     */
+    val resumed: StateFlow<Boolean> = _resumed.asStateFlow()
+
     /**
      * Work that the queue does not show yet: an upload while its local copy is made, and a
      * transfer from its start request until the SDK reports it. The transfer job counts it.
@@ -214,6 +223,11 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
     private val sink = object : MegaTransferListenerInterface {
         override fun onTransferStart(api: MegaApiJava, transfer: MegaTransfer) {
             if (!accepting || skip(transfer)) return
+            // Earlier versions uploaded camera media from the file path, with the location data.
+            // The SDK resumes such uploads after the nodes are current; they stop here, and the
+            // next camera uploads run queues the media again without it.
+            if (transfer.type == MegaTransfer.TYPE_UPLOAD && Purpose.of(transfer.appData) == Purpose.CAMERA &&
+                !isContentUri(transfer.path.orEmpty())) api.cancelTransferByTag(transfer.tag)
             val k = key(api, transfer.tag)
             val first = synchronized(lock) {
                 if (isBatch(transfer)) {
@@ -297,6 +311,9 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
 
     init {
         mega.transferSink = sink
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            mega.events.collect { if (it.type == MegaEvent.EVENT_NODES_CURRENT) _resumed.value = true }
+        }
         scope.launch(Dispatchers.IO) {
             for ((epoch, item) in completionQueue) {
                 if (!accepting || epoch != sessionEpoch.get()) continue
@@ -651,6 +668,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
 
     fun endSession() {
         accepting = false
+        _resumed.value = false
         sessionEpoch.incrementAndGet()
         pending.set(0)
         cancelAll()

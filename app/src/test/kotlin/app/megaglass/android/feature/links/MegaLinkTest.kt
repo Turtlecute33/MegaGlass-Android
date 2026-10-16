@@ -28,6 +28,14 @@ class MegaLinkTest {
         assertNull(findMegaLink(""))
     }
 
+    @Test fun punctuationAroundASharedLinkIsNotPartOfIt() {
+        assertEquals("https://mega.nz/file/h#k", findMegaLink("See (https://mega.nz/file/h#k) here"))
+        assertEquals("https://mega.nz/folder/h#k", findMegaLink("Open https://mega.nz/folder/h#k."))
+        assertEquals("https://mega.nz/folder/h#k_-", findMegaLink("\"https://mega.nz/folder/h#k_-\","))
+        assertEquals("https://mega.nz/#F!h!k", findMegaLink("<https://mega.nz/#F!h!k>"))
+        assertNull(findMegaLink("(https://mega.nz.evil.test/file/h#k)"))
+    }
+
     @Test fun folderSubpathsRemainSeparateFromTheSdkUrl() {
         assertEquals(MegaLink.Folder("https://mega.nz/folder/root#key", "child", null),
             parseMegaLink("https://mega.nz/folder/root#key/folder/child"))

@@ -126,6 +126,8 @@ fun rememberUploader(parent: Long): Uploader {
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val f = photoPath?.let(::File)
         if (ok && f != null && f.length() > 0) {
+            // Also in a new process, when the system stopped the one that started the camera.
+            graph.files.claimCapture(f)
             graph.scope.launch {
                 catching { graph.transfers.upload(listOf(LocalSource(f.absolutePath, f.name, temporary = true)), target) }.onFailure { e ->
                     // The photo is in no other place: it goes to the gallery.
@@ -173,6 +175,7 @@ fun rememberUploader(parent: Long): Uploader {
                 val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
                 val f = File(dir, "IMG_$stamp.jpg")
                 photoPath = f.absolutePath
+                graph.files.claimCapture(f)
                 try {
                     camera.launch(graph.files.shareUri(f))
                 } catch (_: ActivityNotFoundException) {

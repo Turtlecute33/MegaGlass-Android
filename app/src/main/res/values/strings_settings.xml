@@ -113,7 +113,7 @@
     <string name="security_2fa_done_title">Two-factor authentication is on</string>
     <string name="security_2fa_done_text">If you lose access to your authenticator app, you need your recovery key. Save it now if you did not do this before.</string>
     <string name="security_copy">Copy</string>
-    <string name="security_copied_secret">Copied. The clipboard is cleared after 1 minute.</string>
+    <string name="security_copied_secret">Copied. In 1 minute the clipboard is cleared, also if you copied something else.</string>
     <string name="security_open_authenticator">Open authenticator</string>
     <string name="security_send_key_to">Add the key to %1$s?</string>
     <string name="security_no_authenticator">No authenticator app is installed. Copy the key into your app.</string>

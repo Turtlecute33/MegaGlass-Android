@@ -59,11 +59,25 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
         return ok
     }
 
+    /** Wrong passcodes in Settings since the last unlock, in memory only. */
+    private var settingsMisses = 0
+
     /**
-     * Checks [passcode] without counting: for an unlocked app (Settings), where a wrong entry
-     * must not move toward the wipe.
+     * Checks [passcode] in an unlocked app (Settings). A wrong entry does not move toward the
+     * wipe, but after [SETTINGS_TRIES] wrong entries the app locks, and the lock screen counts.
      */
-    suspend fun matches(passcode: String): Boolean = withContext(Dispatchers.Default) {
+    suspend fun confirm(passcode: String): Boolean {
+        val ok = matches(passcode)
+        if (ok) settingsMisses = 0 else if (++settingsMisses >= SETTINGS_TRIES) lockNow()
+        return ok
+    }
+
+    /** Locks at once, when a passcode is set. */
+    fun lockNow() {
+        if (isEnabled) _locked.value = true
+    }
+
+    private suspend fun matches(passcode: String): Boolean = withContext(Dispatchers.Default) {
         val stored = settings.current.passcodeHash ?: return@withContext true
         catching {
             val parts = stored.split(":")
@@ -80,6 +94,7 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
     }
 
     fun unlock() {
+        settingsMisses = 0
         _locked.value = false
     }
 
@@ -110,7 +125,7 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
     /** Unlocks when the biometric prompt authorized [cipher] (from [biometricCipher]). */
     fun unlockWithBiometric(cipher: Cipher): Boolean {
         val ok = catching { cipher.doFinal(ByteArray(16)) }.isSuccess
-        if (ok) _locked.value = false
+        if (ok) unlock()
         return ok
     }
 
@@ -164,5 +179,6 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
     private companion object {
         const val BIOMETRIC_KEY = "megaglass.lock.biometric"
         const val BIOMETRIC_TRANSFORMATION = "AES/GCM/NoPadding"
+        const val SETTINGS_TRIES = 3
     }
 }

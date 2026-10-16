@@ -123,8 +123,9 @@ fun TransfersScreen() {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
             if (tab == 0) {
-                if (state.isIdle) {
-                    EmptyState(R.drawable.ic_swap_vert, stringResource(R.string.no_active_transfers))
+                if (state.active.isEmpty()) {
+                    // Copies for uploads are not in the list yet.
+                    EmptyState(R.drawable.ic_swap_vert, stringResource(if (state.preparing > 0) R.string.notif_preparing else R.string.no_active_transfers))
                 } else {
                     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 48.dp)) {
                         item(key = "summary") { Summary(state) }

@@ -311,19 +311,24 @@ fun TextEditorScreen(route: TextEditor) {
     }
 
     if (askDiscard && rememberDialogAllowed()) {
+        // A save that runs already continues in the app scope after the editor closes.
         AlertDialog(
             onDismissRequest = { askDiscard = false },
             icon = { Ic(R.drawable.ic_edit) },
-            title = { Text(stringResource(R.string.editor_discard_title)) },
-            text = { Text(stringResource(R.string.editor_discard_text)) },
+            title = { Text(stringResource(if (saving) R.string.editor_saving else R.string.editor_discard_title)) },
+            text = { Text(stringResource(if (saving) R.string.editor_saving_leave_text else R.string.editor_discard_text)) },
             confirmButton = {
                 // The editor closes only after the save succeeds; on an error it stays open with the edits.
                 // A save that runs already closes the editor when it ends.
                 Button(onClick = {
                     askDiscard = false
-                    m.closeAfterSave = true
-                    save()
-                }) { Text(stringResource(R.string.save)) }
+                    // A save that ended while the dialog was open left nothing to save.
+                    if (!dirty && !saving) nav.back()
+                    else {
+                        m.closeAfterSave = true
+                        save()
+                    }
+                }) { Text(stringResource(if (saving) R.string.editor_close_when_saved else R.string.save)) }
             },
             dismissButton = {
                 TextButton(onClick = {
@@ -331,7 +336,7 @@ fun TextEditorScreen(route: TextEditor) {
                     dirty = false
                     m.closeAfterSave = false
                     nav.back()
-                }) { Text(stringResource(R.string.editor_discard)) }
+                }) { Text(stringResource(if (saving) R.string.editor_leave else R.string.editor_discard)) }
             },
         )
     }

@@ -63,8 +63,17 @@ class SafeFilesTest {
     }
 
     @Test fun namesThatFitAreKept() {
-        val name = "a".repeat(251) + ".txt"
+        val name = "a".repeat(236) + ".txt"
         assertEquals(name, localFileName(name))
+    }
+
+    @Test fun namesNearTheLimitLeaveSpaceForACollisionSuffix() {
+        val name = "a".repeat(251) + ".txt"
+        val safe = localFileName(name)
+        assertEquals("a".repeat(236) + ".txt", safe)
+        val collision = availableName(safe) { it == safe }
+        assertTrue(collision.toByteArray(Charsets.UTF_8).size <= 255)
+        File(temp.root, collision).writeText("ok")
     }
 
     @Test fun aCompleteLengthDoesNotProveADownloadFinished() {
@@ -193,11 +202,26 @@ class SafeFilesTest {
         val failed = capture("failed", 600_000)
         val queued = capture("queued", 600_000)
         val current = capture("current", 0)
-        val empty = capture("empty", 600_000, bytes = 0)
-        assertEquals(listOf(failed), leftoverCaptures(root, setOf(queued.absolutePath), start))
+        val abandoned = capture("abandoned", 7_200_000, bytes = 0)
+        assertEquals(listOf(failed), leftoverCaptures(root, setOf(queued.absolutePath), start, start - 3_600_000))
         assertTrue(queued.exists())
         assertTrue(current.exists())
-        assertFalse(empty.parentFile!!.exists())
+        assertFalse(abandoned.parentFile!!.exists())
+    }
+
+    @Test fun aCaptureFolderStaysWhileTheCameraCanStillSaveIntoIt() {
+        val root = temp.newFolder("captures")
+        val start = System.currentTimeMillis()
+        val waiting = File(root, "waiting").apply { mkdir(); setLastModified(start - 600_000) }
+        val opened = File(root, "opened").apply { mkdir() }.let { d ->
+            File(d, "IMG.jpg").apply { createNewFile(); setLastModified(start - 600_000) }.also { d.setLastModified(start - 600_000) }
+        }
+        assertEquals(emptyList<File>(), leftoverCaptures(root, emptySet(), start, start - 3_600_000))
+        assertTrue(waiting.exists())
+        assertTrue(opened.exists())
+        // At logout: photos go, folders without a photo stay.
+        assertEquals(emptyList<File>(), leftoverCaptures(root, emptySet(), start, 0))
+        assertTrue(waiting.exists())
     }
 
     @Test fun staleImagePartsGoButActiveOnesAndImagesStay() {

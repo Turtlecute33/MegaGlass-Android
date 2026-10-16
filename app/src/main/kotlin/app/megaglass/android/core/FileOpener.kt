@@ -7,6 +7,7 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import app.megaglass.android.R
+import app.megaglass.android.core.security.AppLock
 import app.megaglass.android.core.storage.LocalFiles
 import app.megaglass.android.core.storage.localFileName
 import app.megaglass.android.core.storage.VerifiedFiles
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import nz.mega.sdk.MegaApiJava
@@ -47,7 +49,8 @@ class FileOpener(
     private val transfers: TransferManager,
     private val files: LocalFiles,
     private val messenger: Messenger,
-    scope: CoroutineScope,
+    private val lock: AppLock,
+    private val scope: CoroutineScope,
 ) {
     private val _preparing = MutableStateFlow<Set<Long>>(emptySet())
     /** Nodes that are downloading before they open. */
@@ -62,12 +65,15 @@ class FileOpener(
                     Purpose.OPEN -> {
                         if (item.nodeHandle !in _preparing.value) return@collect
                         _preparing.update { it - item.nodeHandle }
-                        if (item.status == TransferStatus.COMPLETED) withContext(Dispatchers.Main) { view(File(item.localPath)) }
+                        if (item.status == TransferStatus.COMPLETED) whenUnlocked {
+                            // A logout while it waited removed the file.
+                            File(item.localPath).takeIf { it.exists() }?.let(::view)
+                        }
                         else if (item.status == TransferStatus.FAILED) messenger.show(item.error ?: context.getString(R.string.error_title))
                     }
                     Purpose.SHARE -> {
                         _preparing.update { it - item.nodeHandle }
-                        if (item.status == TransferStatus.COMPLETED) withContext(Dispatchers.Main) { collectShare(item.appData, File(item.localPath)) }
+                        if (item.status == TransferStatus.COMPLETED) whenUnlocked { collectShare(item.appData, File(item.localPath)) }
                         else {
                             synchronized(shareBatch) { shareBatch.remove(item.appData) }
                             messenger.show(item.error ?: context.getString(R.string.error_title))
@@ -75,6 +81,17 @@ class FileOpener(
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Runs [block] on the main thread when the app lock is open: a download can end while the
+     * lock screen shows, and the app chooser must not open over it. Other completions do not wait.
+     */
+    private fun whenUnlocked(block: () -> Unit) {
+        scope.launch(Dispatchers.Main) {
+            lock.locked.first { !it }
+            block()
         }
     }
 

@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.storage.OfflineEntry
+import app.megaglass.android.core.storage.localFileName
 import app.megaglass.android.core.storage.availableName
 import app.megaglass.android.core.util.FileType
 import app.megaglass.android.core.util.Format
@@ -117,7 +118,7 @@ fun OfflineScreen(path: String?) {
                                         val saved = withContext(Dispatchers.IO) {
                                             catching {
                                                 val dir = graph.files.downloadDir(graph.settings.current)
-                                                if (entry.file.copyRecursively(File(dir, availableName(entry.name, entry.isFolder) { File(dir, it).exists() }))) dir else null
+                                                if (entry.file.copyRecursively(File(dir, availableName(localFileName(entry.name), entry.isFolder) { File(dir, it).exists() }))) dir else null
                                             }.getOrNull()
                                         }
                                         graph.messenger.show(

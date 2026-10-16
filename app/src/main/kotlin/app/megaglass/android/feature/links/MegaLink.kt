@@ -57,9 +57,14 @@ private fun replaceKey(url: String, key: String): String {
     }
 }
 
-/** The first MEGA link in [text], for example a link shared from a browser or a chat. */
+/**
+ * The first MEGA link in [text], for example a link shared from a browser or a chat. Brackets,
+ * quotes and sentence punctuation around a link are not part of it: handles and keys are base64url.
+ */
 fun findMegaLink(text: String): String? =
-    text.split(Regex("\\s+")).firstOrNull { it.isNotEmpty() && parseMegaLink(it) !is MegaLink.Invalid }
+    text.split(Regex("\\s+"))
+        .map { it.trimStart('(', '[', '<', '"', '\'').trimEnd('.', ',', ';', ':', ')', ']', '>', '"', '\'') }
+        .firstOrNull { it.isNotEmpty() && parseMegaLink(it) !is MegaLink.Invalid }
 
 /**
  * Parses https://mega.nz links (also mega.co.nz, www., and mega:// forms):

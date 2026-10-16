@@ -154,7 +154,8 @@ fun MainScaffold(nav: AppNavigator) {
             TransferPill(
                 visible = (!fullScreen || route is TextEditor) && route != Transfers,
                 onClick = { nav.navigate(Transfers) },
-                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+                // Full-screen routes draw behind the system navigation bar.
+                modifier = Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(16.dp),
             )
             SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 72.dp))
         }

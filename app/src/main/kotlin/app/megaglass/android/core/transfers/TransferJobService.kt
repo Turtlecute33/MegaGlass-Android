@@ -19,14 +19,17 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import app.megaglass.android.MainActivity
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
+import app.megaglass.android.core.mega.SessionState
 import app.megaglass.android.core.util.Format
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * A user-initiated data transfer job (Android 14+). While it runs, the system keeps the process
@@ -43,6 +46,11 @@ class TransferJobService : JobService() {
         setNotification(params, TransferNotifications.ID, notifications.build(transfers.state.value), JOB_END_NOTIFICATION_POLICY_REMOVE)
         val s = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scope = it }
         s.launch {
+            // In a new process (the system ran the job again after it stopped it), the SDK resumes
+            // the queue only after the login and the nodes: until then the queue looks empty.
+            withTimeoutOrNull(RESUME_WAIT_MS) {
+                combine(MegaGlassApp.graph.session.state, transfers.resumed) { _, _ -> resuming() }.first { !it }
+            }
             // Give the SDK a moment to register the transfers that were just queued.
             transfers.state.sample(1000).collect { state ->
                 if (state.isIdle) {
@@ -67,13 +75,23 @@ class TransferJobService : JobService() {
         scope = null
         // The system stopped the job (for example, the network was lost): it runs again when it
         // can, because the SDK continues the queue. The user or the app stopped it: it ends.
-        return !MegaGlassApp.graph.transfers.isIdleNow &&
+        return (!MegaGlassApp.graph.transfers.isIdleNow || resuming()) &&
             params.stopReason != JobParameters.STOP_REASON_USER &&
             params.stopReason != JobParameters.STOP_REASON_CANCELLED_BY_APP
     }
 
+    /** The session loads, and the SDK has not resumed the queue of the earlier run yet. */
+    private fun resuming(): Boolean {
+        val graph = MegaGlassApp.graph
+        val session = graph.session.state.value
+        return !graph.transfers.resumed.value &&
+            (session == SessionState.Starting || session is SessionState.Loading || session == SessionState.Ready)
+    }
+
     companion object {
         private const val JOB_ID = 1001
+        /** A session that loads longer than this: the job ends when the queue is empty. */
+        private const val RESUME_WAIT_MS = 3 * 60_000L
 
         /**
          * Schedules the job. A user-initiated job can only start while the app is visible;
@@ -114,13 +132,15 @@ class TransferNotifications(private val context: Context) {
         )
         val percent = (state.progress * 100).toInt()
         val title = when {
+            // Copies for uploads, viewer copies, or a queue that the SDK has not resumed yet.
+            state.active.isEmpty() -> context.getString(R.string.notif_preparing)
             state.downloads > 0 && state.uploads > 0 ->
                 context.getString(R.string.notif_transfers_both, state.downloads, state.uploads)
             state.uploads > 0 -> context.resources.getQuantityString(R.plurals.notif_uploading, state.uploads, state.uploads)
             else -> context.resources.getQuantityString(R.plurals.notif_downloading, state.downloads, state.downloads)
         }
         val speed = state.downloadSpeed + state.uploadSpeed
-        val text = buildString {
+        val text = if (state.active.isEmpty()) null else buildString {
             append(Format.size(state.transferredBytes)).append(" / ").append(Format.size(state.totalBytes))
             if (speed > 0) append(" · ").append(Format.speed(speed))
         }

@@ -121,8 +121,9 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                     }.sortedBy { it.added }
                 }
 
-                // Earlier versions uploaded from the file path, with the location data. Such uploads,
-                // resumed from the SDK queue, stop; this run queues their media again without it.
+                // Earlier versions uploaded from the file path, with the location data. TransferManager
+                // stops such uploads when the SDK resumes them; this is a second check. This run
+                // queues their media again without it.
                 withContext(Dispatchers.IO) { graph.transfers.cancelUploads(Purpose.CAMERA) { !isContentUri(it) } }
                 val inQueue = graph.transfers.uploadingPaths()
                 val handled = prefs.handled

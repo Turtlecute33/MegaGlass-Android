@@ -33,12 +33,11 @@ fun pathComponent(name: String): String =
 
 /**
  * Names supplied by cloud nodes and document providers, for files on this device. A name
- * longer than the 255 bytes that Android file systems allow is cut, with space left for the
- * " (1)" of a name collision; the extension stays.
+ * longer than [SHORT_NAME_BYTES] is cut to that length; the extension stays. The rest of the
+ * 255 bytes that Android file systems allow is for the " (1)" of a name collision.
  */
 fun localFileName(name: String): String = shortName(pathComponent(displayName(name)))
 
-private const val MAX_NAME_BYTES = 255
 private const val SHORT_NAME_BYTES = 240
 
 private fun utf8Length(codePoint: Int) = when {
@@ -51,7 +50,7 @@ private fun utf8Length(codePoint: Int) = when {
 private fun utf8Length(s: String) = s.toByteArray(Charsets.UTF_8).size
 
 private fun shortName(name: String): String {
-    if (utf8Length(name) <= MAX_NAME_BYTES) return name
+    if (utf8Length(name) <= SHORT_NAME_BYTES) return name
     val dot = name.lastIndexOf('.')
     val extension = if (dot > 0 && utf8Length(name.substring(dot)) <= 16) name.substring(dot) else ""
     val budget = SHORT_NAME_BYTES - utf8Length(extension)
@@ -109,15 +108,17 @@ fun removeUploadCopies(root: File, inUse: Set<String>, before: Long) {
 
 /**
  * The photos in [root] (a folder each) that no path in [inUse] reads and that were last written
- * before [before]. Such folders without a photo are removed: the camera saved nothing.
+ * before [before]. A folder without a photo is removed when it was last written before
+ * [emptyBefore]: until then the camera app can still be open and save the photo into it.
  */
-fun leftoverCaptures(root: File, inUse: Set<String>, before: Long): List<File> {
+fun leftoverCaptures(root: File, inUse: Set<String>, before: Long, emptyBefore: Long): List<File> {
     val photos = ArrayList<File>()
     root.listFiles()?.forEach { dir ->
         val prefix = dir.absolutePath + File.separator
         if (inUse.any { it == dir.absolutePath || it.startsWith(prefix) }) return@forEach
-        if (!dir.walkTopDown().all { it.lastModified() < before }) return@forEach
         val saved = dir.listFiles().orEmpty().filter { it.isFile && it.length() > 0 }
+        val cutoff = if (saved.isEmpty()) emptyBefore else before
+        if (!dir.walkTopDown().all { it.lastModified() < cutoff }) return@forEach
         if (saved.isEmpty()) dir.deleteRecursively() else photos += saved
     }
     return photos

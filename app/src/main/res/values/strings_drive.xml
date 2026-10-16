@@ -8,7 +8,7 @@
         <item quantity="one">Not enough free space on this phone to upload %d selected file.</item>
         <item quantity="other">Not enough free space on this phone to upload %d selected files.</item>
     </plurals>
-    <string name="share_nothing">Nothing to upload</string>
+    <string name="share_nothing">No file or MEGA link to open</string>
     <string name="cloud_drive">Cloud drive</string>
     <string name="incoming_shares">Incoming shares</string>
     <string name="rubbish_bin">Rubbish bin</string>
