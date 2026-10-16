@@ -40,7 +40,7 @@
     <string name="settings_fast_off">4 connections for downloads, 3 for uploads</string>
     <string name="settings_downloads">Downloads</string>
     <string name="settings_download_location">Download location</string>
-    <string name="settings_location_default">Default (Download/MegaGlass)</string>
+    <string name="settings_location_default">Default (%1$s)</string>
     <string name="settings_location_choose">Choose a folder</string>
     <string name="settings_location_failed">MegaGlass cannot write to this folder</string>
     <string name="settings_location_access">Without access to all files, downloads go to the folder of the app.</string>
@@ -61,6 +61,7 @@
     <string name="settings_clear_cache">Clear cache</string>
     <string name="settings_cache_summary">Thumbnails and temporary files: %1$s</string>
     <string name="settings_clear_cache_text">Thumbnails and temporary copies are deleted. They download again when needed.</string>
+    <string name="settings_cache_kept">Temporary copies are kept while files download to them. Clear the cache again when the downloads end.</string>
     <string name="settings_clear_offline">Remove offline files</string>
     <string name="settings_offline_summary">Files kept on this device: %1$s</string>
     <string name="settings_clear_offline_text">All offline files are deleted from this device. They stay in your cloud.</string>
@@ -172,10 +173,12 @@
     <string name="lock_biometric_reset">Biometric unlock is off because the fingerprints or faces on this device changed. Enter your passcode, then turn it on again in Settings.</string>
 
     <!-- About -->
-    <string name="about_privacy">MegaGlass has no analytics, no ads and no telemetry. Files are encrypted on this device before they are uploaded. The app connects only to MEGA.</string>
+    <string name="about_privacy">MegaGlass has no ads and no third-party analytics. The MEGA SDK sends some diagnostic events, such as errors and timings, to MEGA. Files are encrypted on this device before they are uploaded. The app connects only to MEGA.</string>
     <string name="about_versions">Versions</string>
     <string name="about_app_version">MegaGlass</string>
     <string name="about_sdk_version">MEGA SDK</string>
     <string name="about_licences">Open-source licences</string>
-    <string name="about_native_licences">Boost Software License, ISC, curl, Apache License 2.0, Unicode, public domain, MIT, BSD</string>
+    <string name="about_app_licence">GNU General Public License v3.0</string>
+    <string name="about_notices">Third-party notices</string>
+    <string name="about_notices_summary">Crypto++, curl, ICU, libsodium, libuv, MediaInfo, OpenSSL, SQLite, AndroidX, Jetpack Compose, Media3, Kotlin, Coil, Telephoto and others</string>
 </resources>

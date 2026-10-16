@@ -6,11 +6,14 @@ import androidx.compose.runtime.Immutable
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.core.mega.NodeItem
 import app.megaglass.android.core.mega.await
+import app.megaglass.android.core.mega.cancellable
 import app.megaglass.android.core.mega.keepAlive
 import app.megaglass.android.core.mega.toItem
 import app.megaglass.android.core.util.FileType
 import app.megaglass.android.ui.nav.Album
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import nz.mega.sdk.MegaApiJava
 import nz.mega.sdk.MegaHandleList
@@ -36,6 +39,18 @@ internal fun mediaDay(seconds: Long): LocalDate = catching {
     Instant.ofEpochSecond(seconds).atZone(ZoneId.systemDefault()).toLocalDate()
 }.getOrDefault(LocalDate.ofEpochDay(0))
 
+/** 0001-01-01 and 9999-12-31 (UTC), in seconds: every date in this range has a day in any time zone. */
+private const val MIN_TAKEN = -62_135_596_800L
+private const val MAX_TAKEN = 253_402_300_799L
+
+/**
+ * When a photo was taken, in seconds: the capture time, or else the modification time. The
+ * uploader sets both, so they can be any value. The range keeps the sort order and the days of
+ * the timeline the same: two distinct days never get the same date.
+ */
+internal fun mediaTakenAt(captureMs: Long, modified: Long): Long =
+    (if (captureMs > 0) captureMs / 1000 else modified).coerceIn(MIN_TAKEN, MAX_TAKEN)
+
 @Immutable
 data class AlbumInfo(
     /** MegaSet id, or Album.FAVOURITES / GIF / RAW. */
@@ -60,13 +75,12 @@ object PhotosRepository {
     private val graph get() = MegaGlassApp.graph
     private val api: MegaApiJava get() = graph.mega.api
 
-    fun MegaNode.toMedia(api: MegaApiJava): MediaItem {
-        val captured = mediaCaptureTimeMs
-        return MediaItem(
-            node = toItem(api, withCounts = false),
-            takenAt = if (captured > 0) captured / 1000 else modificationTime,
-        )
-    }
+    fun MegaNode.toMedia(api: MegaApiJava): MediaItem =
+        MediaItem(node = toItem(api, withCounts = false), takenAt = mediaTakenAt(mediaCaptureTimeMs, modificationTime))
+
+    /** Shown in albums: not in the rubbish bin and, unless [showHidden], not hidden. */
+    private fun isShown(node: MegaNode, showHidden: Boolean): Boolean =
+        !api.isInRubbish(node) && (showHidden || !(node.isMarkedSensitive || api.isSensitiveInherited(node)))
 
     /** All photos and videos in Cloud drive, newest first. */
     suspend fun timeline(filter: MediaFilter, showHidden: Boolean): List<MediaItem> = withContext(Dispatchers.IO) {
@@ -81,9 +95,11 @@ object PhotosRepository {
             },
         )
         if (!showHidden) f.bySensitivity(MegaSearchFilter.BOOL_FILTER_ONLY_TRUE)
-        api.search(f, MegaApiJava.ORDER_MEDIATS_DESC, null, null)
+        // A newer load cancels this one: the search and the mapping stop.
+        val context = currentCoroutineContext()
+        cancellable { token -> api.search(f, MegaApiJava.ORDER_MEDIATS_DESC, token, null) }
             .asSequence()
-            .map { it.toMedia(api) }
+            .map { context.ensureActive(); it.toMedia(api) }
             // The SDK category is by extension; keep the types this app can show.
             .filter { it.node.type == FileType.IMAGE || it.node.type == FileType.VIDEO }
             .sortedByDescending { it.takenAt }
@@ -106,25 +122,27 @@ object PhotosRepository {
             else AlbumInfo(id, "", items.size, items.firstOrNull()?.handle ?: MegaApiJava.INVALID_HANDLE, true)
         }
 
-    /** User albums, newest first. */
-    suspend fun userAlbums(): List<AlbumInfo> = withContext(Dispatchers.IO) {
+    /** User albums, newest first. The count and the cover use the items that the album page shows. */
+    suspend fun userAlbums(showHidden: Boolean): List<AlbumInfo> = withContext(Dispatchers.IO) {
         val sets = api.sets
         sets.keepAlive {
         (0 until sets.size()).mapNotNull { i ->
             val set = sets.get(i)
             if (set.type() != MegaSet.SET_TYPE_ALBUM) return@mapNotNull null
             val elements = api.getSetElements(set.id())
-            val count = elements.size().toInt()
+            // Element id to node handle.
+            val shown = elements.keepAlive { (0 until it.size()).mapNotNull { j ->
+                val e = it.get(j)
+                val node = api.getNodeByHandle(e.node())?.takeIf { n -> isShown(n, showHidden) } ?: return@mapNotNull null
+                e.id() to node.handle
+            } }
             val coverElement = api.getSetCover(set.id())
-            val coverNode = if (coverElement != MegaApiJava.INVALID_HANDLE) api.getSetElement(set.id(), coverElement)?.node() else null
-            val cover = coverNode ?: elements.keepAlive { (0 until count).asSequence()
-                .map { elements.get(it.toLong()).node() }
-                .firstOrNull { api.getNodeByHandle(it) != null } }
+            val cover = shown.firstOrNull { it.first == coverElement } ?: shown.firstOrNull()
             AlbumInfo(
                 id = set.id(),
                 name = set.name() ?: "",
-                count = count,
-                cover = cover ?: MegaApiJava.INVALID_HANDLE,
+                count = shown.size,
+                cover = cover?.second ?: MegaApiJava.INVALID_HANDLE,
                 isSystem = false,
                 isExported = set.isExported,
             ) to set.ts()
@@ -138,9 +156,7 @@ object PhotosRepository {
         elements.keepAlive {
         (0 until elements.size()).mapNotNull { i ->
             val e = elements.get(i)
-            val node = api.getNodeByHandle(e.node()) ?: return@mapNotNull null
-            if (api.isInRubbish(node)) return@mapNotNull null
-            if (!showHidden && (node.isMarkedSensitive || api.isSensitiveInherited(node))) return@mapNotNull null
+            val node = api.getNodeByHandle(e.node())?.takeIf { isShown(it, showHidden) } ?: return@mapNotNull null
             AlbumEntry(e.id(), node.toMedia(api))
         }.sortedByDescending { it.media.takenAt }
         }

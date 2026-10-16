@@ -5,11 +5,12 @@
 # MegaGlass
 
 **Open-source MEGA cloud client for Android.**<br>
-End-to-end encrypted, fast and private. No ads, no tracking, no Google Play Services.
+End-to-end encrypted, fast and private. No ads, no third-party trackers, no Google Play Services.
 
 [![Android 15+](https://img.shields.io/badge/Android-15%2B-3DDC84?logo=android&logoColor=white)](#build)
 [![MEGA SDK](https://img.shields.io/badge/MEGA%20SDK-10.21.0-D21F24)](https://github.com/meganz/sdk)
 [![Release](https://img.shields.io/github/v/release/Turtlecute33/MegaGlass-Android?include_prereleases&color=D21F24)](https://github.com/Turtlecute33/MegaGlass-Android/releases)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE)
 
 <img src="docs/banner.png" width="100%" alt="MegaGlass for Android: Photos timeline, Cloud drive and Transfers screens">
 
@@ -35,7 +36,9 @@ Compose with Material 3 Expressive for the interface. Chat and calls are not inc
 
 ## Privacy
 
-- No analytics, no ads, no telemetry, no Google Play Services. The app connects only to MEGA.
+- No ads, no third-party analytics, no Google Play Services. The app connects only to MEGA.
+- The MEGA SDK sends some diagnostic events to MEGA, for example errors and timings. The SDK has
+  no setting to turn them off.
 - Files are encrypted on the device before upload.
 - The session is encrypted with a key in the Android Keystore and is not included in backups.
 - Thumbnails, previews and offline files stay in app-private storage.
@@ -45,6 +48,15 @@ Compose with Material 3 Expressive for the interface. Chat and calls are not inc
 
 Get the APK from [Releases](https://github.com/Turtlecute33/MegaGlass-Android/releases).
 MegaGlass is alpha software. Keep a copy of important files.
+
+Before you install, check the signing certificate. Its SHA-256 fingerprint is:
+
+```text
+84c7ed6935e18d6e6aebc6e3c490e3aa5468974ee856baf1df979bda3c7b5241
+```
+
+Compare it with the output of `apksigner verify --print-certs <file>.apk`, or use AppVerifier.
+Do not install an APK with a different certificate.
 
 ## Build
 
@@ -111,6 +123,12 @@ The [alpha audit](docs/ALPHA_AUDIT.md) lists the fixes and the remaining test ga
 [validation record](docs/ALPHA_AUDIT_VALIDATION.md) has the measured results and artifact hashes.
 
 </details>
+
+## License
+
+MegaGlass is free software under the [GNU General Public License v3.0](LICENSE). The app
+includes the MEGA SDK (BSD 2-Clause) and other open-source libraries. Their licences are in
+`app/src/main/assets/third_party_notices.txt`, which the app shows in Settings > About.
 
 ---
 

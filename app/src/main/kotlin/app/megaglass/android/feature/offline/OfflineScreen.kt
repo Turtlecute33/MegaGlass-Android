@@ -113,13 +113,17 @@ fun OfflineScreen(path: String?) {
                             onSave = {
                                 storage.ensure {
                                     scope.launch {
-                                        val ok = withContext(Dispatchers.IO) {
+                                        // Without all-files access the folder is the app's own: the message names it.
+                                        val saved = withContext(Dispatchers.IO) {
                                             catching {
                                                 val dir = graph.files.downloadDir(graph.settings.current)
-                                                entry.file.copyRecursively(File(dir, availableName(entry.name, entry.isFolder) { File(dir, it).exists() }))
-                                            }.getOrDefault(false)
+                                                if (entry.file.copyRecursively(File(dir, availableName(entry.name, entry.isFolder) { File(dir, it).exists() }))) dir else null
+                                            }.getOrNull()
                                         }
-                                        graph.messenger.show(graph.context.getString(if (ok) R.string.saved_to_downloads else R.string.error_title))
+                                        graph.messenger.show(
+                                            if (saved != null) graph.context.getString(R.string.saved_to_folder, graph.files.displayPath(saved))
+                                            else graph.context.getString(R.string.error_title),
+                                        )
                                     }
                                 }
                             },
@@ -137,7 +141,13 @@ fun OfflineScreen(path: String?) {
             title = stringResource(R.string.offline_remove_title),
             text = stringResource(R.string.offline_remove_text, entry.name),
             confirmLabel = stringResource(R.string.remove),
-            onConfirm = { scope.launch { graph.offline.remove(listOf(entry.handle)); reload++ } },
+            onConfirm = {
+                scope.launch {
+                    catching { graph.offline.remove(listOf(entry.handle)) }
+                        .onFailure { graph.messenger.show(it.message ?: graph.context.getString(R.string.error_title)) }
+                    reload++
+                }
+            },
             onDismiss = { removing = null },
         )
     }

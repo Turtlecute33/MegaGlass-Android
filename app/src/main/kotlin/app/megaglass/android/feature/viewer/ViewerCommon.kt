@@ -103,7 +103,7 @@ suspend fun loadEntries(source: MediaSource, handle: Long, types: Set<FileType>)
             MediaSource.Timeline -> PhotosRepository.timeline(MediaFilter.ALL, settings.showHidden)
                 .filter { it.node.type in types }.map { it.node.toEntry(false) }
             is MediaSource.Album -> {
-                val media = if (source.id < 0) {
+                val media = if (source.system) {
                     PhotosRepository.systemAlbum(source.id, PhotosRepository.timeline(MediaFilter.ALL, settings.showHidden))
                 } else {
                     PhotosRepository.albumEntries(source.id, settings.showHidden).map { it.media }

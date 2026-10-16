@@ -27,6 +27,10 @@ Sources: [vcpkg revision](https://github.com/microsoft/vcpkg/tree/357b1a6f834306
 [MediaInfoLib changes](https://github.com/MediaArea/MediaInfoLib/blob/v26.10/History_DLL.txt), and
 [Talos MediaInfoLib advisories](https://blog.talosintelligence.com/mediaarea-heap-based-buffer-overflow-vulnerabilities/).
 
+When a native dependency changes, update its section in
+`app/src/main/assets/third_party_notices.txt` from the new licence files (`share/<port>/copyright`
+in the vcpkg install tree, or the source archive).
+
 SQLite CVEs require an attacker to run SQL or supply a crafted database. The SDK owns its SQL
 and stores databases privately; this audit did not establish such an attack path. Its update
 also takes the intervening correctness fixes. This is not a claim that every upstream advisory

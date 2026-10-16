@@ -56,6 +56,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.media.NodeImage
+import app.megaglass.android.core.mega.MegaException
 import app.megaglass.android.core.transfers.Purpose
 import app.megaglass.android.core.util.FileType
 import app.megaglass.android.feature.drive.NodeActionsHost
@@ -79,6 +80,7 @@ import me.saket.telephoto.zoomable.ZoomSpec
 import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
 import me.saket.telephoto.zoomable.rememberZoomableImageState
 import me.saket.telephoto.zoomable.rememberZoomableState
+import nz.mega.sdk.MegaError
 import nz.mega.sdk.MegaTransfer
 
 /** Originals up to this size download when the user zooms in. Larger files keep the preview. */
@@ -111,7 +113,7 @@ fun ImmersiveSystemBars(hidden: Boolean) {
 /** Downloads a folder-link node with the account's transfer engine (it shows in Transfers). */
 suspend fun downloadFolderLinkNode(handle: Long) = withContext(Dispatchers.IO) {
     val graph = MegaGlassApp.graph
-    val node = graph.mega.folderApi.getNodeByHandle(handle) ?: return@withContext
+    val node = graph.mega.folderApi.getNodeByHandle(handle) ?: throw MegaException(MegaError.API_ENOENT, "Item not found")
     val authorized = graph.mega.folderApi.authorizeNode(node) ?: node
     val dir = graph.files.downloadDir(graph.settings.current)
     graph.mega.api.startDownload(
@@ -210,7 +212,8 @@ private fun Pager(list: List<MediaEntry>, start: Int, chrome: Boolean, onToggleC
                             storage.ensure {
                                 scope.launch {
                                     catching { downloadFolderLinkNode(entry.handle) }
-                                    graph.messenger.show(graph.context.resources.getQuantityString(R.plurals.download_started, 1, 1))
+                                        .onSuccess { graph.messenger.show(graph.context.resources.getQuantityString(R.plurals.download_started, 1, 1)) }
+                                        .onFailure { graph.messenger.show(it.message ?: graph.context.getString(R.string.error_title)) }
                                 }
                             }
                         })
@@ -241,13 +244,20 @@ private fun ImagePage(entry: MediaEntry, onTap: () -> Unit) {
     val zoomed = (zoom.zoomableState.zoomFraction ?: 0f) > 0.01f
     // The original downloads when the preview is not enough: the user zooms in, or there is no preview.
     val wantOriginal = original == null && !failed && entry.size in 1..MAX_ORIGINAL && (zoomed || !entry.hasPreview)
-    LaunchedEffect(wantOriginal) {
-        if (!wantOriginal) return@LaunchedEffect
+    // Once started, the download continues when the user zooms out. A restart could collide with
+    // the cancelled download, which the SDK releases only later.
+    var fetch by remember(entry.key) { mutableStateOf(false) }
+    LaunchedEffect(wantOriginal) { if (wantOriginal) fetch = true }
+    LaunchedEffect(fetch) {
+        if (!fetch) return@LaunchedEffect
         loading = true
-        catching { PreviewCache.fetch(entry.handle, entry.name, entry.size, entry.folderLink) }
-            .onSuccess { original = it }
-            .onFailure { failed = true }
-        loading = false
+        try {
+            catching { PreviewCache.fetch(entry.handle, entry.name, entry.size, entry.folderLink) }
+                .onSuccess { original = it }
+                .onFailure { failed = true }
+        } finally {
+            loading = false
+        }
     }
     val previewKey = "node:${entry.handle}:true:${entry.folderLink}"
     val thumbKey = "node:${entry.handle}:false:${entry.folderLink}"

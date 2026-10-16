@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -48,6 +49,7 @@ import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.storage.LocalSource
 import app.megaglass.android.core.mega.SessionState
+import app.megaglass.android.core.mega.awaitResult
 import app.megaglass.android.core.storage.localFileName
 import app.megaglass.android.core.transfers.Purpose
 import app.megaglass.android.core.transfers.TransferStatus
@@ -68,6 +70,7 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import nz.mega.sdk.MegaError
 import nz.mega.sdk.MegaShare
 import java.io.File
 import java.nio.ByteBuffer
@@ -76,6 +79,26 @@ import java.nio.charset.CodingErrorAction
 
 /** Files above this size open read-only in a line list, which stays fast for long logs. */
 private const val EDIT_LIMIT = 512L * 1024
+
+/**
+ * Lines for the read-only view. Very long lines (minified code) split into parts of [max]
+ * characters: one Text with millions of characters freezes the screen while it is measured.
+ */
+internal fun displayLines(text: String, max: Int = 4096): List<String> {
+    require(max > 1)
+    val out = ArrayList<String>()
+    for (line in text.lines()) {
+        var start = 0
+        while (line.length - start > max) {
+            // Keep a surrogate pair together.
+            val end = if (Character.isHighSurrogate(line[start + max - 1])) start + max - 1 else start + max
+            out += line.substring(start, end)
+            start = end
+        }
+        out += line.substring(start)
+    }
+    return out
+}
 
 /** The text, and true when the file is valid UTF-8. Files in other encodings open read-only, so that a save cannot damage them. */
 private fun readText(file: File): Pair<String, Boolean> {
@@ -104,6 +127,8 @@ class TextEditorModel : ViewModel() {
     val editorState = TextFieldState()
     var original by mutableStateOf("")
     var saving by mutableStateOf(false)
+    /** Set by Save in the leave dialog: the editor closes when the save succeeds. */
+    var closeAfterSave = false
 }
 
 @Composable
@@ -198,11 +223,18 @@ fun TextEditorScreen(route: TextEditor) {
                     original = content
                     dirty = editorState.text.toString() != content
                     withContext(Dispatchers.IO) { dir.deleteRecursively() }
-                    graph.messenger.show(resources.getString(R.string.editor_saved, savedTitle))
+                    // With file versions off, the server deletes the previous content.
+                    val versioned = catching {
+                        val (code, request) = withContext(Dispatchers.IO) { graph.mega.api.awaitResult { getFileVersionsOption(it) } }
+                        code == MegaError.API_ENOENT || code == MegaError.API_OK && !request.flag
+                    }.getOrDefault(false)
+                    graph.messenger.show(resources.getString(if (versioned) R.string.editor_saved_version else R.string.editor_saved, savedTitle))
+                    if (m.closeAfterSave && !dirty) nav.backFrom(route)
                 }.onFailure { graph.messenger.show(it.message ?: resources.getString(R.string.error_title)) }
             } finally {
                 sessionMonitor.cancel()
                 saving = false
+                m.closeAfterSave = false
             }
         }
     }
@@ -236,7 +268,7 @@ fun TextEditorScreen(route: TextEditor) {
             )
         },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding).imePadding()) {
+        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             val t = text
             val mono = FileType.of(title) == FileType.CODE
             val style = MaterialTheme.typography.bodyMedium.copy(
@@ -254,13 +286,15 @@ fun TextEditorScreen(route: TextEditor) {
                 }
                 canEdit -> BasicTextField(
                     state = editorState,
+                    // The save sends the text of this moment: later edits would be lost when the editor closes after it.
+                    readOnly = saving,
                     textStyle = style,
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     lineLimits = TextFieldLineLimits.MultiLine(),
                     modifier = Modifier.fillMaxSize().padding(16.dp),
                 )
                 else -> {
-                    val lines = remember(t) { t.lines() }
+                    val lines = remember(t) { displayLines(t) }
                     SelectionContainer {
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
                             itemsIndexed(lines) { _, line -> Text(line, style = style) }
@@ -278,10 +312,12 @@ fun TextEditorScreen(route: TextEditor) {
             title = { Text(stringResource(R.string.editor_discard_title)) },
             text = { Text(stringResource(R.string.editor_discard_text)) },
             confirmButton = {
+                // The editor closes only after the save succeeds; on an error it stays open with the edits.
+                // A save that runs already closes the editor when it ends.
                 Button(onClick = {
                     askDiscard = false
+                    m.closeAfterSave = true
                     save()
-                    nav.back()
                 }) { Text(stringResource(R.string.save)) }
             },
             dismissButton = {

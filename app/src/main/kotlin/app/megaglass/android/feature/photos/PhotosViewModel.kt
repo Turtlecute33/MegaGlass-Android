@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.core.util.FileType
+import app.megaglass.android.core.util.whileObserved
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,7 +46,8 @@ class PhotosViewModel : ViewModel() {
 
     init {
         load()
-        viewModelScope.launch { graph.nodes.changes.debounce(1000).collect { load() } }
+        // Each upload changes the nodes: the full timeline loads again only while it shows.
+        viewModelScope.launch { graph.nodes.changes.whileObserved(_state.subscriptionCount).debounce(1000).collect { load() } }
         viewModelScope.launch { graph.mega.sets.debounce(300).collect { loadAlbums() } }
         viewModelScope.launch {
             graph.settings.state.distinctUntilChangedBy { it.showHidden }.drop(1).collect { load() }
@@ -75,7 +77,7 @@ class PhotosViewModel : ViewModel() {
 
     private suspend fun loadAlbums() {
         val all = _state.value.all ?: return
-        val user = catching { PhotosRepository.userAlbums() }.getOrDefault(emptyList())
+        val user = catching { PhotosRepository.userAlbums(graph.settings.current.showHidden) }.getOrDefault(emptyList())
         _state.update { it.copy(albums = PhotosRepository.systemAlbums(all) + user) }
     }
 
@@ -157,21 +159,26 @@ data class AlbumState(
     val media get() = entries.orEmpty().map { it.media }
 }
 
-/** One album: a user album (MegaSet) or a system album computed from the timeline. */
-class AlbumViewModel(private val id: Long, private val systemName: String) : ViewModel() {
+/** One album: a user album (MegaSet) or, when [isSystem], a system album computed from the timeline. */
+class AlbumViewModel(private val id: Long, private val isSystem: Boolean, private val systemName: String) : ViewModel() {
 
     private val graph = MegaGlassApp.graph
-    private val isSystem = id < 0
     private val _state = MutableStateFlow(AlbumState(isSystem = isSystem))
     val state: StateFlow<AlbumState> = _state.asStateFlow()
+    private var loadJob: Job? = null
 
     init {
         load()
         viewModelScope.launch { graph.mega.sets.debounce(300).collect { load() } }
-        viewModelScope.launch { graph.nodes.changes.debounce(1000).collect { load() } }
+        viewModelScope.launch { graph.nodes.changes.whileObserved(_state.subscriptionCount).debounce(1000).collect { load() } }
     }
 
-    fun load() = viewModelScope.launch {
+    fun load() {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch { loadNow() }
+    }
+
+    private suspend fun loadNow() {
         val showHidden = graph.settings.current.showHidden
         if (isSystem) {
             val all = PhotosRepository.timeline(MediaFilter.ALL, showHidden)
@@ -181,7 +188,7 @@ class AlbumViewModel(private val id: Long, private val systemName: String) : Vie
             val name = withContext(Dispatchers.IO) { PhotosRepository.albumName(id) }
             if (name == null) {
                 _state.update { it.copy(deleted = true, entries = emptyList()) }
-                return@launch
+                return
             }
             val entries = catching { PhotosRepository.albumEntries(id, showHidden) }.getOrDefault(emptyList())
             val exported = withContext(Dispatchers.IO) { graph.mega.api.isExportedSet(id) }

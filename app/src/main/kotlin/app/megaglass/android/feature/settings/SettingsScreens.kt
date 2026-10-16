@@ -55,6 +55,7 @@ import app.megaglass.android.core.mega.awaitResult
 import app.megaglass.android.core.storage.AppSettings
 import app.megaglass.android.core.storage.StartPage
 import app.megaglass.android.core.storage.ThemeMode
+import app.megaglass.android.core.transfers.Direction
 import app.megaglass.android.core.util.Format
 import app.megaglass.android.ui.components.ConfirmDialog
 import app.megaglass.android.ui.components.Ic
@@ -307,7 +308,10 @@ fun TransferSettingsScreen() {
     if (chooseLocation) {
         ChoiceDialog(
             title = stringResource(R.string.settings_download_location),
-            options = listOf(stringResource(R.string.settings_location_default), stringResource(R.string.settings_location_choose)),
+            options = listOf(
+                stringResource(R.string.settings_location_default, graph.files.displayPath(graph.files.defaultDownloadDir())),
+                stringResource(R.string.settings_location_choose),
+            ),
             selected = if (settings.downloadDir == null) 0 else 1,
             onSelect = { i ->
                 if (i == 0) updateSettings { it.copy(downloadDir = null) }
@@ -398,9 +402,16 @@ fun StorageSettingsScreen() {
                         when (action) {
                             StorageAction.CACHE -> withContext(Dispatchers.IO) {
                                 graph.images.clear()
+                                val now = graph.transfers.state.value
+                                val cache = graph.context.cacheDir.absolutePath + File.separator
                                 // Files in "open" can be in use by the app that is viewing them; they are copies only.
-                                if (graph.transfers.state.value.isIdle) {
+                                // Only a download into the cache keeps them; uploads (camera uploads) do not.
+                                if (now.internalTransfers == 0 && now.active.none { it.direction == Direction.DOWNLOAD && it.localPath.startsWith(cache) }) {
                                     listOf("open", "preview", "links").forEach { File(graph.context.cacheDir, it).deleteRecursively() }
+                                } else {
+                                    graph.messenger.show(graph.context.getString(R.string.settings_cache_kept))
+                                }
+                                if (now.isIdle) {
                                     // Copies of failed and cancelled uploads: Retry cannot use them after this.
                                     graph.files.cleanUploadTemp(graph.transfers.uploadingPaths(), all = true)
                                 }
@@ -427,24 +438,29 @@ private enum class StorageAction(val title: Int, val text: Int, val confirm: Int
 @Composable
 fun AboutScreen() {
     val graph = MegaGlassApp.graph
-    var licence by remember { mutableStateOf<String?>(null) }
+    // Title and text of the licence on screen.
+    var licence by remember { mutableStateOf<Pair<String, String>?>(null) }
     val context = LocalContext.current
     val resources = LocalResources.current
+    val scope = rememberCoroutineScope()
     val sdkVersion = remember { graph.mega.api.version.orEmpty() }
     val versionRows = listOf(
         SettingRow.Info(R.drawable.ic_info, stringResource(R.string.about_app_version), BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")"),
         SettingRow.Info(R.drawable.ic_code, stringResource(R.string.about_sdk_version), sdkVersion),
     )
+    val noticesTitle = stringResource(R.string.about_notices)
     val licenceRows = listOf(
+        SettingRow.Info(R.drawable.ic_gavel, stringResource(R.string.app_name), stringResource(R.string.about_app_licence)),
         SettingRow.Link(R.drawable.ic_gavel, "MEGA SDK", summary = "BSD 2-Clause") {
-            licence = context.resources.openRawResource(R.raw.license_mega_sdk).bufferedReader().use { it.readText() }
+            licence = "MEGA SDK" to resources.openRawResource(R.raw.license_mega_sdk).bufferedReader().use { it.readText() }
         },
-        SettingRow.Info(R.drawable.ic_gavel, "Material Symbols", "Apache License 2.0 · Google"),
-        SettingRow.Info(R.drawable.ic_gavel, "AndroidX, Jetpack Compose, Media3", "Apache License 2.0 · The Android Open Source Project"),
-        SettingRow.Info(R.drawable.ic_gavel, "Kotlin, kotlinx.coroutines, kotlinx.serialization", "Apache License 2.0 · JetBrains"),
-        SettingRow.Info(R.drawable.ic_gavel, "Coil", "Apache License 2.0 · Coil Contributors"),
-        SettingRow.Info(R.drawable.ic_gavel, "Telephoto", "Apache License 2.0 · Saket Narayan"),
-        SettingRow.Info(R.drawable.ic_gavel, "Crypto++, libsodium, curl, OpenSSL, ICU, SQLite, libuv, MediaInfo", stringResource(R.string.about_native_licences)),
+        // The licences of every library in the APK, native and Android.
+        SettingRow.Link(R.drawable.ic_gavel, noticesTitle, summary = stringResource(R.string.about_notices_summary)) {
+            scope.launch {
+                val text = withContext(Dispatchers.IO) { context.assets.open("third_party_notices.txt").bufferedReader().use { it.readText() } }
+                licence = noticesTitle to text
+            }
+        },
     )
     val versionTitle = stringResource(R.string.about_versions)
     val licenceTitle = stringResource(R.string.about_licences)
@@ -467,10 +483,10 @@ fun AboutScreen() {
         settingsGroup(licenceTitle, licenceRows)
     }
 
-    licence?.takeIf { rememberDialogAllowed() }?.let { text ->
+    licence?.takeIf { rememberDialogAllowed() }?.let { (title, text) ->
         AlertDialog(
             onDismissRequest = { licence = null },
-            title = { Text("MEGA SDK") },
+            title = { Text(title) },
             text = {
                 Text(
                     text,

@@ -173,7 +173,7 @@ fun PhotosScreen() {
             } else {
                 Albums(
                     albums = state.albums,
-                    onOpen = { nav.navigate(Album(it.id)) },
+                    onOpen = { nav.navigate(Album(it.id, it.isSystem)) },
                     onNew = { newAlbum = false },
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp + padding.calculateBottomPadding()),
                 )
@@ -435,13 +435,14 @@ private fun AddToAlbumSheet(
 
 @Composable
 fun AlbumScreen(route: Album) {
-    val systemName = when (route.id) {
-        Album.FAVOURITES -> stringResource(R.string.album_favourites)
-        Album.GIF -> stringResource(R.string.album_gif)
-        Album.RAW -> stringResource(R.string.album_raw)
+    val systemName = when {
+        !route.system -> ""
+        route.id == Album.FAVOURITES -> stringResource(R.string.album_favourites)
+        route.id == Album.GIF -> stringResource(R.string.album_gif)
+        route.id == Album.RAW -> stringResource(R.string.album_raw)
         else -> ""
     }
-    val vm: AlbumViewModel = viewModel(key = "album:${route.id}") { AlbumViewModel(route.id, systemName) }
+    val vm: AlbumViewModel = viewModel(key = "album:${route.system}:${route.id}") { AlbumViewModel(route.id, route.system, systemName) }
     val state by vm.state.collectAsStateWithLifecycle()
     val graph = MegaGlassApp.graph
     val settings by graph.settings.state.collectAsStateWithLifecycle()
@@ -545,7 +546,7 @@ fun AlbumScreen(route: Album) {
                     sections = sections,
                     columns = settings.photosGridColumns.coerceIn(MIN_COLUMNS, MAX_COLUMNS),
                     selection = state.selection,
-                    onClick = { item -> if (selecting) vm.toggle(item.handle) else nav.openMedia(item, MediaSource.Album(route.id)) },
+                    onClick = { item -> if (selecting) vm.toggle(item.handle) else nav.openMedia(item, MediaSource.Album(route.id, route.system)) },
                     onLongClick = { vm.toggle(it.handle) },
                     onToggleDay = null,
                     onColumnsChange = { c -> scope.launch { graph.settings.update { it.copy(photosGridColumns = c) } } },

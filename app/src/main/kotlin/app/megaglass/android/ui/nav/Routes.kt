@@ -13,8 +13,8 @@ sealed interface MediaSource {
     @Serializable data class Folder(val parent: Long) : MediaSource
     /** All photos and videos in Cloud drive (the Photos timeline). */
     @Serializable data object Timeline : MediaSource
-    /** An album: a user album id, or one of the system album ids in [Album]. */
-    @Serializable data class Album(val id: Long) : MediaSource
+    /** An album: a user album id, or with [system] one of the system album ids in [Album]. */
+    @Serializable data class Album(val id: Long, val system: Boolean = false) : MediaSource
     /** Only this item. */
     @Serializable data object Single : MediaSource
     /** A folder inside a public folder link. */
@@ -52,8 +52,11 @@ sealed interface MediaSource {
 @Serializable data class OfflineFolder(val path: String) : Route
 
 // Photos
-/** A user album (MegaSet id) or a system album: [Album.FAVOURITES], [Album.GIF], [Album.RAW]. */
-@Serializable data class Album(val id: Long) : Route {
+/**
+ * A user album (MegaSet id), or with [system] a system album: [Album.FAVOURITES], [Album.GIF],
+ * [Album.RAW]. Set ids use all 64 bits, so about half of them are negative.
+ */
+@Serializable data class Album(val id: Long, val system: Boolean = false) : Route {
     companion object {
         const val FAVOURITES = -2L
         const val GIF = -3L
@@ -97,7 +100,8 @@ sealed interface MediaSource {
 /** Plays [handle]; the other audio files of [source] form the queue. */
 @Serializable data class AudioPlayer(val handle: Long, val source: MediaSource = MediaSource.Single, val localPath: String? = null) : Route
 @Serializable data class PdfViewer(val handle: Long, val localPath: String? = null, val folderLink: Boolean = false) : Route, FullScreen
-@Serializable data class TextEditor(val handle: Long, val localPath: String? = null, val folderLink: Boolean = false) : Route
+/** Full screen: a tap on the current tab would close the editor without asking about unsaved edits. */
+@Serializable data class TextEditor(val handle: Long, val localPath: String? = null, val folderLink: Boolean = false) : Route, FullScreen
 
 /** Handle value for "the root of this section". */
 const val ROOT = -1L

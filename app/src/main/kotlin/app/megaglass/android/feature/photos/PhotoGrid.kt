@@ -296,10 +296,8 @@ fun AlbumTile(album: AlbumInfo, title: String, onClick: () -> Unit, modifier: Mo
 private fun AlbumPlaceholder(album: AlbumInfo) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Ic(
-            when (album.id) {
-                app.megaglass.android.ui.nav.Album.FAVOURITES -> R.drawable.ic_favorite
-                else -> R.drawable.ic_photo_album
-            },
+            if (album.isSystem && album.id == app.megaglass.android.ui.nav.Album.FAVOURITES) R.drawable.ic_favorite
+            else R.drawable.ic_photo_album,
             null,
             Modifier.size(40.dp),
             AppTheme.colors.onSurfaceVariant,
@@ -308,9 +306,10 @@ private fun AlbumPlaceholder(album: AlbumInfo) {
 }
 
 @Composable
-fun albumTitle(album: AlbumInfo): String = when (album.id) {
-    app.megaglass.android.ui.nav.Album.FAVOURITES -> stringResource(R.string.album_favourites)
-    app.megaglass.android.ui.nav.Album.GIF -> stringResource(R.string.album_gif)
-    app.megaglass.android.ui.nav.Album.RAW -> stringResource(R.string.album_raw)
+fun albumTitle(album: AlbumInfo): String = when {
+    !album.isSystem -> album.name
+    album.id == app.megaglass.android.ui.nav.Album.FAVOURITES -> stringResource(R.string.album_favourites)
+    album.id == app.megaglass.android.ui.nav.Album.GIF -> stringResource(R.string.album_gif)
+    album.id == app.megaglass.android.ui.nav.Album.RAW -> stringResource(R.string.album_raw)
     else -> album.name
 }

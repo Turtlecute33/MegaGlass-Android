@@ -62,6 +62,18 @@ fun SortOrder.dateComparator(): Comparator<NodeItem>? = when (this) {
 /** The items in [order], with folders by date for the modification orders (see dateComparator). */
 fun List<NodeItem>.sortedFor(order: SortOrder): List<NodeItem> = order.dateComparator()?.let(::sortedWith) ?: this
 
+/**
+ * Runs a blocking SDK query that takes a cancel token. The SDK holds its lock for the whole
+ * query, so a query that nobody waits for any more (a cancelled coroutine) must stop.
+ */
+suspend fun <T> cancellable(query: (MegaCancelToken) -> T): T = coroutineScope {
+    val token = MegaCancelToken.createInstance()
+    val watcher = launch(start = CoroutineStart.UNDISPATCHED) {
+        try { awaitCancellation() } finally { token.cancel() }
+    }
+    try { query(token) } finally { watcher.cancel() }
+}
+
 /** File and folder operations. Every call runs on Dispatchers.IO. */
 class NodeRepository(private val mega: Mega) {
 
@@ -327,18 +339,6 @@ class NodeRepository(private val mega: Mega) {
             .filter { showHidden || !it.isMarkedSensitive && !api.isSensitiveInherited(it) }
             .map { it.toItem(api) }
             .sortedFor(order)
-    }
-
-    /**
-     * Runs a blocking SDK query that takes a cancel token. The SDK holds its lock for the whole
-     * query, so a query that nobody waits for any more (a cancelled coroutine) must stop.
-     */
-    private suspend fun <T> cancellable(query: (MegaCancelToken) -> T): T = coroutineScope {
-        val token = MegaCancelToken.createInstance()
-        val watcher = launch(start = CoroutineStart.UNDISPATCHED) {
-            try { awaitCancellation() } finally { token.cancel() }
-        }
-        try { query(token) } finally { watcher.cancel() }
     }
 
     /** Runs [action] for every node concurrently; the SDK pipelines the requests. */

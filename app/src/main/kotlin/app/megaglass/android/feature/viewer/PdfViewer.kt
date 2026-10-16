@@ -82,6 +82,13 @@ import kotlin.math.sqrt
 import java.io.File
 
 /**
+ * Width / height of a page for the layout. Extreme shapes are drawn stretched: a page 1000 px
+ * wide and 5 million px tall cannot be measured (layout sizes stop at about 260,000 px).
+ */
+internal fun pdfPageRatio(width: Int, height: Int): Float =
+    (width.coerceAtLeast(1).toFloat() / height.coerceAtLeast(1)).coerceIn(0.05f, 20f)
+
+/**
  * Renders PDF pages with the platform PdfRenderer. One page renders at a time (the renderer is
  * not thread-safe); rendered pages stay in a memory cache sized from the app memory class.
  */
@@ -93,7 +100,7 @@ private class PdfDocument(file: File, context: Context) {
     /** Width / height of each page. */
     private var closed = false
     val ratios: List<Float> = try {
-        (0 until pageCount).map { i -> renderer.openPage(i).use { it.width.coerceAtLeast(1).toFloat() / it.height.coerceAtLeast(1) } }
+        (0 until pageCount).map { i -> renderer.openPage(i).use { pdfPageRatio(it.width, it.height) } }
     } catch (e: Exception) { renderer.close(); fd.close(); throw e }
     private val cache = object : LruCache<Int, Bitmap>(cacheBytes(context)) {
         override fun sizeOf(key: Int, value: Bitmap) = value.allocationByteCount

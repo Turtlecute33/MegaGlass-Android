@@ -29,7 +29,8 @@ ANDROID_SERIAL=emulator-5560 ./gradlew \
   :app:assembleDebug :app:lintDebug :sdk:lintDebug :app:assembleRelease
 ```
 
-Artifacts from this run:
+Artifacts from this run (local builds, not the published release assets; check a release APK by
+its signing certificate, see the README):
 
 | Artifact | SHA-256 |
 |---|---|

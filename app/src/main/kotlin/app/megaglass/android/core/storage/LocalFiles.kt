@@ -48,6 +48,10 @@ class LocalFiles(private val context: Context) {
     fun downloadDir(settings: AppSettings): File =
         (settings.downloadDir?.let(::File)?.takeIf { hasAllFilesAccess } ?: defaultDownloadDir()).apply { mkdirs() }
 
+    /** [dir] as file managers show it: relative to the device storage, for example Download/MegaGlass. */
+    fun displayPath(dir: File): String =
+        dir.absolutePath.removePrefix(Environment.getExternalStorageDirectory().absolutePath + File.separator)
+
     /** Folder for files opened with other apps; cleared from the cache settings. */
     val openDir: File get() = File(context.cacheDir, "open").apply { mkdirs() }
 

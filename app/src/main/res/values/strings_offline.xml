@@ -4,12 +4,12 @@
     <string name="offline_title">Offline</string>
     <string name="offline_size">%1$s on this device</string>
     <string name="offline_empty">Nothing saved offline</string>
-    <string name="offline_empty_hint">Turn on "Available offline" in the menu of a file or folder to keep it on this device.</string>
+    <string name="offline_empty_hint">Turn on \"Available offline\" in the menu of a file or folder to keep it on this device.</string>
     <string name="offline_remove">Remove from device</string>
     <string name="offline_remove_title">Remove from this device?</string>
     <string name="offline_remove_text">%1$s stays in your cloud.</string>
     <string name="remove">Remove</string>
     <string name="save_to_downloads">Save to Downloads</string>
-    <string name="saved_to_downloads">Saved to Downloads</string>
+    <string name="saved_to_folder">Saved to %1$s</string>
     <string name="show_in_cloud">Show in cloud</string>
 </resources>
