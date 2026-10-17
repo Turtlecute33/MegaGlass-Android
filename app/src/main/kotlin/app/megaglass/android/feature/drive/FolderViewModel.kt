@@ -40,6 +40,8 @@ data class FolderState(
     val access: Int = MegaShare.ACCESS_OWNER,
     val isRoot: Boolean = true,
     val sortOrder: SortOrder = FolderSorts.DEFAULT,
+    /** The view of this folder: true for the grid; null when the user did not choose one (the default view). */
+    val grid: Boolean? = null,
     /** The section at the start of [path]; null inside an incoming share. */
     val top: DriveMode? = null,
 ) {
@@ -73,6 +75,9 @@ class FolderViewModel(private val mode: DriveMode, requested: Long) : ViewModel(
                 }
         }
         viewModelScope.launch {
+            graph.folderSorts.gridFlow(handle).collect { grid -> _state.update { it.copy(grid = grid) } }
+        }
+        viewModelScope.launch {
             nodes.changes.filter { it.touches(handle) }.debounce(150).collect { load() }
         }
     }
@@ -80,6 +85,11 @@ class FolderViewModel(private val mode: DriveMode, requested: Long) : ViewModel(
     /** Sorts this folder; the order stays for this folder only. */
     fun sort(order: SortOrder) {
         graph.scope.launch { graph.folderSorts.set(handle, order) }
+    }
+
+    /** Shows this folder as a grid or a list; the view stays for this folder only. */
+    fun setGrid(grid: Boolean) {
+        graph.scope.launch { graph.folderSorts.setGrid(handle, grid) }
     }
 
     fun load(refresh: Boolean = false) {

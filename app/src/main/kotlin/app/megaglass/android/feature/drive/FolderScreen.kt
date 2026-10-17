@@ -127,7 +127,7 @@ private fun DriveFolder(mode: DriveMode, handle: Long) {
                             if (mode != DriveMode.RUBBISH) {
                                 IconAction(R.drawable.ic_search, stringResource(R.string.search), { nav.navigate(Search(vm.rootHandle)) })
                             }
-                            ViewOptionsActions(folderSort = state.sortOrder, onFolderSort = vm::sort)
+                            ViewOptionsActions(folderSort = state.sortOrder, onFolderSort = vm::sort, folderGrid = state.grid, onFolderGrid = vm::setGrid)
                             if (mode == DriveMode.RUBBISH && !state.items.isNullOrEmpty()) {
                                 IconAction(R.drawable.ic_delete_forever, stringResource(R.string.empty_rubbish), { confirmEmpty = true })
                             }
@@ -229,7 +229,7 @@ private fun DriveFolder(mode: DriveMode, handle: Long) {
                 )
                 else -> NodeCollection(
                     items = items,
-                    grid = settings.gridView,
+                    grid = state.grid ?: settings.gridView,
                     selection = state.selection,
                     offline = offline,
                     onClick = { item ->

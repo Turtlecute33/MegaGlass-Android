@@ -54,20 +54,30 @@ private val sortLabels = mapOf(
 )
 
 /**
- * Sort and list/grid buttons for top app bars. A folder passes its own [folderSort]; other lists
- * (Shared items, categories) use one sort order that is saved in the settings.
+ * Sort and list/grid buttons for top app bars. A folder passes its own [folderSort] and
+ * [folderGrid] (null: the default view); other lists (Shared items, categories) use one sort
+ * order and one view that are saved in the settings.
  */
 @Composable
-fun ViewOptionsActions(folderSort: SortOrder? = null, onFolderSort: (SortOrder) -> Unit = {}) {
+fun ViewOptionsActions(
+    folderSort: SortOrder? = null,
+    onFolderSort: (SortOrder) -> Unit = {},
+    folderGrid: Boolean? = null,
+    onFolderGrid: (Boolean) -> Unit = {},
+) {
     val settings = MegaGlassApp.graph.settings
     val s by settings.state.collectAsStateWithLifecycle()
     val current = folderSort ?: s.sortOrder
+    val grid = folderGrid ?: s.gridView
     val scope = rememberCoroutineScope()
     var open by remember { mutableStateOf(false) }
     IconAction(
-        if (s.gridView) R.drawable.ic_view_list else R.drawable.ic_grid_view,
-        stringResource(if (s.gridView) R.string.list_view else R.string.grid_view),
-        { scope.launch { settings.update { it.copy(gridView = !it.gridView) } } },
+        if (grid) R.drawable.ic_view_list else R.drawable.ic_grid_view,
+        stringResource(if (grid) R.string.list_view else R.string.grid_view),
+        {
+            if (folderSort != null) onFolderGrid(!grid)
+            else scope.launch { settings.update { it.copy(gridView = !it.gridView) } }
+        },
     )
     Box {
         IconAction(R.drawable.ic_sort, stringResource(R.string.sort), { open = true })
