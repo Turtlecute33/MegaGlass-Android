@@ -4,10 +4,13 @@ The curl, OpenSSL, libsodium, zlib, and SQLite overlay ports are copied from Mic
 commit `357b1a6f8343064ca982a20771e420fcecfe7efc` (MIT license).
 They select curl 8.23.0, OpenSSL 3.6.5#1, libsodium 1.0.22#1, zlib 1.3.2#2, and SQLite
 3.53.4#2, with the upstream download checksums and patches.
-Only the OpenSSL port is changed: for Android, `unix/portfile.cmake` gives fixed values for the
+Two ports are changed. For Android, the OpenSSL `unix/portfile.cmake` gives fixed values for the
 compiler command, the module and engine folders, and the build date that OpenSSL records in the
 library (the block marked "MegaGlass"). Without them, the library holds paths of the build
-machine, and each build gives a different binary.
+machine, and each build gives a different binary. The curl `portfile.cmake` builds only HTTP(S)
+and WebSockets (the block marked "MegaGlass"): the SDK uses only these, and many curl advisories
+are in the other protocol handlers (FILE, FTP, GOPHER, TFTP and more). The curl configure log
+(`buildtrees/curl/config-*-out.log` in Vendor/vcpkg) shows `Protocols: http https ws wss`.
 The remaining dependencies and the MEGA SDK version stay pinned by the SDK manifest.
 
 The SDK's original baseline selected curl 8.14.1 and OpenSSL 3.5.0, which have subsequently
