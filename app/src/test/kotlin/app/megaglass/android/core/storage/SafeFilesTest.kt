@@ -156,6 +156,23 @@ class SafeFilesTest {
         assertTrue(active.exists())
     }
 
+    @Test fun imageCacheTrimEndsAtEightyPercentOldestFirst() {
+        val now = System.currentTimeMillis()
+        val root = temp.newFolder("cache")
+        val old = (0 until 5).map { i ->
+            File(root, "old$i.jpg").apply { writeBytes(ByteArray(20)); setLastModified(now - 600_000 - i * 10_000L) }
+        }
+        val recent = File(root, "recent.jpg").apply { writeBytes(ByteArray(20)) }
+        val active = File(root, "active.part").apply { writeBytes(ByteArray(20)); setLastModified(now - 900_000) }
+        trimImageCache(root, 100, now)
+        val left = root.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        assertTrue("left $left bytes", left <= 80)
+        assertTrue(recent.exists())
+        assertTrue(active.exists())
+        // The oldest copies go first.
+        assertEquals(listOf(true, true, false, false, false), old.map { it.exists() })
+    }
+
     @Test fun uploadCleanupCannotDeleteUserFilesOutsideItsPrivateRoots() {
         val root = temp.newFolder("uploads")
         val original = temp.newFile("original.jpg").apply { writeText("keep") }

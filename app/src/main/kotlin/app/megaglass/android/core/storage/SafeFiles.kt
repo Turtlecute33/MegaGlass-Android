@@ -132,15 +132,19 @@ fun replaceFile(source: File, target: File) {
 fun privateCacheKey(value: String): String = java.security.MessageDigest.getInstance("SHA-256")
     .digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
 
-/** Trim copies that can be fetched again, protecting recent readers and active SDK writes. */
+/**
+ * Trim copies that can be fetched again, protecting recent readers and active SDK writes.
+ * It reads the size and time of each file once, and over [budget] it trims to 80 % of it, so
+ * that the next trim does not start after only a few writes (MEGAGLASS-PERF-008).
+ */
 fun trimImageCache(root: File, budget: Long, now: Long = System.currentTimeMillis()) {
-    val files = root.walkTopDown().filter { it.isFile }.toList()
-    var bytes = files.sumOf { it.length() }
+    val files = root.walkTopDown().filter { it.isFile }.map { Triple(it, it.length(), it.lastModified()) }.toList()
+    var bytes = files.sumOf { it.second }
     if (bytes <= budget) return
-    for (file in files.filter { !it.name.endsWith(".part") && it.lastModified() < now - 120_000 }.sortedBy { it.lastModified() }) {
-        val size = file.length()
+    val target = budget * 8 / 10
+    for ((file, size, _) in files.filter { !it.first.name.endsWith(".part") && it.third < now - 120_000 }.sortedBy { it.third }) {
         if (file.delete()) bytes -= size
-        if (bytes <= budget) break
+        if (bytes <= target) break
     }
 }
 
