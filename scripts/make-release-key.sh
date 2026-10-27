@@ -47,9 +47,10 @@ trap 'exit 130' INT TERM HUP
 
 export MG_STORE_PASS="$(openssl rand -base64 32)"
 export MG_KEY_PASS="$MG_STORE_PASS"   # PKCS12 keystores use one password for store and key.
-security add-generic-password -s "$STORE_ITEM" -a "$USER" -w "$MG_STORE_PASS"
+# The passwords go to `security` on stdin, not in its arguments, so `ps` cannot show them.
+print -r -- "add-generic-password -s \"$STORE_ITEM\" -a \"$USER\" -w \"$MG_STORE_PASS\"" | security -i
 created+=("$STORE_ITEM")
-security add-generic-password -s "$KEY_ITEM" -a "$USER" -w "$MG_KEY_PASS"
+print -r -- "add-generic-password -s \"$KEY_ITEM\" -a \"$USER\" -w \"$MG_KEY_PASS\"" | security -i
 created+=("$KEY_ITEM")
 
 keytool -genkeypair -v -storetype PKCS12 -keystore "$KEYSTORE" -alias "$ALIAS" \
