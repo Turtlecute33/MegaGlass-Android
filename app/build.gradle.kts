@@ -45,6 +45,12 @@ android {
         }
     }
 
+    // The dependency list block in the APK signing block is for Google Play only, and the app is not there.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
@@ -141,8 +147,6 @@ dependencies {
     implementation(libs.compose.material3.navigation.suite)
     implementation(libs.compose.material3.adaptive)
     implementation(libs.compose.material3.adaptive.layout)
-    implementation(libs.compose.ui.tooling.preview)
-    debugImplementation(libs.compose.ui.tooling)
 
     implementation(libs.navigation3.runtime)
     implementation(libs.navigation3.ui)
