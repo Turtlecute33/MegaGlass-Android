@@ -110,6 +110,13 @@
     <string name="link_removed">Link removed</string>
     <string name="hidden_done">Hidden. Show hidden items in Settings.</string>
     <string name="remove_label">Remove label</string>
+    <string name="label_red">Red label</string>
+    <string name="label_orange">Orange label</string>
+    <string name="label_yellow">Yellow label</string>
+    <string name="label_green">Green label</string>
+    <string name="label_blue">Blue label</string>
+    <string name="label_purple">Purple label</string>
+    <string name="label_grey">Grey label</string>
     <string name="creating_link">Creating link…</string>
     <string name="decryption_key">Decryption key</string>
     <string name="copy_key">Copy key</string>

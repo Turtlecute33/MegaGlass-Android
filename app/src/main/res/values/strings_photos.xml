@@ -4,6 +4,7 @@
     <string name="photos_albums">Albums</string>
     <string name="photos_today">Today</string>
     <string name="photos_yesterday">Yesterday</string>
+    <string name="photos_select_day">Select all items of %1$s</string>
     <string name="photos_filter_all">All</string>
     <string name="photos_filter_photos">Photos</string>
     <string name="photos_filter_videos">Videos</string>

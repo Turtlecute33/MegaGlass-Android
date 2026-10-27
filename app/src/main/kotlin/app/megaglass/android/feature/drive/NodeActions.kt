@@ -6,7 +6,6 @@ import android.content.Context
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -49,6 +49,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,6 +69,7 @@ import app.megaglass.android.ui.components.TextInputDialog
 import app.megaglass.android.ui.components.copySensitive
 import app.megaglass.android.ui.components.invalidNameError
 import app.megaglass.android.ui.components.labelColor
+import app.megaglass.android.ui.components.labelName
 import app.megaglass.android.ui.components.rememberDialogAllowed
 import app.megaglass.android.ui.components.rememberStorageAccess
 import app.megaglass.android.ui.components.subtitle
@@ -421,11 +425,16 @@ private fun LabelRow(current: Int, onPick: (Int) -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         labels.forEach { l ->
+            val name = labelName(l)
             Box(
-                Modifier.size(32.dp).clip(CircleShape).background(labelColor(l)).clickable { onPick(if (current == l) 0 else l) },
+                Modifier.size(32.dp).clip(CircleShape).background(labelColor(l))
+                    .selectable(selected = current == l, role = Role.RadioButton, onClick = { onPick(if (current == l) 0 else l) })
+                    .semantics { contentDescription = name },
                 contentAlignment = Alignment.Center,
             ) {
-                if (current == l) Ic(R.drawable.ic_check, stringResource(R.string.remove_label), Modifier.size(18.dp), Color.White)
+                // A white check is hard to see on the light colours.
+                val check = if (l == MegaNode.NODE_LBL_YELLOW || l == MegaNode.NODE_LBL_ORANGE) Color.Black else Color.White
+                if (current == l) Ic(R.drawable.ic_check, stringResource(R.string.remove_label), Modifier.size(18.dp), check)
             }
         }
     }

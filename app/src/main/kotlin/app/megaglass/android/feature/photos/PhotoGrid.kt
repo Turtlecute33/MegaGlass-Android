@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +48,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.megaglass.android.R
 import app.megaglass.android.core.media.NodeImage
@@ -127,6 +132,7 @@ fun MediaCell(
     Box(
         modifier
             .aspectRatio(1f)
+            .semantics { if (selecting) this.selected = selected }
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         Box(Modifier.fillMaxSize().scale(scale).clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
@@ -181,13 +187,16 @@ fun DayHeader(section: DaySection, selecting: Boolean, allSelected: Boolean, onT
             Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(dayLabel(section.day), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            val label = dayLabel(section.day)
+            Text(label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
             if (selecting) {
+                val description = stringResource(R.string.photos_select_day, label)
                 Box(
                     Modifier.size(24.dp).clip(CircleShape)
                         .background(if (allSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
                         .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                        .combinedClickable(onClick = onToggle),
+                        .toggleable(value = allSelected, role = Role.Checkbox, onValueChange = { onToggle() })
+                        .semantics { contentDescription = description },
                     contentAlignment = Alignment.Center,
                 ) {
                     if (allSelected) Ic(R.drawable.ic_check, null, Modifier.size(16.dp), MaterialTheme.colorScheme.onPrimary)

@@ -54,6 +54,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -115,6 +118,19 @@ fun labelColor(label: Int): Color = when (label) {
     MegaNode.NODE_LBL_PURPLE -> Color(0xFF8E24AA)
     MegaNode.NODE_LBL_GREY -> Color(0xFF757575)
     else -> Color.Transparent
+}
+
+/** Name of a colour label, for TalkBack: the colour alone does not tell it. */
+@Composable
+fun labelName(label: Int): String = when (label) {
+    MegaNode.NODE_LBL_RED -> stringResource(R.string.label_red)
+    MegaNode.NODE_LBL_ORANGE -> stringResource(R.string.label_orange)
+    MegaNode.NODE_LBL_YELLOW -> stringResource(R.string.label_yellow)
+    MegaNode.NODE_LBL_GREEN -> stringResource(R.string.label_green)
+    MegaNode.NODE_LBL_BLUE -> stringResource(R.string.label_blue)
+    MegaNode.NODE_LBL_PURPLE -> stringResource(R.string.label_purple)
+    MegaNode.NODE_LBL_GREY -> stringResource(R.string.label_grey)
+    else -> ""
 }
 
 /** A tinted square with the file type glyph. */
@@ -183,7 +199,10 @@ fun NodeItem.subtitle(): String = if (isFolder) {
 @Composable
 fun NodeBadges(item: NodeItem, offline: Boolean, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (item.label != 0) Box(Modifier.size(10.dp).clip(CircleShape).background(labelColor(item.label)))
+        if (item.label != 0) {
+            val name = labelName(item.label)
+            Box(Modifier.size(10.dp).clip(CircleShape).background(labelColor(item.label)).semantics { contentDescription = name })
+        }
         if (item.isFavourite) Ic(R.drawable.ic_star_fill, stringResource(R.string.favourite), Modifier.size(16.dp), AppTheme.extra.warning)
         if (item.isExported) Ic(R.drawable.ic_link, stringResource(R.string.link), Modifier.size(16.dp), MaterialTheme.colorScheme.primary)
         if (offline) Ic(R.drawable.ic_offline_pin_fill, stringResource(R.string.offline), Modifier.size(16.dp), AppTheme.extra.success)
@@ -254,6 +273,7 @@ fun NodeTile(
         modifier = modifier
             .scale(scale)
             .clip(MaterialTheme.shapes.large)
+            .semantics { if (selectionMode) this.selected = selected }
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .graphicsLayer { alpha = if (item.isSensitive) 0.55f else 1f },
     ) {
