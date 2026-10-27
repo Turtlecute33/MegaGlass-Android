@@ -76,7 +76,11 @@ android {
         }
     }
 
-    lint { abortOnError = true }
+    lint {
+        abortOnError = true
+        // The app ships only arm64-v8a (libmega.so); Chrome OS x86 devices are not a target.
+        disable += "ChromeOsAbiSupport"
+    }
 }
 
 androidComponents {
