@@ -217,11 +217,6 @@ class NodeActionsState internal constructor(
                 onDone()
             }
             NodeAction.GET_LINK -> linkFor = items.first()
-            NodeAction.REMOVE_LINK -> launch {
-                nodes.disableLink(handles)
-                messenger.show(str(R.string.link_removed))
-                onDone()
-            }
             NodeAction.SHARE_FOLDER -> shareFolder = items.first()
             NodeAction.SEND -> launch {
                 graph.opener.share(items.filter { !it.isFolder }.map { Triple(it.handle, it.name, it.size) })
@@ -239,8 +234,10 @@ class NodeActionsState internal constructor(
                 if (action == NodeAction.HIDE) messenger.show(str(R.string.hidden_done))
                 onDone()
             }
-            NodeAction.RUBBISH -> moveToRubbish(items)
-            NodeAction.LEAVE_SHARE, NodeAction.DELETE -> confirming = action to items
+            // Items of an incoming share go for all its members, with no undo (MEGAGLASS-UX-012).
+            NodeAction.RUBBISH -> if (items.any { it.access < MegaShare.ACCESS_OWNER }) confirming = action to items else moveToRubbish(items)
+            // A removed link stops working for everyone who has it.
+            NodeAction.LEAVE_SHARE, NodeAction.DELETE, NodeAction.REMOVE_LINK -> confirming = action to items
             NodeAction.RESTORE -> launch {
                 nodes.restore(handles)
                 messenger.show(appContext.resources.getQuantityString(R.plurals.restored, items.size, items.size))
@@ -275,6 +272,12 @@ class NodeActionsState internal constructor(
             NodeAction.DELETE -> nodes.deleteFromRubbish(handles)
             // Removing the root of an incoming share leaves the share.
             NodeAction.LEAVE_SHARE -> nodes.deletePermanently(handles)
+            NodeAction.REMOVE_LINK -> {
+                nodes.disableLink(handles)
+                messenger.show(str(R.string.link_removed))
+            }
+            // moveToRubbish calls onDone itself.
+            NodeAction.RUBBISH -> { moveToRubbish(items); return@launch }
             else -> Unit
         }
         onDone()
@@ -346,12 +349,21 @@ fun NodeActionsHost(state: NodeActionsState) {
         )
     }
     state.confirming?.let { (action, items) ->
-        val leave = action == NodeAction.LEAVE_SHARE
+        val n = items.size
         ConfirmDialog(
-            title = if (leave) stringResource(R.string.leave_share_title)
-            else pluralStringResource(R.plurals.delete_forever_title, items.size, items.size),
-            text = stringResource(if (leave) R.string.leave_share_text else R.string.delete_forever_text),
-            confirmLabel = stringResource(if (leave) R.string.action_leave_share else R.string.action_delete_forever),
+            title = when (action) {
+                NodeAction.LEAVE_SHARE -> stringResource(R.string.leave_share_title)
+                NodeAction.RUBBISH -> pluralStringResource(R.plurals.shared_rubbish_title, n, n)
+                NodeAction.REMOVE_LINK -> pluralStringResource(R.plurals.remove_link_title, n, n)
+                else -> pluralStringResource(R.plurals.delete_forever_title, n, n)
+            },
+            text = when (action) {
+                NodeAction.LEAVE_SHARE -> stringResource(R.string.leave_share_text)
+                NodeAction.RUBBISH -> stringResource(R.string.shared_rubbish_text)
+                NodeAction.REMOVE_LINK -> pluralStringResource(R.plurals.remove_link_text, n)
+                else -> stringResource(R.string.delete_forever_text)
+            },
+            confirmLabel = stringResource(action.label),
             destructive = true,
             icon = action.icon,
             onConfirm = { state.confirmed(action, items) },

@@ -105,6 +105,19 @@
     <string name="delete_forever_text">You cannot undo this.</string>
     <string name="leave_share_title">Leave this share?</string>
     <string name="leave_share_text">You lose access to this folder. The owner can share it with you again.</string>
+    <plurals name="shared_rubbish_title">
+        <item quantity="one">Move %d shared item to the rubbish bin?</item>
+        <item quantity="other">Move %d shared items to the rubbish bin?</item>
+    </plurals>
+    <string name="shared_rubbish_text">Other people in this shared folder lose access to these items. You cannot undo this here.</string>
+    <plurals name="remove_link_title">
+        <item quantity="one">Remove the link of %d item?</item>
+        <item quantity="other">Remove the links of %d items?</item>
+    </plurals>
+    <plurals name="remove_link_text">
+        <item quantity="one">The link stops working for everyone who has it.</item>
+        <item quantity="other">The links stop working for everyone who has them.</item>
+    </plurals>
     <string name="offline_started">Saving for offline use</string>
     <string name="offline_removed">Removed from this device</string>
     <string name="link_removed">Link removed</string>
