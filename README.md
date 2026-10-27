@@ -54,6 +54,11 @@ Compose with Material 3 Expressive for the interface. Chat and calls are not inc
 ## Privacy
 
 - No ads, no third-party analytics, no Google Play Services. The app connects only to MEGA.
+- At each login, the MEGA SDK sends a device ID. By default, this is a hash of the Android ID,
+  which stays the same after a reinstall. MegaGlass gives the SDK a random ID in its place. The
+  ID stays until you log out, and the next login gets a new ID, so Device Centre shows each login
+  as a new device. After an update from 0.2.3 or earlier, the current session also gets a new ID
+  once: its syncs and camera uploads can show under a new device.
 - The MEGA SDK sends some diagnostic events to MEGA, for example errors and timings. The SDK has
   no setting to turn them off.
 - Files are encrypted on the device before upload.
@@ -98,6 +103,8 @@ records the commit that it was built from. Commit (and tag) the version change f
 - `patches/mega-sdk-android-request-size.patch`: the SDK limits each transfer request to 2 MB on
   Android. The patch scales the limit with device RAM (up to 16 MB, the desktop value). This
   decreases the overhead of each request on fast connections.
+- `patches/mega-sdk-device-id.patch`: adds `MegaApi::setStatsId`, so that the app can give the
+  SDK a random device ID. The SDK does not read the Android ID.
 - `patches/mega-sdk-java-factory-ownership.patch`: marks allocating JNI factories and album
   getters as owners of their native results, so that Java can release them safely.
 - `scripts/ports/`: pinned native dependency updates, with upstream provenance and licenses.

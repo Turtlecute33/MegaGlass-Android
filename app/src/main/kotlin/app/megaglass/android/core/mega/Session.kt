@@ -124,6 +124,7 @@ class Session(
                 catching {
                     _state.value = SessionState.Loading(SessionState.Stage.LOGIN, null)
                     try {
+                        mega.useDeviceId()
                         val sent = withTimeoutOrNull(LOGIN_TIMEOUT_MS) { api.await { fastLogin(saved, it) } }
                         if (sent == null) throw MegaException(MegaError.API_EAGAIN, res.getString(R.string.auth_timed_out))
                         fetchNodes()
@@ -153,6 +154,7 @@ class Session(
             _notice.value = null
             _state.value = SessionState.Loading(SessionState.Stage.LOGIN, null)
             try {
+                mega.useDeviceId()
                 val sent = withTimeoutOrNull(LOGIN_TIMEOUT_MS) {
                     if (pin == null) {
                         api.await { login(email.trim(), password, it) }

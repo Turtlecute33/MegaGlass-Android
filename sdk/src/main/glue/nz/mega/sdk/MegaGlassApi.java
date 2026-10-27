@@ -18,6 +18,14 @@ public class MegaGlassApi extends MegaApiJava {
         megaApi.setMaxConnections(direction, connections);
     }
 
+    /**
+     * Sets the device ID that the SDK sends at login (patches/mega-sdk-device-id.patch). The SDK
+     * does not read ANDROID_ID, so call this before each login or session resume.
+     */
+    public void setStatsId(String id) {
+        megaApi.setStatsId(id);
+    }
+
     /** Receives each sync that the SDK adds or loads. */
     public interface SyncAddedListener {
         void onSyncAdded(MegaSync sync);

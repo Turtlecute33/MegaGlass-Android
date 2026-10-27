@@ -35,6 +35,7 @@ import nz.mega.sdk.MegaUser
 import nz.mega.sdk.MegaUserAlert
 import java.io.File
 import java.lang.ref.Reference
+import java.util.UUID
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -301,6 +302,18 @@ class Mega(context: Context) {
     }
 
     /**
+     * Gives the SDK a random device ID in place of a hash of ANDROID_ID (MEGAGLASS-PRIV-001). The
+     * file is in [baseDir], so [clearCaches] deletes it at logout and the next login gets a new ID.
+     * Call before each login or session resume, off the main thread.
+     */
+    fun useDeviceId() {
+        val file = File(baseDir, DEVICE_ID_FILE)
+        val id = catching { file.readText().trim() }.getOrNull()?.takeIf { it.isNotEmpty() }
+            ?: UUID.randomUUID().toString().also { id -> catching { file.writeText(id) } }
+        api.setStatsId(id)
+    }
+
+    /**
      * Removes the SDK caches after a logout. A logout on this device only keeps the node cache,
      * which has the names of all files, and the caches of the public folders that were open.
      */
@@ -329,6 +342,7 @@ class Mega(context: Context) {
         const val APP_KEY = ""
         val INVALID_HANDLE: Long = MegaApiJava.INVALID_HANDLE
         private const val LOGOUT_TIMEOUT_MS = 15_000L
+        private const val DEVICE_ID_FILE = "device-id"
     }
 }
 

@@ -1,0 +1,84 @@
+diff --git a/include/megaapi.h b/include/megaapi.h
+index 9222d02..34d2bf1 100644
+--- a/include/megaapi.h
++++ b/include/megaapi.h
+@@ -17519,6 +17519,17 @@ class MegaApi
+          */
+         const char* getDeviceId() const;
+ 
++        /**
++         * @brief Sets the id of this device
++         *
++         * MegaGlass: the SDK sends a hash of this value as the device id. Call it before each
++         * login or session resume. On Android, the SDK does not read ANDROID_ID, so without
++         * this value the device id is empty.
++         *
++         * @param id The id of this device, for example a random UUID
++         */
++        void setStatsId(const char* id);
++
+         /**
+          * @brief Returns the name previously set for a device
+          *
+diff --git a/include/megaapi_impl.h b/include/megaapi_impl.h
+index ac4491b..bf2e8a5 100644
+--- a/include/megaapi_impl.h
++++ b/include/megaapi_impl.h
+@@ -4606,6 +4606,7 @@ class MegaApiImpl : public MegaApp
+         void getRubbishBinAutopurgePeriod(MegaRequestListener *listener = NULL);
+         void setRubbishBinAutopurgePeriod(int days, MegaRequestListener *listener = NULL);
+         const char* getDeviceId() const;
++        void setStatsId(const char* id);
+         void getDeviceName(const char* deviceId, MegaRequestListener *listener = NULL);
+         void setDeviceName(const char* deviceId, const char* deviceName, MegaRequestListener *listener = NULL);
+         void getDriveName(const char *pathToDrive, MegaRequestListener *listener = NULL);
+diff --git a/src/megaapi.cpp b/src/megaapi.cpp
+index 6c840bb..8b036c7 100644
+--- a/src/megaapi.cpp
++++ b/src/megaapi.cpp
+@@ -3520,6 +3520,11 @@ const char* MegaApi::getDeviceId() const
+     return pImpl->getDeviceId();
+ }
+ 
++void MegaApi::setStatsId(const char* id)
++{
++    pImpl->setStatsId(id);
++}
++
+ void MegaApi::getDeviceName(const char *deviceId, MegaRequestListener *listener)
+ {
+     pImpl->getDeviceName(deviceId, listener);
+diff --git a/src/megaapi_impl.cpp b/src/megaapi_impl.cpp
+index baebdb9..4a7b77e 100644
+--- a/src/megaapi_impl.cpp
++++ b/src/megaapi_impl.cpp
+@@ -9156,6 +9156,12 @@ const char* MegaApiImpl::getDeviceId() const
+     return MegaApi::strdup(client->getDeviceidHash().c_str());
+ }
+ 
++void MegaApiImpl::setStatsId(const char* id)
++{
++    SdkMutexGuard g(sdkMutex);
++    client->statsid = id ? id : "";
++}
++
+ void MegaApiImpl::getDeviceName(const char* deviceId, MegaRequestListener *listener)
+ {
+     MegaRequestPrivate *request = new MegaRequestPrivate(MegaRequest::TYPE_GET_ATTR_USER, listener);
+diff --git a/src/megaclient.cpp b/src/megaclient.cpp
+index 30be643..6c359f3 100644
+--- a/src/megaclient.cpp
++++ b/src/megaclient.cpp
+@@ -1775,10 +1775,12 @@ std::string MegaClient::getDeviceidHash()
+ {
+     string deviceIdHash;
+ 
++#ifndef __ANDROID__ // MegaGlass: no ANDROID_ID. The app sets a random id with MegaApi::setStatsId.
+     if (MegaClient::statsid.empty())
+     {
+         fsaccess->statsid(&statsid);
+     }
++#endif
+ 
+     string id = MegaClient::statsid;
+     DEBUG_TEST_HOOK_DEVICE_ID(id);
