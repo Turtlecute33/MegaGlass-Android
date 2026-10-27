@@ -225,6 +225,9 @@ fun TextEditorScreen(route: TextEditor) {
                         if (item.status != TransferStatus.COMPLETED) throw java.io.IOException(item.error ?: "Save failed")
                         if (item.nodeHandle != nz.mega.sdk.MegaApiJava.INVALID_HANDLE) m.handle = item.nodeHandle
                     }
+                    // The new version stays available offline (MEGAGLASS-UX-001). On a failure the old copy stays, marked old.
+                    val newHandle = m.handle
+                    graph.scope.launch { catching { graph.offline.replaceVersion(savedHandle, newHandle) } }
                     original = content
                     dirty = editorState.text.toString() != content
                     withContext(Dispatchers.IO) { dir.deleteRecursively() }

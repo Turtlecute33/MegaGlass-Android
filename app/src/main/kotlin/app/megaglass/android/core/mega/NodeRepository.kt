@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import app.megaglass.android.core.storage.SortOrder
 import app.megaglass.android.core.storage.availableName
 import app.megaglass.android.core.storage.displayName
+import app.megaglass.android.core.storage.isOutdatedCopy
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -244,6 +245,12 @@ class NodeRepository(private val mega: Mega) {
         // A previous version is a child of the version after it.
         while (true) node = api.getParentNode(node)?.takeIf { it.isFile } ?: break
         api.getVersions(node).map { it.toItem(api, withCounts = false) }
+    }
+
+    /** The [handles] of offline copies that are outdated (see isOutdatedCopy). None while the node tree is not loaded. */
+    suspend fun outdated(handles: Collection<Long>): Set<Long> = io {
+        if (api.rootNode == null) return@io emptySet()
+        handles.filterTo(HashSet()) { h -> isOutdatedCopy(api.getNodeByHandle(h)?.let { api.getParentNode(it)?.isFile == true }) }
     }
 
     suspend fun versionCount(handle: Long): Int = io {

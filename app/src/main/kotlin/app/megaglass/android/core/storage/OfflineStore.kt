@@ -55,6 +55,8 @@ class OfflineStore(
     private val index = OfflineFiles(root)
     private val operations = Mutex()
     private val pending = mutableMapOf<Long, String>()
+    /** Download ID of a new version → the offline handle that its copy replaces (MEGAGLASS-UX-001). */
+    private val replacing = mutableMapOf<String, Long>()
 
     private val _handles = MutableStateFlow<Set<Long>>(emptySet())
     /** Handles of the nodes that are available offline (complete downloads only). */
@@ -75,12 +77,16 @@ class OfflineStore(
                 if (item.nodeHandle != handle) return@collect
                 operations.withLock {
                     if (pending[handle] == id) pending.remove(handle)
+                    // A failed download keeps the copy that it was to replace.
+                    val replaced = replacing.remove(id)
                     // A download that the SDK resumed after a restart is not in [pending]. The
                     // staging key shows that it was not removed since it started.
                     val key = MegaApiJava.handleToBase64(handle)
                     if (item.status == TransferStatus.COMPLETED && index.stagedKey(id) == key) {
-                        catching { index.commit(id, key) }
-                            .onFailure { transfers.onError?.invoke(it.message ?: "Cannot save offline copy") }
+                        catching {
+                            index.commit(id, key)
+                            replaced?.let { removeCopy(it) }
+                        }.onFailure { transfers.onError?.invoke(it.message ?: "Cannot save offline copy") }
                     }
                     index.discard(id)
                     refresh()
@@ -136,8 +142,8 @@ class OfflineStore(
         refresh()
     }
 
-    /** Call with [operations] held. */
-    private suspend fun start(handle: Long) {
+    /** Call with [operations] held. Returns the download ID. */
+    private suspend fun start(handle: Long): String {
         val id = UUID.randomUUID().toString()
         pending[handle] = id
         try {
@@ -147,6 +153,7 @@ class OfflineStore(
             index.discard(id)
             throw e
         }
+        return id
     }
 
     fun dirFor(handle: Long): File = File(root, MegaApiJava.handleToBase64(handle))
@@ -163,20 +170,34 @@ class OfflineStore(
         }
     }
 
+    /**
+     * A save made [new], the new version of [old]. When [old] is offline, [new] downloads and
+     * its copy replaces the copy of [old] when it is complete (MEGAGLASS-UX-001).
+     */
+    suspend fun replaceVersion(old: Long, new: Long) = withContext(Dispatchers.IO) {
+        operations.withLock {
+            val h = versionToKeepOffline(old, new, _handles.value) ?: return@withLock
+            if (h !in pending) replacing[start(h)] = old
+        }
+    }
+
     suspend fun remove(handles: Collection<Long>) = withContext(Dispatchers.IO) {
         operations.withLock {
-            handles.forEach { h ->
-                // Invalidate the completion first: a late SDK finish cannot re-create the copy.
-                // This includes downloads that the SDK resumed after a restart.
-                val key = MegaApiJava.handleToBase64(h)
-                pending.remove(h)
-                transfers.cancelPurposePrefix("${Purpose.OFFLINE}:$h:")
-                index.stagedIds().filter { index.stagedKey(it) == key }.forEach(index::discard)
-                index.removePrevious(key)
-                if (!dirFor(h).deleteRecursively()) throw java.io.IOException("Cannot remove offline copy")
-            }
+            handles.forEach(::removeCopy)
             refresh()
         }
+    }
+
+    /** Call with [operations] held. */
+    private fun removeCopy(h: Long) {
+        // Invalidate the completion first: a late SDK finish cannot re-create the copy.
+        // This includes downloads that the SDK resumed after a restart.
+        val key = MegaApiJava.handleToBase64(h)
+        pending.remove(h)
+        transfers.cancelPurposePrefix("${Purpose.OFFLINE}:$h:")
+        index.stagedIds().filter { index.stagedKey(it) == key }.forEach(index::discard)
+        index.removePrevious(key)
+        if (!dirFor(h).deleteRecursively()) throw java.io.IOException("Cannot remove offline copy")
     }
 
     /** Top-level offline items, or the content of [folder] inside an offline folder. */
@@ -215,6 +236,7 @@ class OfflineStore(
         operations.withLock {
             transfers.cancelPurposePrefix("${Purpose.OFFLINE}:")
             pending.clear()
+            replacing.clear()
             if (!root.deleteRecursively()) throw java.io.IOException("Cannot clear offline copies")
             root.ensureDirectory()
             refresh()
@@ -225,3 +247,16 @@ class OfflineStore(
         _handles.value = index.keys().map { MegaApiJava.base64ToHandle(it) }.toSet()
     }
 }
+
+/**
+ * The new version to keep offline after a save made [new] from [old]: only when [old] is
+ * offline and the save made a new node. Null when nothing changes (MEGAGLASS-UX-001).
+ */
+internal fun versionToKeepOffline(old: Long, new: Long, offline: Set<Long>): Long? =
+    new.takeIf { old in offline && new != old && new != MegaApiJava.INVALID_HANDLE && new !in offline }
+
+/**
+ * An offline copy is outdated when its node is gone ([parentIsFile] is null) or is an earlier
+ * version: MEGA keeps an earlier version as a child of the version after it.
+ */
+fun isOutdatedCopy(parentIsFile: Boolean?): Boolean = parentIsFile != false

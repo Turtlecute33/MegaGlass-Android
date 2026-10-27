@@ -54,6 +54,10 @@ import app.megaglass.android.ui.nav.NodeInfo
 import app.megaglass.android.ui.nav.OfflineFolder
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import nz.mega.sdk.MegaApiJava
@@ -76,6 +80,13 @@ fun OfflineScreen(path: String?) {
     LaunchedEffect(handles, reload) {
         entries = graph.offline.list(folder)
         if (folder == null) total = withContext(Dispatchers.IO) { graph.offline.sizeOnDisk() }
+    }
+    // Top-level copies whose node is gone or is an earlier version (MEGAGLASS-UX-001).
+    var outdated by remember { mutableStateOf(emptySet<Long>()) }
+    LaunchedEffect(entries) {
+        val top = entries?.takeIf { folder == null }?.mapTo(HashSet()) { it.handle } ?: return@LaunchedEffect
+        graph.nodes.changes.filter { c -> c.all || c.handles.any(top::contains) }.map { }.onStart { emit(Unit) }
+            .collectLatest { outdated = graph.nodes.outdated(top) }
     }
 
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -103,6 +114,7 @@ fun OfflineScreen(path: String?) {
                     items(list, key = { it.file.absolutePath }) { entry ->
                         OfflineRow(
                             entry = entry,
+                            outdated = entry.handle in outdated,
                             onClick = {
                                 if (!entry.verified) scope.launch {
                                     catching { graph.offline.makeAvailable(listOf(entry.handle)) }
@@ -157,6 +169,7 @@ fun OfflineScreen(path: String?) {
 @Composable
 private fun OfflineRow(
     entry: OfflineEntry,
+    outdated: Boolean,
     onClick: () -> Unit,
     onOpenWith: () -> Unit,
     onSend: () -> Unit,
@@ -181,8 +194,17 @@ private fun OfflineRow(
                 FileTypeIcon(entry.type, size = 44.dp, override = if (entry.isFolder) R.drawable.ic_folder_fill else null)
             }
         },
-        supportingContent = { Text(if (entry.verified) Format.size(entry.size) + " · " + Format.date(entry.modified / 1000)
-            else stringResource(R.string.offline_unverified), maxLines = 1) },
+        supportingContent = {
+            val details = Format.size(entry.size) + " · " + Format.date(entry.modified / 1000)
+            Text(
+                when {
+                    !entry.verified -> stringResource(R.string.offline_unverified)
+                    outdated -> stringResource(R.string.offline_outdated, details)
+                    else -> details
+                },
+                maxLines = 1,
+            )
+        },
         trailingContent = {
             Box {
                 IconAction(R.drawable.ic_more_vert, stringResource(R.string.more), { menu = true })
