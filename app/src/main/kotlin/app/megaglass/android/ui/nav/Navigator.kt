@@ -29,11 +29,28 @@ data class StackEntry(val tab: Tab, val route: Route, val id: Long)
  */
 @Stable
 class AppNavigator(
-    private val graph: AppGraph,
     val startTab: Tab,
+    /**
+     * Opens a cloud file that no viewer of the app shows, and [viewOther] a local file. They are
+     * parameters, so that unit tests need no [AppGraph] (MEGAGLASS-UX-011).
+     */
+    private val openOther: (item: NodeItem, folderLink: Boolean) -> Unit,
+    private val viewOther: (File) -> Unit,
     /** Set for the offline-only stack (MEGAGLASS-UX-002): Back at its root calls it. */
     private val onExit: (() -> Unit)? = null,
 ) {
+    /** The app navigator: [AppGraph.opener] opens the files in other apps and shows its errors. */
+    constructor(graph: AppGraph, startTab: Tab, onExit: (() -> Unit)? = null) : this(
+        startTab,
+        openOther = { item, folderLink ->
+            graph.scope.launch {
+                catching { graph.opener.open(item.handle, item.name, item.size, folderLink) }
+                    .onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
+            }
+        },
+        viewOther = { graph.opener.view(it) },
+        onExit = onExit,
+    )
 
     /** No ready session: the stack starts at Offline and opens only local routes. */
     val offlineOnly: Boolean get() = onExit != null
@@ -139,10 +156,7 @@ class AppNavigator(
             item.type == FileType.AUDIO -> navigate(AudioPlayer(item.handle, source))
             item.type == FileType.PDF -> navigate(PdfViewer(item.handle, folderLink = folderLink))
             item.type.isEditableText() && item.size <= TEXT_EDITOR_LIMIT -> navigate(TextEditor(item.handle, folderLink = folderLink))
-            else -> graph.scope.launch {
-                catching { graph.opener.open(item.handle, item.name, item.size, folderLink) }
-                    .onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
-            }
+            else -> openOther(item, folderLink)
         }
     }
 
@@ -155,11 +169,9 @@ class AppNavigator(
             type == FileType.AUDIO -> navigate(AudioPlayer(-1, MediaSource.Local(file.absolutePath), localPath = file.absolutePath))
             type == FileType.PDF -> navigate(PdfViewer(-1, localPath = file.absolutePath))
             type.isEditableText() && file.length() <= TEXT_EDITOR_LIMIT -> navigate(TextEditor(-1, localPath = file.absolutePath))
-            else -> graph.opener.view(file)
+            else -> viewOther(file)
         }
     }
-
-    fun message(text: String) = graph.messenger.show(text)
 
     companion object {
         const val TEXT_EDITOR_LIMIT = 5L * 1024 * 1024

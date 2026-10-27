@@ -128,32 +128,7 @@ fun SelectionToolbar(
     modifier: Modifier = Modifier,
 ) {
     if (selected.isEmpty()) return
-    val allOwn = selected.all { it.access >= MegaShare.ACCESS_OWNER }
-    val anyFull = selected.all { it.access >= MegaShare.ACCESS_FULL }
-    val main = buildList {
-        when (context) {
-            NodeContext.RUBBISH -> { add(NodeAction.RESTORE); add(NodeAction.DELETE) }
-            NodeContext.BACKUPS -> { add(NodeAction.DOWNLOAD); add(NodeAction.OFFLINE); add(NodeAction.COPY) }
-            else -> {
-                add(NodeAction.DOWNLOAD)
-                if (allOwn && selected.size == 1) add(NodeAction.GET_LINK)
-                if (allOwn) add(NodeAction.MOVE)
-                add(NodeAction.COPY)
-                if ((allOwn || anyFull) && selected.none { it.isShareRoot }) add(NodeAction.RUBBISH)
-            }
-        }
-    }
-    val extra = buildList {
-        if (context != NodeContext.RUBBISH && context != NodeContext.BACKUPS) {
-            add(NodeAction.OFFLINE)
-            if (selected.none { it.isFolder }) add(NodeAction.SEND)
-            if (allOwn) {
-                add(if (selected.all { it.isFavourite }) NodeAction.UNFAVOURITE else NodeAction.FAVOURITE)
-                add(if (selected.all { it.isSensitive }) NodeAction.UNHIDE else NodeAction.HIDE)
-                if (selected.any { it.isExported }) add(NodeAction.REMOVE_LINK)
-            }
-        }
-    }
+    val (main, extra) = selectionActions(selected, context)
     var more by remember { mutableStateOf(false) }
     HorizontalFloatingToolbar(
         expanded = true,
@@ -181,6 +156,41 @@ fun SelectionToolbar(
             }
         }
     }
+}
+
+/**
+ * The toolbar actions for [selected] in [context]: the buttons and the overflow menu. A pure
+ * function, so that unit tests can check the access rules (MEGAGLASS-UX-011).
+ */
+internal fun selectionActions(selected: List<NodeItem>, context: NodeContext): Pair<List<NodeAction>, List<NodeAction>> {
+    val allOwn = selected.all { it.access >= MegaShare.ACCESS_OWNER }
+    // ACCESS_OWNER is above ACCESS_FULL, so allFull is also true when allOwn is true.
+    val allFull = selected.all { it.access >= MegaShare.ACCESS_FULL }
+    val main = buildList {
+        when (context) {
+            NodeContext.RUBBISH -> { add(NodeAction.RESTORE); add(NodeAction.DELETE) }
+            NodeContext.BACKUPS -> { add(NodeAction.DOWNLOAD); add(NodeAction.OFFLINE); add(NodeAction.COPY) }
+            else -> {
+                add(NodeAction.DOWNLOAD)
+                if (allOwn && selected.size == 1) add(NodeAction.GET_LINK)
+                if (allOwn) add(NodeAction.MOVE)
+                add(NodeAction.COPY)
+                if (allFull && selected.none { it.isShareRoot }) add(NodeAction.RUBBISH)
+            }
+        }
+    }
+    val extra = buildList {
+        if (context != NodeContext.RUBBISH && context != NodeContext.BACKUPS) {
+            add(NodeAction.OFFLINE)
+            if (selected.none { it.isFolder }) add(NodeAction.SEND)
+            if (allOwn) {
+                add(if (selected.all { it.isFavourite }) NodeAction.UNFAVOURITE else NodeAction.FAVOURITE)
+                add(if (selected.all { it.isSensitive }) NodeAction.UNHIDE else NodeAction.HIDE)
+                if (selected.any { it.isExported }) add(NodeAction.REMOVE_LINK)
+            }
+        }
+    }
+    return main to extra
 }
 
 @Composable
