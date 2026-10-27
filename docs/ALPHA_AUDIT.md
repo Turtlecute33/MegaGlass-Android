@@ -161,6 +161,14 @@ and checked before builds. A fresh checkout must run both SDK scripts as documen
   fault in the native SDK can reach all of shared storage. The bundled FileWrapper can read SAF
   tree URIs, but a SAF sync is not tested for speed or for files that it does not see, and a
   two-way sync deletes such a file from the cloud. The README Security section records this.
+- Accepted upstream risk (MEGAGLASS-SEC-001): the SDK pins only the API and SC requests.
+  Requests to the storage (gfs) and file attribute hosts set `CURLOPT_SSL_VERIFYPEER` and
+  `CURLOPT_SSL_VERIFYHOST` to 0 (`Vendor/mega-sdk/src/posix/net.cpp`, `send_request` and
+  `configureWsEasy`). An active network attacker cannot decrypt files, but can change streamed
+  media (AES-CTR, no MAC in DirectRead), thumbnails and previews (AES-CBC, no MAC) and upload
+  chunks (the `?d=` chunk checksum is linear). Full downloads check the file MAC. A patch that
+  checks these hosts against the Android system CAs is not made: it needs a native rebuild and
+  a live test of all storage hosts. The README Security section records this.
 - The tests do not establish production readiness for successful login/MFA/session restoration,
   account switching with active authenticated operations, quota exhaustion, multi-gigabyte or
   recursive transfers, real network loss, real disk exhaustion, shared-folder permissions,

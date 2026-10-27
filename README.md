@@ -43,6 +43,13 @@ Compose with Material 3 Expressive for the interface. Chat and calls are not inc
   own folder, and folder upload and sync are not available. Single files upload without it. The
   app does not sync through the Android folder picker (SAF): that path is not tested, and a
   two-way sync deletes a file that it does not see from the cloud.
+- **Storage servers: no certificate check.** This is MEGA SDK design. The SDK pins the keys of
+  the MEGA API servers, but it does not check the TLS certificate of the storage and thumbnail
+  servers, because the files are encrypted end to end. An attacker on your network (for example
+  a hostile Wi-Fi) cannot read your files, but can change data on the way. A full download
+  checks the file MAC and fails. Streamed video and audio, thumbnails and previews have no MAC
+  check. A changed upload can give a cloud file that fails its check at a later download.
+  MegaGlass accepts this risk. Use a network that you trust for important uploads.
 
 ## Privacy
 
