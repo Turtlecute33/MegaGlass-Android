@@ -1,0 +1,9 @@
+/* libmega.so exports only the JNI entry points. All other symbols are local, so the linker can
+   remove the code that they do not use (MEGAGLASS-PERF-013). */
+{
+  global:
+    Java_*;
+    JNI_OnLoad;
+  local:
+    *;
+};

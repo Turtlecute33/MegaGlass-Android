@@ -30,6 +30,8 @@ done
 # scripts/ports come before the SDK's own overlay ports, so they replace them.
 # ENABLE_CHAT only adds the SDK chat helper calls that the Java bindings reference (no MEGAchat).
 # The prefix map keeps the checkout path out of __FILE__ strings in the library.
+# The version script exports only the JNI entry points, so the linker can remove the code that
+# they do not use. RELR packs the relative relocations (MEGAGLASS-PERF-013).
 cmake -S "$SDK_DIR" --preset mega-android -B "$BUILD_DIR" -G Ninja \
   -DVCPKG_ROOT="$VCPKG_DIR" \
   -DVCPKG_OVERLAY_TRIPLETS="$ROOT/scripts/triplets" \
@@ -38,6 +40,7 @@ cmake -S "$SDK_DIR" --preset mega-android -B "$BUILD_DIR" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_FLAGS="-ffile-prefix-map=$ROOT/=" \
   -DCMAKE_CXX_FLAGS="-ffile-prefix-map=$ROOT/=" \
+  -DCMAKE_SHARED_LINKER_FLAGS="-Wl,--version-script=$ROOT/scripts/libmega.map -Wl,--exclude-libs,ALL -Wl,--gc-sections -Wl,--pack-dyn-relocs=relr" \
   -DANDROID_PLATFORM=android-$API \
   -DANDROID_ABI=$ABI \
   -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON \

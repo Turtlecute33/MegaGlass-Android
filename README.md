@@ -98,6 +98,8 @@ scripts/build-sdk.sh          # builds libmega.so (arm64-v8a) and the Java bindi
 The first SDK build compiles all native dependencies with vcpkg and takes a while. Later builds
 use them again.
 
+The release APK is about 33 MB (estimate); libmega.so is about 25 MB of it.
+
 A release build stops if the git tree has changes that are not committed, because the APK
 records the commit that it was built from. Commit (and tag) the version change first.
 
@@ -115,6 +117,9 @@ records the commit that it was built from. Commit (and tag) the version change f
   to MEGA, and it does not keep the journey ID.
 - `patches/mega-sdk-user-agent.patch`: the SDK puts only "Android" in the user agent, and not
   the kernel release and the CPU architecture.
+- libmega.so exports only its JNI functions (`scripts/libmega.map`), and its relative
+  relocations are packed (RELR). The linker can then remove unused code: the library is about
+  25 MB and not 33 MB (estimate).
 - `scripts/ports/`: pinned native dependency updates, with upstream provenance and licenses.
   The native build records versions and a binary digest. Gradle rejects artifacts that do not
   match.
