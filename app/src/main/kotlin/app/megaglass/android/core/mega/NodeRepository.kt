@@ -254,11 +254,6 @@ class NodeRepository(private val mega: Mega) {
         api.await { disableExport(node, it) }
     }
 
-    /** Protects a link with a password (Pro only). Returns the new #P! link. */
-    suspend fun encryptLink(link: String, password: String): String = io {
-        api.await { encryptLinkWithPassword(link, password, it) }.text
-    }
-
     /** All versions of a file, newest first. [handle] can be any version (a restore makes a new current one). */
     suspend fun versions(handle: Long): List<NodeItem> = io {
         var node = require(handle)
@@ -294,10 +289,6 @@ class NodeRepository(private val mega: Mega) {
             val info = r.megaFolderInfo
             FolderInfo(info.numFiles, info.numFolders, info.currentSize, info.numVersions, info.versionsSize)
         }
-    }
-
-    suspend fun importLink(link: String, parent: Long): Long = io {
-        api.await { importFileLink(link, require(parent), it) }.nodeHandle
     }
 
     /**

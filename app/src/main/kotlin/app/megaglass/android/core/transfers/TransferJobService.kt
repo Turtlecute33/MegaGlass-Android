@@ -169,8 +169,3 @@ class TransferNotifications(private val context: Context) {
         const val ID = 1
     }
 }
-
-/** Waits until the transfer queue is empty. */
-suspend fun TransferManager.awaitIdle() {
-    state.first { it.isIdle }
-}

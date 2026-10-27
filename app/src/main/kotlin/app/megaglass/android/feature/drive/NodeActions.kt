@@ -112,7 +112,7 @@ enum class NodeAction(@StringRes val label: Int, @DrawableRes val icon: Int, val
 }
 
 /** Actions for one item in the menu sheet, in display order. */
-fun actionsFor(item: NodeItem, context: NodeContext, versions: Int, api: MegaApiJava): List<NodeAction> {
+fun actionsFor(item: NodeItem, context: NodeContext, versions: Int): List<NodeAction> {
     val own = item.access >= MegaShare.ACCESS_OWNER
     val full = item.access >= MegaShare.ACCESS_FULL
     val list = mutableListOf(NodeAction.INFO)
@@ -382,7 +382,7 @@ private fun NodeSheet(item: NodeItem, state: NodeActionsState, onDismiss: () -> 
     val graph = MegaGlassApp.graph
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val offline by graph.offline.handles.collectAsStateWithLifecycle()
-    val actions = remember(item, state.sheetVersions) { actionsFor(item, state.context, state.sheetVersions, graph.mega.api) }
+    val actions = remember(item, state.sheetVersions) { actionsFor(item, state.context, state.sheetVersions) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding()) {
             Row(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
