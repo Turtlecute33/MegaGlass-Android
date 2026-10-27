@@ -59,8 +59,10 @@ Compose with Material 3 Expressive for the interface. Chat and calls are not inc
   ID stays until you log out, and the next login gets a new ID, so Device Centre shows each login
   as a new device. After an update from 0.2.3 or earlier, the current session also gets a new ID
   once: its syncs and camera uploads can show under a new device.
-- The MEGA SDK sends some diagnostic events to MEGA, for example errors and timings. The SDK has
-  no setting to turn them off.
+- No diagnostic events or error reports go to MEGA. By default, the MEGA SDK sends them, with no
+  setting to turn them off, and some contain file fingerprints and MACs. A local patch stops
+  them. The SDK also does not keep the journey ID that the server can send, so the API requests
+  do not include it.
 - Files are encrypted on the device before upload.
 - The session is encrypted with a key in the Android Keystore and is not included in backups.
 - Thumbnails, previews and offline files stay in app-private storage.
@@ -107,6 +109,8 @@ records the commit that it was built from. Commit (and tag) the version change f
   SDK a random device ID. The SDK does not read the Android ID.
 - `patches/mega-sdk-java-factory-ownership.patch`: marks allocating JNI factories and album
   getters as owners of their native results, so that Java can release them safely.
+- `patches/mega-sdk-no-events.patch`: the SDK does not send its diagnostic events and reports
+  to MEGA, and it does not keep the journey ID.
 - `scripts/ports/`: pinned native dependency updates, with upstream provenance and licenses.
   The native build records versions and a binary digest. Gradle rejects artifacts that do not
   match.
