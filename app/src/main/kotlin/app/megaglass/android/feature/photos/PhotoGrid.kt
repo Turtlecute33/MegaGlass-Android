@@ -147,7 +147,11 @@ fun MediaCell(
                     onError = { failed = true },
                 )
             } else {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { FileTypeIcon(item.node.type) }
+                // TalkBack reads the name also when there is no thumbnail.
+                Box(
+                    Modifier.fillMaxSize().semantics { contentDescription = item.node.name },
+                    contentAlignment = Alignment.Center,
+                ) { FileTypeIcon(item.node.type) }
             }
             if (item.node.isVideo) {
                 Row(
