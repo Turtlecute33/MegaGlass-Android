@@ -162,6 +162,12 @@ fun VideoPlayerScreen(route: VideoPlayer) {
                 return@launchIo
             }
             title = node.name ?: ""
+            // An offline copy plays from the device, also without a network (MEGAGLASS-UX-003).
+            val copy = if (route.folderLink) null else graph.offline.fileFor(route.handle)
+            if (copy != null) {
+                uri = Uri.fromFile(copy)
+                return@launchIo
+            }
             val link = if (hold.acquire()) api.httpServerGetLocalLink(node) else null
             if (link == null) loadError = serverError else uri = Uri.parse(link)
         }

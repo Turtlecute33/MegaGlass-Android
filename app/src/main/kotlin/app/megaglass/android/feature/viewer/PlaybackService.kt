@@ -97,11 +97,15 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    /** A cloud track gets its link on the SDK server only when the player loads it. */
+    /**
+     * A cloud track gets its link on the SDK server only when the player loads it. An offline
+     * copy plays from the device (MEGAGLASS-UX-003).
+     */
     @OptIn(UnstableApi::class)
     private fun resolve(spec: DataSpec): DataSpec {
         val id = PlaybackQueue.idOf(spec.uri) ?: return spec
         val entry = PlaybackQueue[id] ?: throw IOException("Track not found")
+        entry.offlineCopy()?.let { return spec.withUri(Uri.fromFile(it)) }
         val mega = MegaGlassApp.graph.mega
         val api = if (entry.folderLink) mega.folderApi else mega.api
         if (!StreamServer.holdForPlayback(api)) throw IOException("Streaming is not available")

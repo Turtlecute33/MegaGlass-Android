@@ -9,6 +9,7 @@ import android.content.Intent
 import app.megaglass.android.R
 import app.megaglass.android.core.security.AppLock
 import app.megaglass.android.core.storage.LocalFiles
+import app.megaglass.android.core.storage.OfflineStore
 import app.megaglass.android.core.storage.localFileName
 import app.megaglass.android.core.storage.VerifiedFiles
 import app.megaglass.android.core.storage.trimImageCache
@@ -50,6 +51,7 @@ class FileOpener(
     private val context: Context,
     private val transfers: TransferManager,
     private val files: LocalFiles,
+    private val offline: OfflineStore,
     private val messenger: Messenger,
     private val lock: AppLock,
     private val scope: CoroutineScope,
@@ -109,9 +111,14 @@ class FileOpener(
         withContext(Dispatchers.IO) { trimImageCache(files.openDir, PreviewCache.BUDGET) }
     }
 
-    /** Opens a cloud file in another app. */
+    /** Opens a cloud file in another app. An offline copy opens without a download (MEGAGLASS-UX-003). */
     suspend fun open(handle: Long, name: String, size: Long, folderLink: Boolean = false) {
         if (handle in _preparing.value) return
+        val copy = if (folderLink) null else withContext(Dispatchers.IO) { offline.fileFor(handle) }
+        if (copy != null) {
+            withContext(Dispatchers.Main) { view(copy) }
+            return
+        }
         trimCopies()
         val target = cacheFile(handle, name)
         if (withContext(Dispatchers.IO) { VerifiedFiles.contains(target, size) }) {

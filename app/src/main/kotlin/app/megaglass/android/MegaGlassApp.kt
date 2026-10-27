@@ -66,7 +66,7 @@ class AppGraph(val context: Context) {
     )
     val messenger = Messenger()
     val lock = AppLock(settings)
-    val opener = FileOpener(context, transfers, files, messenger, lock, scope)
+    val opener = FileOpener(context, transfers, files, offline, messenger, lock, scope)
 
     init {
         transfers.onActive = { TransferJobService.schedule(context) }

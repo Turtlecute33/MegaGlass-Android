@@ -242,13 +242,17 @@ private fun ImagePage(entry: MediaEntry, onTap: () -> Unit) {
     var original by remember(entry.key) { mutableStateOf(entry.file) }
     var loading by remember(entry.key) { mutableStateOf(false) }
     var failed by remember(entry.key) { mutableStateOf(false) }
-    // The check reads the disk: not on the main thread while the user swipes.
+    var checked by remember(entry.key) { mutableStateOf(false) }
+    // The check reads the disk: not on the main thread while the user swipes. An offline copy
+    // comes first and does not download again (MEGAGLASS-UX-003).
     LaunchedEffect(entry.key) {
-        if (original == null) withContext(Dispatchers.IO) { PreviewCache.cached(entry) }?.let { original = it }
+        if (original == null) withContext(Dispatchers.IO) { entry.offlineCopy() ?: PreviewCache.cached(entry) }?.let { original = it }
+        checked = true
     }
     val zoomed = (zoom.zoomableState.zoomFraction ?: 0f) > 0.01f
-    // The original downloads when the preview is not enough: the user zooms in, or there is no preview.
-    val wantOriginal = original == null && !failed && entry.size in 1..MAX_ORIGINAL && (zoomed || !entry.hasPreview)
+    // The original downloads when the preview is not enough: the user zooms in, or there is no
+    // preview. Only after the check above, so that a local copy does not download.
+    val wantOriginal = checked && original == null && !failed && entry.size in 1..MAX_ORIGINAL && (zoomed || !entry.hasPreview)
     // Once started, the download continues when the user zooms out. A restart could collide with
     // the cancelled download, which the SDK releases only later.
     var fetch by remember(entry.key) { mutableStateOf(false) }

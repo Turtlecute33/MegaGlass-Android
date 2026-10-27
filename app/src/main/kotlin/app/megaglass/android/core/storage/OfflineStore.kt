@@ -159,8 +159,12 @@ class OfflineStore(
 
     fun dirFor(handle: Long): File = File(root, MegaApiJava.handleToBase64(handle))
 
-    /** The local copy of a node, if it is available offline. */
-    fun fileFor(handle: Long): File? = index.entry(MegaApiJava.handleToBase64(handle))
+    /**
+     * The local copy of a node, if it is available offline. The viewers and Open with use it, so
+     * that the node does not download again (MEGAGLASS-UX-003). Reads the disk: not on the main thread.
+     */
+    fun fileFor(handle: Long): File? =
+        if (handle in _handles.value) index.entry(MegaApiJava.handleToBase64(handle)) else null
 
     suspend fun makeAvailable(handles: Collection<Long>) = withContext(Dispatchers.IO) {
         operations.withLock {

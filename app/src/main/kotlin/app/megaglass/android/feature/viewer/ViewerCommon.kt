@@ -63,6 +63,9 @@ data class MediaEntry(
     val isVideo get() = type == FileType.VIDEO
 }
 
+/** The offline copy of an account node; folder-link entries have no [MediaEntry.node] (MEGAGLASS-UX-003). Reads the disk. */
+fun MediaEntry.offlineCopy(): File? = if (node != null) MegaGlassApp.graph.offline.fileFor(handle) else null
+
 private fun NodeItem.toEntry(folderLink: Boolean) = MediaEntry(
     key = "h:$handle",
     handle = handle,

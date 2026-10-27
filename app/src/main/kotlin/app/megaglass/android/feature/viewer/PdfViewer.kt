@@ -176,6 +176,12 @@ fun PdfViewerScreen(route: PdfViewer) {
             return@LaunchedEffect
         }
         title = node.name ?: ""
+        // An offline copy opens without a download (MEGAGLASS-UX-003).
+        val copy = if (route.folderLink) null else withContext(Dispatchers.IO) { graph.offline.fileFor(route.handle) }
+        if (copy != null) {
+            file = copy
+            return@LaunchedEffect
+        }
         catching { PreviewCache.fetch(route.handle, node.name ?: "file.pdf", node.size, route.folderLink) { progress = it } }
             .onSuccess { file = it }
             .onFailure { error = resources.userMessage(it) }
