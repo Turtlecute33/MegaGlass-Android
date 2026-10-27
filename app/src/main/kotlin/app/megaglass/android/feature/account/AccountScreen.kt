@@ -139,6 +139,7 @@ fun AccountScreen(vm: AccountViewModel = viewModel()) {
                                 leadingIcon = { Ic(R.drawable.ic_add_photo_alternate) },
                                 onClick = {
                                     avatarMenu = false
+                                    MegaGlassApp.graph.lock.expectReturn()
                                     picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                                 },
                             )

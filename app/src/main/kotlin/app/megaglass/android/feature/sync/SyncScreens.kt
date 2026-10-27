@@ -96,7 +96,14 @@ fun SyncsScreen(vm: SyncViewModel = viewModel()) {
         if (path == null) graph.messenger.show(resources.getString(if (graph.files.hasAllFilesAccess) R.string.folder_not_local else R.string.sync_needs_access))
         else step = AddStep.PickCloud(path)
     }
-    val startAdd = { storage.ensure { if (storage.granted) pickLocal.launch(null) else graph.messenger.show(resources.getString(R.string.sync_needs_access)) } }
+    val startAdd = {
+        storage.ensure {
+            if (storage.granted) {
+                graph.lock.expectReturn()
+                pickLocal.launch(null)
+            } else graph.messenger.show(resources.getString(R.string.sync_needs_access))
+        }
+    }
     // All-files access can change in the system settings.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.load() }
 

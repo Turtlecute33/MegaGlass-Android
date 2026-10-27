@@ -36,17 +36,31 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
 
     private var backgroundSince = 0L
 
+    private val grace = ReturnGrace(clock = SystemClock::elapsedRealtime)
+
     val isEnabled: Boolean get() = settings.current.passcodeHash != null
+
+    /**
+     * Call just before the app starts a picker, the camera, a share sheet or a settings page: the
+     * return from it does not lock (MEGAGLASS-UX-004). A normal exit to Home or Recents still locks.
+     */
+    fun expectReturn() = grace.expect()
 
     override fun onStop(owner: LifecycleOwner) {
         backgroundSince = SystemClock.elapsedRealtime()
     }
 
     override fun onStart(owner: LifecycleOwner) {
+        // Each return ends the grace, also when the lock is off or already shows.
+        if (grace.consume()) return
         val s = settings.current
         if (s.passcodeHash == null || _locked.value || backgroundSince == 0L) return
         if (SystemClock.elapsedRealtime() - backgroundSince >= s.lockTimeout * 1000L) _locked.value = true
     }
+
+    override fun onPause(owner: LifecycleOwner) = grace.leave()
+
+    override fun onResume(owner: LifecycleOwner) = grace.resume()
 
     /** Wrong passcodes in a row, also across app restarts. */
     var failures: Int = settings.current.lockFailures
@@ -180,5 +194,40 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
         const val BIOMETRIC_KEY = "megaglass.lock.biometric"
         const val BIOMETRIC_TRANSFORMATION = "AES/GCM/NoPadding"
         const val SETTINGS_TRIES = 3
+    }
+}
+
+/**
+ * One return to the app without the lock, after the app started another activity on purpose
+ * (MEGAGLASS-UX-004). It ends at the first return or after [limitMs], whichever comes first.
+ * The calls follow the process lifecycle.
+ */
+internal class ReturnGrace(private val limitMs: Long = 120_000, private val clock: () -> Long) {
+    @Volatile private var until = 0L
+    @Volatile private var left = false
+
+    fun expect() {
+        left = false
+        until = clock() + limitMs
+    }
+
+    /** ON_PAUSE: the app is not in the foreground. */
+    fun leave() {
+        left = true
+    }
+
+    /** ON_START: true once, for a return inside the limit. */
+    fun consume(): Boolean {
+        val end = until
+        until = 0L
+        return end != 0L && clock() < end
+    }
+
+    /**
+     * ON_RESUME. After a pause without a stop (a picker that does not cover the app), the grace
+     * ends. A grace that starts at this resume (a picker after a settings page) stays.
+     */
+    fun resume() {
+        if (left) until = 0L
     }
 }

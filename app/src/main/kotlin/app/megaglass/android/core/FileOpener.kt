@@ -184,6 +184,7 @@ class FileOpener(
             .setDataAndType(uri, files.mimeType(file))
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
+            lock.expectReturn()
             context.startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (_: ActivityNotFoundException) {
             messenger.show(context.getString(R.string.no_app_to_open))
@@ -204,6 +205,7 @@ class FileOpener(
         intent.clipData = ClipData.newRawUri(null, uris[0]).apply { uris.drop(1).forEach { addItem(ClipData.Item(it)) } }
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         try {
+            lock.expectReturn()
             context.startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (_: ActivityNotFoundException) {
             messenger.show(context.getString(R.string.no_app_to_open))
@@ -214,6 +216,7 @@ class FileOpener(
     fun shareText(text: String) {
         val intent = Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_TEXT, text).setType("text/plain")
         try {
+            lock.expectReturn()
             context.startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (_: ActivityNotFoundException) {
             messenger.show(context.getString(R.string.no_app_to_open))

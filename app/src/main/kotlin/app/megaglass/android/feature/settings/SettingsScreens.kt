@@ -316,7 +316,10 @@ fun TransferSettingsScreen() {
             selected = if (settings.downloadDir == null) 0 else 1,
             onSelect = { i ->
                 if (i == 0) updateSettings { it.copy(downloadDir = null) }
-                else storage.ensure { folder.launch(null) }
+                else storage.ensure {
+                    graph.lock.expectReturn()
+                    folder.launch(null)
+                }
             },
             onDismiss = { chooseLocation = false },
         )

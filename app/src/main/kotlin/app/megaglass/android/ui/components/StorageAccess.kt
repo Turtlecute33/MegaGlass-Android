@@ -66,6 +66,7 @@ fun rememberStorageAccess(): StorageAccess {
                         Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + context.packageName)),
                         Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),
                     ).any { intent ->
+                        MegaGlassApp.graph.lock.expectReturn()
                         try { context.startActivity(intent); true } catch (_: ActivityNotFoundException) { false }
                     }
                     if (!opened) {

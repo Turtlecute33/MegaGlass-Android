@@ -166,8 +166,16 @@ fun rememberUploader(parent: Long): Uploader {
 
     return remember {
         Uploader(
-            pickFiles = { files.launch(arrayOf("*/*")) },
-            pickFolder = { storage.ensure { folder.launch(null) } },
+            pickFiles = {
+                graph.lock.expectReturn()
+                files.launch(arrayOf("*/*"))
+            },
+            pickFolder = {
+                storage.ensure {
+                    graph.lock.expectReturn()
+                    folder.launch(null)
+                }
+            },
             photo = {
                 // A captured photo is the only original until its upload succeeds. Cache
                 // eviction and a second capture must not remove or replace it. A folder for each
@@ -178,6 +186,7 @@ fun rememberUploader(parent: Long): Uploader {
                 photoPath = f.absolutePath
                 graph.files.claimCapture(f)
                 try {
+                    graph.lock.expectReturn()
                     camera.launch(graph.files.shareUri(f))
                 } catch (_: ActivityNotFoundException) {
                     dir.deleteRecursively()
