@@ -10,6 +10,7 @@
     <string name="viewer_back_10">Back 10 seconds</string>
     <string name="viewer_forward_10">Forward 10 seconds</string>
     <string name="viewer_rotate">Rotate</string>
+    <string name="viewer_toggle_controls">Show or hide the controls</string>
     <string name="viewer_shuffle">Shuffle</string>
     <string name="viewer_repeat">Repeat</string>
     <string name="viewer_queue">Up next</string>

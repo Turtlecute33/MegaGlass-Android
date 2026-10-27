@@ -48,6 +48,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -312,8 +314,10 @@ private fun ImagePage(entry: MediaEntry, onTap: () -> Unit) {
 @Composable
 private fun VideoPage(entry: MediaEntry, onTap: () -> Unit, onPlay: () -> Unit) {
     val context = LocalContext.current
+    val toggleLabel = stringResource(R.string.viewer_toggle_controls)
     Box(
-        Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { onTap() } },
+        Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { onTap() } }
+            .semantics { onClick(label = toggleLabel) { onTap(); true } },
         contentAlignment = Alignment.Center,
     ) {
         val data: Any? = when {

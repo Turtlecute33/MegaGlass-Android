@@ -52,9 +52,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -214,9 +218,13 @@ fun VideoPlayerScreen(route: VideoPlayer) {
 
     var controls by remember { mutableStateOf(true) }
     var touched by remember { mutableIntStateOf(0) }
-    LaunchedEffect(controls, ui.isPlaying, touched) {
+    // The system "Time to take action" setting can make the delay longer.
+    val a11y = LocalAccessibilityManager.current
+    val hideDelay = a11y?.calculateRecommendedTimeoutMillis(3500, containsIcons = true, containsControls = true) ?: 3500
+    val toggleLabel = stringResource(R.string.viewer_toggle_controls)
+    LaunchedEffect(controls, ui.isPlaying, touched, hideDelay) {
         if (controls && ui.isPlaying) {
-            delay(3500)
+            delay(hideDelay)
             controls = false
         }
     }
@@ -233,6 +241,11 @@ fun VideoPlayerScreen(route: VideoPlayer) {
                             touched++
                         },
                     )
+                }
+                // The tap above has no semantics: TalkBack gets the same toggle as an action.
+                .semantics {
+                    contentDescription = title
+                    onClick(label = toggleLabel) { controls = !controls; true }
                 },
         ) {
             ContentFrame(player = player, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
