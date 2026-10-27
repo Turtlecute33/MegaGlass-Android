@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.drive
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.whileObserved
 
 import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
@@ -78,7 +79,7 @@ class FolderViewModel(private val mode: DriveMode, requested: Long) : ViewModel(
             graph.folderSorts.gridFlow(handle).collect { grid -> _state.update { it.copy(grid = grid) } }
         }
         viewModelScope.launch {
-            nodes.changes.filter { it.touches(handle) }.debounce(150).collect { load() }
+            nodes.changes.filter { it.touches(handle) }.whileObserved(_state.subscriptionCount).debounce(150).collect { load() }
         }
     }
 

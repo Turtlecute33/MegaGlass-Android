@@ -48,7 +48,7 @@ class PhotosViewModel : ViewModel() {
         load()
         // Each upload changes the nodes: the full timeline loads again only while it shows.
         viewModelScope.launch { graph.nodes.changes.whileObserved(_state.subscriptionCount).debounce(1000).collect { load() } }
-        viewModelScope.launch { graph.mega.sets.debounce(300).collect { loadAlbums() } }
+        viewModelScope.launch { graph.mega.sets.whileObserved(_state.subscriptionCount).debounce(300).collect { loadAlbums() } }
         viewModelScope.launch {
             graph.settings.state.distinctUntilChangedBy { it.showHidden }.drop(1).collect { load() }
         }
@@ -169,7 +169,7 @@ class AlbumViewModel(private val id: Long, private val isSystem: Boolean, privat
 
     init {
         load()
-        viewModelScope.launch { graph.mega.sets.debounce(300).collect { load() } }
+        viewModelScope.launch { graph.mega.sets.whileObserved(_state.subscriptionCount).debounce(300).collect { load() } }
         viewModelScope.launch { graph.nodes.changes.whileObserved(_state.subscriptionCount).debounce(1000).collect { load() } }
     }
 

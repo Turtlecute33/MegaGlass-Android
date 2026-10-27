@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.contacts
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.whileObserved
 
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
@@ -12,6 +13,7 @@ import app.megaglass.android.core.mega.NodeItem
 import app.megaglass.android.core.mega.await
 import app.megaglass.android.core.mega.toItem
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -182,20 +184,27 @@ class ContactDetailViewModel(private val email: String) : ViewModel() {
     private val directory = ContactDirectory.instance
     private val _state = MutableStateFlow(ContactDetailState())
     val state: StateFlow<ContactDetailState> = _state.asStateFlow()
+    private var loadJob: Job? = null
 
     init {
         load()
-        viewModelScope.launch { merge(directory.changes, graph.mega.nodes).debounce(200).collect { load() } }
+        // Reload only while the screen shows: each node change in the account sends a value (MEGAGLASS-PERF-010).
+        viewModelScope.launch { merge(directory.changes, graph.mega.nodes).whileObserved(_state.subscriptionCount).debounce(200).collect { load() } }
     }
 
     private fun groups(hex: String?): List<String> = hex.orEmpty().uppercase().chunked(4)
 
-    fun load() = viewModelScope.launch {
+    fun load() {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch { loadNow() }
+    }
+
+    private suspend fun loadNow() {
         // getContact also returns people who are no longer contacts.
         val user = withContext(Dispatchers.IO) { api.getContact(email)?.takeIf { it.visibility == MegaUser.VISIBILITY_VISIBLE } }
         if (user == null) {
             _state.update { it.copy(loading = false, contact = null) }
-            return@launch
+            return
         }
         val contact = directory.toContact(user)
         val shares = withContext(Dispatchers.IO) { api.getInShares(user).map { it.toItem(api, owner = contact.name) } }

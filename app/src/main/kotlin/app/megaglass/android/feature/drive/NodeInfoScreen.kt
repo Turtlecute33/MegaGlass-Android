@@ -58,6 +58,7 @@ import app.megaglass.android.core.mega.showsUploaderImage
 import app.megaglass.android.core.media.NodeImage
 import app.megaglass.android.core.util.FileType
 import app.megaglass.android.core.util.Format
+import app.megaglass.android.core.util.whileObserved
 import app.megaglass.android.ui.components.BackButton
 import app.megaglass.android.ui.components.ConfirmDialog
 import app.megaglass.android.ui.components.EmptyState
@@ -113,7 +114,7 @@ class NodeInfoViewModel(private val handle: Long) : ViewModel() {
 
     init {
         load()
-        viewModelScope.launch { graph.nodes.changes.filter { it.touches(handle) }.debounce(200).collect { load() } }
+        viewModelScope.launch { graph.nodes.changes.filter { it.touches(handle) }.whileObserved(_state.subscriptionCount).debounce(200).collect { load() } }
     }
 
     fun load() = viewModelScope.launch {
