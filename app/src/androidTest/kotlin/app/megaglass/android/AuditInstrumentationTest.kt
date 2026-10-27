@@ -111,6 +111,9 @@ class AuditInstrumentationTest {
         }
         assertTrue(registered())
         job.cancelAndJoin()
+        // The removal runs on the mega-listener-removal thread, not in the cancel call.
+        val deadline = System.nanoTime() + 2_000_000_000L
+        while (registered() && System.nanoTime() < deadline) Thread.sleep(10)
         assertFalse(registered())
         listener!!.onRequestUpdate(api, Request())
         listener!!.onRequestFinish(api, Request(), Error(MegaError.API_OK))
