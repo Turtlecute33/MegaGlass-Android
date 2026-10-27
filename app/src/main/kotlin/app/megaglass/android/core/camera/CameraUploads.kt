@@ -56,8 +56,9 @@ sealed interface CuStatus {
 
 /**
  * Schedules the camera uploads worker and keeps its status.
- * Runs: every hour, soon after new photos or videos appear (MediaStore content trigger),
- * and on demand ("Upload now"). The worker itself is [CameraUploadWorker].
+ * Runs: soon after new photos or videos appear (MediaStore content trigger), on demand
+ * ("Upload now"), and every 6 hours as a safety net (MEGAGLASS-PERF-001). The worker itself
+ * is [CameraUploadWorker].
  */
 object CameraUploads {
 
@@ -119,6 +120,7 @@ object CameraUploads {
     }
 
     private const val POLICY_CHECK_MS = 5_000L
+    private const val SAFETY_NET_HOURS = 6L
 
     /** Without a network no upload runs, and the next network decides. */
     private fun isMetered(context: Context): Boolean {
@@ -135,10 +137,11 @@ object CameraUploads {
         return images && (!videos || granted(Manifest.permission.READ_MEDIA_VIDEO))
     }
 
-    private fun constraints(s: AppSettings, triggers: Boolean): Constraints {
+    private fun constraints(s: AppSettings, triggers: Boolean, batteryNotLow: Boolean = false): Constraints {
         val b = Constraints.Builder()
             .setRequiredNetworkType(if (s.cuWifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED)
             .setRequiresCharging(s.cuRequireCharging)
+            .setRequiresBatteryNotLow(batteryNotLow)
         if (triggers) {
             b.addContentUriTrigger(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL), true)
             if (s.cuIncludeVideos) b.addContentUriTrigger(MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL), true)
@@ -150,8 +153,10 @@ object CameraUploads {
 
     fun schedule(context: Context, s: AppSettings) {
         val wm = WorkManager.getInstance(context)
-        val periodic = PeriodicWorkRequestBuilder<CameraUploadWorker>(1, TimeUnit.HOURS)
-            .setConstraints(constraints(s, triggers = false))
+        // Safety net only: the trigger work finds new media. Each run is a full SDK login, so it
+        // runs seldom and not on a low battery (MEGAGLASS-PERF-001).
+        val periodic = PeriodicWorkRequestBuilder<CameraUploadWorker>(SAFETY_NET_HOURS, TimeUnit.HOURS)
+            .setConstraints(constraints(s, triggers = false, batteryNotLow = true))
             .build()
         wm.enqueueUniquePeriodicWork(PERIODIC, ExistingPeriodicWorkPolicy.UPDATE, periodic)
         // Replace the trigger work only when its constraints change: a running upload
