@@ -2,6 +2,8 @@ package app.megaglass.android
 
 import android.app.Application
 import android.content.Context
+import android.os.StrictMode
+import android.os.Trace
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -145,9 +147,16 @@ class MegaGlassApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        if (BuildConfig.DEBUG) enableStrictMode()
         // The SDK does local file access through FileWrapper; content URIs need the context.
         mega.privacy.android.data.filewrapper.FileWrapper.init(this)
-        graph = AppGraph(this)
+        // The SDK load and start are most of the cold start: a trace section measures them (MEGAGLASS-PERF-003).
+        Trace.beginSection("AppGraph")
+        try {
+            graph = AppGraph(this)
+        } finally {
+            Trace.endSection()
+        }
         ProcessLifecycleOwner.get().lifecycle.addObserver(graph.lock)
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             // The transfer job can only start while the app is visible. Transfers that continued
@@ -162,6 +171,12 @@ class MegaGlassApp : Application(), SingletonImageLoader.Factory {
             }
         })
         graph.session.start()
+    }
+
+    /** Debug builds log disk and network work on the main thread, leaks and unsafe intents (MEGAGLASS-PERF-003). */
+    private fun enableStrictMode() {
+        StrictMode.setThreadPolicy(StrictMode.ThreadPolicy.Builder().detectAll().penaltyLog().build())
+        StrictMode.setVmPolicy(StrictMode.VmPolicy.Builder().detectAll().penaltyLog().build())
     }
 
     override fun newImageLoader(context: PlatformContext): ImageLoader =
