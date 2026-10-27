@@ -155,6 +155,7 @@ data class AlbumState(
     val selection: Set<Long> = emptySet(),
     val isExported: Boolean = false,
     val deleted: Boolean = false,
+    val error: String? = null,
 ) {
     val media get() = entries.orEmpty().map { it.media }
 }
@@ -181,16 +182,22 @@ class AlbumViewModel(private val id: Long, private val isSystem: Boolean, privat
     private suspend fun loadNow() {
         val showHidden = graph.settings.current.showHidden
         if (isSystem) {
-            val all = PhotosRepository.timeline(MediaFilter.ALL, showHidden)
-            val items = PhotosRepository.systemAlbum(id, all).map { AlbumEntry(it.handle, it) }
-            _state.update { it.copy(name = systemName, entries = items) }
+            catching { PhotosRepository.timeline(MediaFilter.ALL, showHidden) }
+                .onSuccess { all ->
+                    val items = PhotosRepository.systemAlbum(id, all).map { AlbumEntry(it.handle, it) }
+                    _state.update { it.copy(name = systemName, entries = items, error = null) }
+                }
+                .onFailure { e -> _state.update { it.copy(name = systemName, entries = it.entries ?: emptyList(), error = e.message) } }
         } else {
             val name = withContext(Dispatchers.IO) { PhotosRepository.albumName(id) }
             if (name == null) {
                 _state.update { it.copy(deleted = true, entries = emptyList()) }
                 return
             }
-            val entries = catching { PhotosRepository.albumEntries(id, showHidden) }.getOrDefault(emptyList())
+            val entries = catching { PhotosRepository.albumEntries(id, showHidden) }.getOrElse { e ->
+                _state.update { it.copy(name = name, entries = it.entries ?: emptyList(), error = e.message) }
+                return
+            }
             val exported = withContext(Dispatchers.IO) { graph.mega.api.isExportedSet(id) }
             val handles = entries.mapTo(HashSet()) { it.media.handle }
             _state.update { st ->
@@ -199,6 +206,7 @@ class AlbumViewModel(private val id: Long, private val isSystem: Boolean, privat
                     entries = entries,
                     isExported = exported,
                     selection = st.selection.filterTo(HashSet()) { it in handles },
+                    error = null,
                 )
             }
         }

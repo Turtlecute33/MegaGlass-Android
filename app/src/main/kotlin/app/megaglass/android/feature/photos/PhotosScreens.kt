@@ -88,6 +88,7 @@ import app.megaglass.android.feature.drive.rememberNodeActions
 import app.megaglass.android.ui.components.BackButton
 import app.megaglass.android.ui.components.ConfirmDialog
 import app.megaglass.android.ui.components.EmptyState
+import app.megaglass.android.ui.components.ErrorState
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.IconAction
 import app.megaglass.android.ui.components.LoadingBox
@@ -168,6 +169,7 @@ fun PhotosScreen() {
                     onLongClick = { vm.toggle(it.handle) },
                     onToggleDay = vm::toggleDay,
                     onCameraUploads = { nav.navigate(CameraUploadsSettings) },
+                    onRetry = vm::load,
                     contentPadding = PaddingValues(bottom = 120.dp + padding.calculateBottomPadding()),
                 )
             } else {
@@ -228,11 +230,14 @@ private fun Timeline(
     onLongClick: (MediaItem) -> Unit,
     onToggleDay: (DaySection) -> Unit,
     onCameraUploads: () -> Unit,
+    onRetry: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     val all = state.all
     when {
         all == null -> LoadingBox()
+        // A failed load is not an empty timeline (MEGAGLASS-UX-005).
+        all.isEmpty() && state.error != null -> ErrorState(state.error, onRetry = onRetry)
         all.isEmpty() -> EmptyState(
             icon = R.drawable.ic_photo_library,
             title = stringResource(R.string.photos_empty_title),
@@ -534,8 +539,10 @@ fun AlbumScreen(route: Album) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
             val entries = state.entries
+            val error = state.error
             when {
                 entries == null -> LoadingBox()
+                entries.isEmpty() && error != null -> ErrorState(error, onRetry = vm::load)
                 entries.isEmpty() -> EmptyState(
                     icon = R.drawable.ic_photo_album,
                     title = stringResource(R.string.album_empty),

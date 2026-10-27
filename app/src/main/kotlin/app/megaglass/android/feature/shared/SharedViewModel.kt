@@ -36,12 +36,16 @@ data class SharedState(
     val outgoing: List<SharedEntry>? = null,
     val links: List<SharedEntry>? = null,
     val selection: Set<Long> = emptySet(),
+    /** Load error of each tab, in tab order; null when the tab loaded. */
+    val errors: List<String?> = listOf(null, null, null),
 ) {
     fun list(tab: Int) = when (tab) {
         0 -> incoming
         1 -> outgoing
         else -> links
     }
+
+    fun error(tab: Int) = errors.getOrNull(tab)
 }
 
 /** Access level as text. */
@@ -77,6 +81,7 @@ class SharedViewModel : ViewModel() {
             val s = graph.settings.current
             val order = s.sortOrder.sdkOrder
             val res = graph.context.resources
+            val errors = arrayOfNulls<String>(3)
             val incoming = catching {
                 val shares = withContext(Dispatchers.IO) { api.getInSharesList(order) }
                 val unverified = withContext(Dispatchers.IO) { api.getUnverifiedIncomingShares(order).map { it.nodeHandle }.toSet() }
@@ -93,7 +98,7 @@ class SharedViewModel : ViewModel() {
                         )
                     }
                 }
-            }.getOrDefault(emptyList())
+            }.getOrElse { errors[0] = it.message; emptyList() }
             val outgoing = catching {
                 val shares = withContext(Dispatchers.IO) { api.getOutShares(order) }
                 val unverified = withContext(Dispatchers.IO) { api.getUnverifiedOutgoingShares(order).map { it.nodeHandle }.toSet() }
@@ -112,10 +117,10 @@ class SharedViewModel : ViewModel() {
                         SharedEntry(node.toItem(api), subtitle, unverified = handle in unverified)
                     }
                 }
-            }.getOrDefault(emptyList())
+            }.getOrElse { errors[1] = it.message; emptyList() }
             val links = catching {
                 graph.nodes.publicLinks(s.sortOrder, s.showHidden).map { SharedEntry(it, null) }
-            }.getOrDefault(emptyList())
+            }.getOrElse { errors[2] = it.message; emptyList() }
             // Folders by their shown date for Newest and Oldest (see dateComparator).
             val byDate = s.sortOrder.dateComparator()?.let { c -> compareBy<SharedEntry, NodeItem>(c) { it.item } }
             _state.update { st ->
@@ -125,6 +130,7 @@ class SharedViewModel : ViewModel() {
                     outgoing = byDate?.let(outgoing::sortedWith) ?: outgoing,
                     links = links,
                     selection = st.selection.filterTo(HashSet()) { it in all },
+                    errors = errors.toList(),
                 )
             }
         }

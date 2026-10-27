@@ -50,6 +50,7 @@ import app.megaglass.android.feature.drive.ViewOptionsActions
 import app.megaglass.android.feature.drive.rememberNodeActions
 import app.megaglass.android.ui.components.BackButton
 import app.megaglass.android.ui.components.EmptyState
+import app.megaglass.android.ui.components.ErrorState
 import app.megaglass.android.ui.components.IconAction
 import app.megaglass.android.ui.components.LoadingBox
 import app.megaglass.android.ui.components.NodeRow
@@ -124,9 +125,11 @@ fun SharedScreen(route: Shared) {
         Box(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
             HorizontalPager(pager, Modifier.fillMaxSize(), beyondViewportPageCount = 1) { page ->
                 val list = state.list(page)
+                val error = state.error(page)
                 val tab = sharedTabs[page]
                 when {
                     list == null -> LoadingBox()
+                    list.isEmpty() && error != null -> ErrorState(error, onRetry = vm::load)
                     list.isEmpty() -> EmptyState(
                         icon = when (page) {
                             0 -> R.drawable.ic_folder_shared

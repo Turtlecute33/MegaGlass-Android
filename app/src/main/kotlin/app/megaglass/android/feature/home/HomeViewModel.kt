@@ -25,6 +25,8 @@ import nz.mega.sdk.MegaApiJava
 data class HomeState(
     val firstName: String = "",
     val recents: List<RecentBucket>? = null,
+    /** The last recents load failed: not the same as no recent activity. */
+    val recentsError: String? = null,
     val storageUsed: Long = 0,
     val storageMax: Long = 0,
     val refreshing: Boolean = false,
@@ -64,8 +66,8 @@ class HomeViewModel : ViewModel() {
 
     private suspend fun loadRecents() {
         catching { graph.nodes.recents(showHidden = graph.settings.current.showHidden) }
-            .onSuccess { r -> _state.update { it.copy(recents = r) } }
-            .onFailure { _state.update { s -> s.copy(recents = s.recents ?: emptyList()) } }
+            .onSuccess { r -> _state.update { it.copy(recents = r, recentsError = null) } }
+            .onFailure { e -> _state.update { s -> s.copy(recents = s.recents ?: emptyList(), recentsError = e.message) } }
     }
 
     private fun loadName() = viewModelScope.launch {

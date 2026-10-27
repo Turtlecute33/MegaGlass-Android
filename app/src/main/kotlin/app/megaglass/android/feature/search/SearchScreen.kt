@@ -61,6 +61,7 @@ import app.megaglass.android.feature.drive.SelectionToolbar
 import app.megaglass.android.feature.drive.rememberNodeActions
 import app.megaglass.android.ui.components.BackButton
 import app.megaglass.android.ui.components.EmptyState
+import app.megaglass.android.ui.components.ErrorState
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.IconAction
 import app.megaglass.android.ui.components.LoadingBox
@@ -107,6 +108,8 @@ data class SearchState(
     val results: List<NodeItem>? = emptyList(),
     val searching: Boolean = false,
     val selection: Set<Long> = emptySet(),
+    /** The last search failed: not the same as no results. */
+    val error: String? = null,
 ) {
     val active get() = query.isNotBlank() || type != TypeFilter.ALL || date != DateFilter.ANY
 }
@@ -120,7 +123,7 @@ class SearchViewModel(private val parent: Long) : ViewModel() {
     init {
         viewModelScope.launch {
             combine(_state, trigger, graph.settings.state) { s, revision, settings ->
-                Triple(s.copy(results = null, searching = false, selection = emptySet()), revision, settings.sortOrder to settings.showHidden)
+                Triple(s.copy(results = null, searching = false, selection = emptySet(), error = null), revision, settings.sortOrder to settings.showHidden)
             }
                 .distinctUntilChanged()
                 .debounce(250)
@@ -131,7 +134,7 @@ class SearchViewModel(private val parent: Long) : ViewModel() {
 
     private suspend fun search(s: SearchState) {
         if (!s.active) {
-            _state.update { it.copy(results = emptyList(), searching = false) }
+            _state.update { it.copy(results = emptyList(), searching = false, error = null) }
             return
         }
         _state.update { it.copy(searching = true) }
@@ -148,9 +151,13 @@ class SearchViewModel(private val parent: Long) : ViewModel() {
                 showHidden = graph.settings.current.showHidden,
                 limit = RESULT_LIMIT.toLong(),
             )
-        }.getOrDefault(emptyList())
-        _state.update { it.copy(results = result, searching = false) }
+        }
+        _state.update {
+            it.copy(results = result.getOrDefault(emptyList()), searching = false, error = result.exceptionOrNull()?.message)
+        }
     }
+
+    fun retry() = trigger.update { it + 1 }
 
     fun setQuery(q: String) = _state.update { it.copy(query = q, results = null, selection = emptySet()) }
     fun setType(t: TypeFilter) = _state.update { it.copy(type = t, results = null, selection = emptySet()) }
@@ -209,9 +216,11 @@ fun SearchScreen(route: Search) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
             val results = state.results
+            val error = state.error
             when {
                 !state.active -> EmptyState(R.drawable.ic_search, stringResource(R.string.search_start), message = stringResource(R.string.search_start_hint))
                 results == null || state.searching && results.isEmpty() -> LoadingBox()
+                results.isEmpty() && error != null -> ErrorState(error, onRetry = vm::retry)
                 results.isEmpty() -> EmptyState(R.drawable.ic_image_search, stringResource(R.string.no_results))
                 else -> NodeCollection(
                     items = results,

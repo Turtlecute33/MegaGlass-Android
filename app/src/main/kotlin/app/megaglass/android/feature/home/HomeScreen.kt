@@ -57,6 +57,7 @@ import app.megaglass.android.feature.drive.NodeContext
 import app.megaglass.android.feature.drive.rememberNodeActions
 import app.megaglass.android.ui.components.Avatar
 import app.megaglass.android.ui.components.EmptyState
+import app.megaglass.android.ui.components.ErrorState
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.LoadingBox
 import app.megaglass.android.ui.components.NodeRow
@@ -145,8 +146,12 @@ fun HomeScreen(vm: HomeViewModel = viewModel()) {
                 )
             }
             val recents = state.recents
+            val error = state.recentsError
             when {
                 recents == null -> item(key = "loading") { LoadingBox(Modifier.height(240.dp)) }
+                recents.isEmpty() && error != null -> item(key = "error") {
+                    ErrorState(error, onRetry = vm::refresh, modifier = Modifier.height(320.dp))
+                }
                 recents.isEmpty() -> item(key = "empty") {
                     EmptyState(
                         R.drawable.ic_history,
