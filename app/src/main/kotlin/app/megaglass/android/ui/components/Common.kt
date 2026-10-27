@@ -56,8 +56,15 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.Worker
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import app.megaglass.android.R
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 /** A Material Symbols icon from res/drawable. */
 @Composable
@@ -276,10 +283,12 @@ fun UsageBar(fraction: Float, modifier: Modifier = Modifier, height: Dp = 12.dp)
 /**
  * Copies a secret (a link with its key, a recovery key); Android 13+ hides it in the clipboard preview.
  * With [expire] the clip is removed after [SECRET_CLIP_MS]. If the app is not in the foreground then,
- * the clipboard is cleared whatever it holds.
+ * the clipboard is cleared whatever it holds. A [ClearClipWorker] job also clears it when the process
+ * stops before the delay ends (MEGAGLASS-SEC-005).
  */
 fun copySensitive(context: Context, text: String, expire: Boolean = false) {
-    val clipboard = context.applicationContext.getSystemService(ClipboardManager::class.java)
+    val app = context.applicationContext
+    val clipboard = app.getSystemService(ClipboardManager::class.java)
     val id = UUID.randomUUID().toString()
     val clip = ClipData.newPlainText("MEGA", text)
     clip.description.extras = PersistableBundle().apply {
@@ -288,11 +297,35 @@ fun copySensitive(context: Context, text: String, expire: Boolean = false) {
     }
     clipboard.setPrimaryClip(clip)
     if (!expire) return
+    // One name for each clip: the Handler of one clip must not cancel the job of a later clip.
+    val work = "clear-clip-$id"
+    WorkManager.getInstance(app).enqueueUniqueWork(
+        work,
+        ExistingWorkPolicy.REPLACE,
+        OneTimeWorkRequestBuilder<ClearClipWorker>()
+            .setInitialDelay(SECRET_CLIP_MS, TimeUnit.MILLISECONDS)
+            .setInputData(workDataOf(CLIP_ID to id))
+            .build(),
+    )
     Handler(Looper.getMainLooper()).postDelayed({
-        // In the background the clipboard cannot be read (null): clear it anyway, the secret must not stay.
-        val current = clipboard.primaryClipDescription
-        if (current == null || current.extras?.getString(CLIP_ID) == id) clipboard.clearPrimaryClip()
+        clearSecretClip(app, id)
+        WorkManager.getInstance(app).cancelUniqueWork(work)
     }, SECRET_CLIP_MS)
+}
+
+/** Clears clip [id]. In the background the clipboard cannot be read (null): clear it anyway, the secret must not stay. */
+private fun clearSecretClip(context: Context, id: String) {
+    val clipboard = context.getSystemService(ClipboardManager::class.java)
+    val current = clipboard.primaryClipDescription
+    if (current == null || current.extras?.getString(CLIP_ID) == id) clipboard.clearPrimaryClip()
+}
+
+/** Clears a secret clip of [copySensitive] after the delay, also after a process stop. */
+class ClearClipWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
+    override fun doWork(): Result {
+        inputData.getString(CLIP_ID)?.let { clearSecretClip(applicationContext, it) }
+        return Result.success()
+    }
 }
 
 private const val SECRET_CLIP_MS = 60_000L
