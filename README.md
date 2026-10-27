@@ -34,6 +34,16 @@ Compose with Material 3 Expressive for the interface. Chat and calls are not inc
 - **App lock**: passcode lock and screenshot blocking.
 - **Themes**: light, dark, pure black and dynamic colour.
 
+## Security
+
+- **All-files access is optional.** MegaGlass asks for it before a download to
+  Download/MegaGlass, a folder upload or a two-way sync, because the MEGA SDK uses real file
+  paths for these. With this access, the app and its native SDK can read and change all files in
+  shared storage, not only the folders that you select. Without it, downloads go to the app's
+  own folder, and folder upload and sync are not available. Single files upload without it. The
+  app does not sync through the Android folder picker (SAF): that path is not tested, and a
+  two-way sync deletes a file that it does not see from the cloud.
+
 ## Privacy
 
 - No ads, no third-party analytics, no Google Play Services. The app connects only to MEGA.

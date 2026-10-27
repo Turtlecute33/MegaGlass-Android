@@ -131,7 +131,7 @@ class LocalFiles(private val context: Context) {
         }
     }.getOrNull()
 
-    /** Real file path behind a content URI, when it can be found. */
+    /** Real file path behind a content URI, when it can be found. Only with all-files access, else null. */
     fun realPath(uri: Uri): String? = queryRealPath(uri)?.takeUnless { isPrivate(File(it)) }
 
     private fun queryRealPath(uri: Uri): String? {

@@ -22,8 +22,9 @@ import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 
 /**
- * Asks for all-files access before an action that writes to shared storage (downloads, folder
- * uploads). Without it, downloads go to the app's own folder instead.
+ * Asks for all-files access before an action that uses real paths in shared storage: downloads,
+ * folder uploads and two-way sync. Without it, downloads go to the app's own folder, and folder
+ * upload and sync are not available (README Security).
  */
 @Stable
 class StorageAccess {

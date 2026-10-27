@@ -156,6 +156,11 @@ and checked before builds. A fresh checkout must run both SDK scripts as documen
   on the existing in-memory back stacks; full process-death navigation/draft restoration is not
   established by this round. `Mega.APP_KEY` remains empty as in the alpha and must be checked
   with service acceptance during real-account validation.
+- Accepted risk (MEGAGLASS-SEC-002): downloads to shared storage, folder upload and two-way
+  sync need all-files access, because the SDK uses real paths for them. With this access, a
+  fault in the native SDK can reach all of shared storage. The bundled FileWrapper can read SAF
+  tree URIs, but a SAF sync is not tested for speed or for files that it does not see, and a
+  two-way sync deletes such a file from the cloud. The README Security section records this.
 - The tests do not establish production readiness for successful login/MFA/session restoration,
   account switching with active authenticated operations, quota exhaustion, multi-gigabyte or
   recursive transfers, real network loss, real disk exhaustion, shared-folder permissions,
