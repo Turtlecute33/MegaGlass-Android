@@ -98,10 +98,13 @@ class NodeRepository(private val mega: Mega) {
     suspend fun children(parent: Long, order: SortOrder, showHidden: Boolean): List<NodeItem> = io {
         val node = require(parent)
         val inherited = parent != rootHandle && api.isSensitiveInherited(node)
+        // A child has the access of its parent, except a nested incoming share: one SDK call
+        // for the folder, not one for each child (MEGAGLASS-PERF-007).
+        val access = api.getAccess(node)
         api.getChildren(node, order.sdkOrder)
             .asSequence()
             .filter { showHidden || inherited || !it.isMarkedSensitive }
-            .map { it.toItem(api) }
+            .map { it.toItem(api, access = if (it.isInShare) null else access) }
             .toList()
             .sortedFor(order)
     }
