@@ -50,6 +50,11 @@ Compose with Material 3 Expressive for the interface. Chat and calls are not inc
   checks the file MAC and fails. Streamed video and audio, thumbnails and previews have no MAC
   check. A changed upload can give a cloud file that fails its check at a later download.
   MegaGlass accepts this risk. Use a network that you trust for important uploads.
+- **Local stream server.** Video and audio play through an HTTP server of the MEGA SDK on
+  127.0.0.1, on a random port, while a file plays. It serves only the files that the app opens.
+  It sends no CORS header, so a web page cannot read a stream. The stream path has no secret:
+  another app on the phone that finds the port and knows the node handle can read the file that
+  plays. MegaGlass accepts this risk.
 
 ## Privacy
 
@@ -117,6 +122,8 @@ records the commit that it was built from. Commit (and tag) the version change f
   getters as owners of their native results, so that Java can release them safely.
 - `patches/mega-sdk-no-events.patch`: the SDK does not send its diagnostic events and reports
   to MEGA, and it does not keep the journey ID.
+- `patches/mega-sdk-stream-no-cors.patch`: the local stream server does not send
+  `Access-Control-Allow-Origin: *`, so a web page cannot read the decrypted stream.
 - `patches/mega-sdk-user-agent.patch`: the SDK puts only "Android" in the user agent, and not
   the kernel release and the CPU architecture.
 - libmega.so exports only its JNI functions (`scripts/libmega.map`), and its relative
