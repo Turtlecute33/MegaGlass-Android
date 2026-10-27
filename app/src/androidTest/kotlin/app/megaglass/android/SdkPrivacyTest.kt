@@ -33,4 +33,11 @@ class SdkPrivacyTest {
         mega.useDeviceId()
         assertNotEquals(first, mega.api.deviceId)
     }
+
+    /** MEGAGLASS-PRIV-006: no kernel release and no CPU architecture in the user agent. */
+    @Test fun userAgentIsTheSameOnEveryDevice() {
+        val agent = checkNotNull(mega.api.userAgent)
+        assertEquals("MegaGlass/${BuildConfig.VERSION_NAME} (Android) (Android) MegaClient/10.21.0/64", agent)
+        assertFalse(agent.contains(checkNotNull(System.getProperty("os.version"))))
+    }
 }

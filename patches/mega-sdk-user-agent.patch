@@ -1,0 +1,23 @@
+diff --git a/src/posix/fs.cpp b/src/posix/fs.cpp
+index a3b87c6..cd6a98a 100644
+--- a/src/posix/fs.cpp
++++ b/src/posix/fs.cpp
+@@ -1601,6 +1601,10 @@ string getDistroVersion()
+ 
+ void PosixFileSystemAccess::osversion(string* u, bool /*includeArchExtraInfo*/) const
+ {
++#ifdef __ANDROID__
++    // MegaGlass: no kernel release and no CPU architecture, so the value is the same on every device.
++    u->append("Android");
++#else
+ #ifdef __linux__
+     string distro = getDistro();
+     if (distro.size())
+@@ -1630,6 +1634,7 @@ void PosixFileSystemAccess::osversion(string* u, bool /*includeArchExtraInfo*/)
+         u->append(" ");
+         u->append(uts.machine);
+     }
++#endif
+ }
+ 
+ void PosixFileSystemAccess::statsid(string *id) const

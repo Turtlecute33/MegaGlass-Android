@@ -78,7 +78,8 @@ class Mega(context: Context) {
     val publicSetLock = Mutex()
     var publicSetOwner = 0L
 
-    // No device model or OS version: the same for every device.
+    // The SDK adds " (Android) MegaClient/<SDK version>/64" (patches/mega-sdk-user-agent.patch). No
+    // device model, OS version, kernel release or CPU architecture: the same on every device.
     private val userAgent = "MegaGlass/${BuildConfig.VERSION_NAME} (Android)"
     private val baseDir = File(context.filesDir, "mega").apply { mkdirs() }
     private val folderDir = File(context.cacheDir, "mega-folder")

@@ -63,6 +63,8 @@ Compose with Material 3 Expressive for the interface. Chat and calls are not inc
   setting to turn them off, and some contain file fingerprints and MACs. A local patch stops
   them. The SDK also does not keep the journey ID that the server can send, so the API requests
   do not include it.
+- The user agent is `MegaGlass/<version> (Android) (Android) MegaClient/<SDK version>/64`, the
+  same on every device. It has no device model, OS version, kernel release or CPU architecture.
 - Files are encrypted on the device before upload.
 - The session is encrypted with a key in the Android Keystore and is not included in backups.
 - Thumbnails, previews and offline files stay in app-private storage.
@@ -111,6 +113,8 @@ records the commit that it was built from. Commit (and tag) the version change f
   getters as owners of their native results, so that Java can release them safely.
 - `patches/mega-sdk-no-events.patch`: the SDK does not send its diagnostic events and reports
   to MEGA, and it does not keep the journey ID.
+- `patches/mega-sdk-user-agent.patch`: the SDK puts only "Android" in the user agent, and not
+  the kernel release and the CPU architecture.
 - `scripts/ports/`: pinned native dependency updates, with upstream provenance and licenses.
   The native build records versions and a binary digest. Gradle rejects artifacts that do not
   match.
