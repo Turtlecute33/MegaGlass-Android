@@ -127,6 +127,9 @@ records the commit that it was built from. Commit (and tag) the version change f
   is the "Fast transfers" setting.
 - Crypto++ and OpenSSL are built with the ARMv8 AES, PMULL and SHA instructions. The libraries
   select them at run time.
+- All native code is built with BTI and PAC branch protection. libmega.so has the BTI note, so
+  Android enforces BTI for it on devices that support it. The link stops if an object has no
+  BTI note.
 
 </details>
 
