@@ -154,6 +154,7 @@
         <item quantity="one">%d digit</item>
         <item quantity="other">%d digits</item>
     </plurals>
+    <string name="security_passcode_wipe_note">After 10 wrong passcodes, MegaGlass logs out and deletes offline files and photos that did not upload.</string>
     <string name="security_use_4">Use 4 digits</string>
     <string name="security_use_6">Use 6 digits</string>
     <string name="security_passcode_mismatch">The passcodes are not the same. Try again.</string>
@@ -163,8 +164,8 @@
     <string name="lock_title">MegaGlass is locked</string>
     <string name="lock_subtitle">Enter your passcode</string>
     <plurals name="lock_attempts_left">
-        <item quantity="one">Wrong passcode. %d attempt left before log-out.</item>
-        <item quantity="other">Wrong passcode. %d attempts left before log-out.</item>
+        <item quantity="one">Wrong passcode. %d attempt left. Then MegaGlass logs out and deletes local files.</item>
+        <item quantity="other">Wrong passcode. %d attempts left. Then MegaGlass logs out and deletes local files.</item>
     </plurals>
     <plurals name="pin_dots_state">
         <item quantity="one">%1$d of %2$d digit entered</item>

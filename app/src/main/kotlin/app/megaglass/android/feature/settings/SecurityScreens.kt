@@ -878,6 +878,15 @@ fun PasscodeSetupScreen() {
                 pluralStringResource(R.plurals.security_passcode_digits, length, length),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // The wipe also deletes data that is not in the cloud (MEGAGLASS-UX-013). In both
+            // steps, so that the dots do not move.
+            Text(
+                stringResource(R.string.security_passcode_wipe_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 4.dp),
+            )
             if (step == PasscodeStep.ENTER) {
                 TextButton(onClick = {
                     length = if (length == 4) 6 else 4
