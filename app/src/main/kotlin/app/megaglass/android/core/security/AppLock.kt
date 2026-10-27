@@ -8,6 +8,7 @@ import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import app.megaglass.android.core.storage.Settings
 import kotlinx.coroutines.Dispatchers
@@ -58,9 +59,15 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
         if (SystemClock.elapsedRealtime() - backgroundSince >= s.lockTimeout * 1000L) _locked.value = true
     }
 
-    override fun onPause(owner: LifecycleOwner) = grace.leave()
+    /**
+     * Add to the lifecycle of the activity. The process gets no pause or resume for a picker that
+     * closes within 700 ms, so the grace must follow the activity.
+     */
+    val activityObserver: LifecycleObserver = object : DefaultLifecycleObserver {
+        override fun onPause(owner: LifecycleOwner) = grace.leave()
 
-    override fun onResume(owner: LifecycleOwner) = grace.resume()
+        override fun onResume(owner: LifecycleOwner) = grace.resume()
+    }
 
     /** Wrong passcodes in a row, also across app restarts. */
     var failures: Int = settings.current.lockFailures
@@ -200,32 +207,48 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
 /**
  * One return to the app without the lock, after the app started another activity on purpose
  * (MEGAGLASS-UX-004). It ends at the first return or after [limitMs], whichever comes first.
- * The calls follow the process lifecycle.
+ * [leave] and [resume] follow the activity, [consume] follows the process.
  */
-internal class ReturnGrace(private val limitMs: Long = 120_000, private val clock: () -> Long) {
+internal class ReturnGrace(
+    private val limitMs: Long = 120_000,
+    /** The activity pauses this soon after [expect] when the other activity starts. */
+    private val startMs: Long = 5_000,
+    private val clock: () -> Long,
+) {
+    @Volatile private var since = 0L
     @Volatile private var until = 0L
     @Volatile private var left = false
 
     fun expect() {
         left = false
-        until = clock() + limitMs
-    }
-
-    /** ON_PAUSE: the app is not in the foreground. */
-    fun leave() {
-        left = true
-    }
-
-    /** ON_START: true once, for a return inside the limit. */
-    fun consume(): Boolean {
-        val end = until
-        until = 0L
-        return end != 0L && clock() < end
+        since = clock()
+        until = since + limitMs
     }
 
     /**
-     * ON_RESUME. After a pause without a stop (a picker that does not cover the app), the grace
-     * ends. A grace that starts at this resume (a picker after a settings page) stays.
+     * ON_PAUSE of the activity. A first pause long after [expect] is not the start of the other
+     * activity (for example, no app could open it), so the grace ends and the next return locks.
+     */
+    fun leave() {
+        if (!left && clock() - since > startMs) until = 0L
+        left = true
+    }
+
+    /**
+     * ON_START of the process: true once, for a return inside the limit. Only after a [leave]:
+     * without a pause, the other activity did not open (for example, the app was in the
+     * background when it tried to start it).
+     */
+    fun consume(): Boolean {
+        val end = until
+        until = 0L
+        return end != 0L && left && clock() < end
+    }
+
+    /**
+     * ON_RESUME of the activity. After a pause without a stop (a picker that does not cover the
+     * app, or a picker that closes at once), the grace ends. A grace that starts at this resume
+     * (a picker after a settings page) stays.
      */
     fun resume() {
         if (left) until = 0L

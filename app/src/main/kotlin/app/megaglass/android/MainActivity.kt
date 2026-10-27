@@ -30,6 +30,8 @@ class MainActivity : ComponentActivity() {
         // The bar icons follow the app theme, also after a system dark-mode change (MEGAGLASS-UX-007).
         edgeToEdge { res -> settings.current.themeMode.isDark(res.configuration.isNightModeActive) }
         super.onCreate(savedInstanceState)
+        // The lock grace after a picker follows the pause and the resume of this activity (MEGAGLASS-UX-004).
+        lifecycle.addObserver(MegaGlassApp.graph.lock.activityObserver)
         if (savedInstanceState == null) handle(intent)
 
         lifecycleScope.launch {
