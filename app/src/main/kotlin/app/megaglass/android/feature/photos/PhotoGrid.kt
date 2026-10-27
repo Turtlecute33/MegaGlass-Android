@@ -32,8 +32,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +54,7 @@ import app.megaglass.android.core.util.Format
 import app.megaglass.android.ui.components.FileTypeIcon
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.theme.AppTheme
+import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
 import java.time.LocalDate
@@ -127,13 +130,15 @@ fun MediaCell(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         Box(Modifier.fillMaxSize().scale(scale).clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
-            if (item.node.hasThumbnail) {
-                SubcomposeAsyncImage(
+            // AsyncImage without subcomposition; after an error the cell shows the type icon (MEGAGLASS-PERF-005).
+            var failed by remember(item.handle) { mutableStateOf(false) }
+            if (item.node.hasThumbnail && !failed) {
+                AsyncImage(
                     model = remember(item.handle) { ImageRequest.Builder(context).data(NodeImage(item.handle)).build() },
                     contentDescription = item.node.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                    error = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { FileTypeIcon(item.node.type) } },
+                    onError = { failed = true },
                 )
             } else {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { FileTypeIcon(item.node.type) }

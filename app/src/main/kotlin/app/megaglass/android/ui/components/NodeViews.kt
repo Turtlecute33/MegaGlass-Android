@@ -153,14 +153,17 @@ fun NodeThumbnail(
     val request = remember(item.handle, folderLink) {
         ImageRequest.Builder(context).data(NodeImage(item.handle, folderLink = folderLink)).build()
     }
-    SubcomposeAsyncImage(
-        model = request,
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        modifier = modifier.size(size).clip(RoundedCornerShape(size * cornerFraction)),
-        loading = { FileTypeIcon(item.type, Modifier.fillMaxSize(), size) },
-        error = { FileTypeIcon(item.type, Modifier.fillMaxSize(), size) },
-    )
+    // The icon stays behind the image while it loads and after an error. AsyncImage does not
+    // subcompose, which keeps fast list scrolls smooth (MEGAGLASS-PERF-005).
+    Box(modifier.size(size).clip(RoundedCornerShape(size * cornerFraction))) {
+        FileTypeIcon(item.type, Modifier.fillMaxSize(), size)
+        AsyncImage(
+            model = request,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
 }
 
 /** "3 folders · 12 files" for folders, "1.2 MB · 3 Oct" for files. */
