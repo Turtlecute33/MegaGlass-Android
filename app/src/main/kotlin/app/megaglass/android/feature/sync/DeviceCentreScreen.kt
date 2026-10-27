@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.sync
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import android.os.Build
 import androidx.activity.compose.BackHandler
@@ -203,7 +204,7 @@ fun DeviceCentreScreen() {
     LaunchedEffect(reload) {
         catching { loadDevices() }
             .onSuccess { devices = it; error = null }
-            .onFailure { error = it.message }
+            .onFailure { error = graph.context.resources.userMessage(it) }
         refreshing = false
     }
 
@@ -276,7 +277,7 @@ fun DeviceCentreScreen() {
                 scope.launch {
                     catching {
                         withContext(Dispatchers.IO) { graph.mega.api.await { setDeviceName(device.id, name, it) } }
-                    }.onFailure { graph.messenger.show(it.message.orEmpty()) }
+                    }.onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
                     reload++
                 }
             },

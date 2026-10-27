@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.offline
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -118,7 +119,7 @@ fun OfflineScreen(path: String?) {
                             onClick = {
                                 if (!entry.verified) scope.launch {
                                     catching { graph.offline.makeAvailable(listOf(entry.handle)) }
-                                        .onFailure { graph.messenger.show(it.message ?: graph.context.getString(R.string.error_title)) }
+                                        .onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
                                 } else if (entry.isFolder) nav.navigate(OfflineFolder(entry.file.absolutePath)) else nav.openLocal(entry.file)
                             },
                             onOpenWith = { graph.opener.view(entry.file) },
@@ -157,7 +158,7 @@ fun OfflineScreen(path: String?) {
             onConfirm = {
                 scope.launch {
                     catching { graph.offline.remove(listOf(entry.handle)) }
-                        .onFailure { graph.messenger.show(it.message ?: graph.context.getString(R.string.error_title)) }
+                        .onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
                     reload++
                 }
             },

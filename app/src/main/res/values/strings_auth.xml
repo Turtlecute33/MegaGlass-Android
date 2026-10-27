@@ -29,6 +29,17 @@
     <string name="auth_send_link">Send reset link</string>
     <string name="auth_reset_sent_title">Check your e-mail</string>
     <string name="auth_reset_sent_text">We sent a reset link to %1$s. Open it on mega.nz and enter your recovery key.</string>
+    <string name="auth_wrong_login">Wrong e-mail or password.</string>
+    <string name="auth_wrong_code">Wrong code. Try again.</string>
+    <string name="auth_email_used">An account with this e-mail already exists.</string>
+    <string name="auth_too_many">Too many attempts. Wait a few minutes and try again.</string>
+    <string name="auth_not_confirmed">This account is not confirmed yet. Check your e-mail.</string>
+    <string name="auth_blocked">This account is blocked.</string>
+    <string name="auth_timed_out">Connection timed out. Try again.</string>
+    <string name="session_read_failed">Cannot read the saved session. Try again.</string>
+    <string name="session_sdk_logged_out">The connection to MEGA stopped because of an error. Try again.</string>
+    <string name="session_cleanup_failed">Could not remove local account data. Try logging out again.</string>
+    <string name="session_server_active">The session could not be ended on the MEGA server. You are logged out on this device, but the session stays active on the server until it expires. To end it now, close it in MEGA on the web (Settings &gt; Security &gt; Session history).</string>
     <string name="strength_very_weak">Very weak</string>
     <string name="strength_weak">Weak</string>
     <string name="strength_medium">Medium</string>

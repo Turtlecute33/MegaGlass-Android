@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.shared
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -135,7 +136,7 @@ private class ShareFolderModel(private val handle: Long, private val scope: Coro
         return when ((e as? MegaException)?.code) {
             MegaError.API_EACCESS -> res.getString(R.string.share_error_access)
             MegaError.API_EARGS -> res.getString(R.string.share_error_args)
-            else -> e.message ?: res.getString(R.string.error_title)
+            else -> res.userMessage(e)
         }
     }
 

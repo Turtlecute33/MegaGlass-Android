@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.viewer
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import android.app.ActivityManager
 import android.content.Context
@@ -177,7 +178,7 @@ fun PdfViewerScreen(route: PdfViewer) {
         title = node.name ?: ""
         catching { PreviewCache.fetch(route.handle, node.name ?: "file.pdf", node.size, route.folderLink) { progress = it } }
             .onSuccess { file = it }
-            .onFailure { error = it.message ?: resources.getString(R.string.error_title) }
+            .onFailure { error = resources.userMessage(it) }
     }
 
     var document by remember { mutableStateOf<PdfDocument?>(null) }

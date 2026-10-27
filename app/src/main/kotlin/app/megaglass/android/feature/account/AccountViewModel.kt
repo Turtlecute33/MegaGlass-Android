@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.account
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import android.content.Context
 import android.net.Uri
@@ -173,7 +174,7 @@ class AccountViewModel : ViewModel() {
                     error = null,
                 )
             }
-        }.onFailure { e -> _state.update { it.copy(loading = false, error = e.message) } }
+        }.onFailure { e -> _state.update { it.copy(loading = false, error = graph.context.resources.userMessage(e)) } }
     }
 
     private class AccountUpdate(
@@ -236,7 +237,7 @@ class AccountViewModel : ViewModel() {
                 block()
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                graph.messenger.show(e.message ?: graph.context.getString(R.string.error_title))
+                graph.messenger.show(graph.context.resources.userMessage(e))
             } finally {
                 _busy.value = false
             }

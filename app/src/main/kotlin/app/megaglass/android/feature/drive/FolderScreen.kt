@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.drive
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -271,7 +272,7 @@ private fun DriveFolder(mode: DriveMode, handle: Long) {
                 // App scope: the dialog closes at once, which would cancel a scope of its own.
                 graph.scope.launch {
                     catching { graph.nodes.createFolder(vm.rootHandle, name) }
-                        .onFailure { graph.messenger.show(it.message ?: "") }
+                        .onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
                 }
             },
             onDismiss = { newFolder = false },

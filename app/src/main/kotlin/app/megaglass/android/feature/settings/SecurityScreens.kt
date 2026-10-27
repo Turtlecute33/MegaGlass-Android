@@ -73,6 +73,7 @@ import app.megaglass.android.R
 import app.megaglass.android.core.mega.MegaException
 import app.megaglass.android.core.mega.await
 import app.megaglass.android.core.util.Format
+import app.megaglass.android.core.util.userMessage
 import app.megaglass.android.feature.auth.OtpField
 import app.megaglass.android.feature.lock.NumberPad
 import app.megaglass.android.feature.lock.PinDots
@@ -123,7 +124,7 @@ private fun Context.errorText(e: Throwable): String = when ((e as? MegaException
     MegaError.API_EEXIST -> getString(R.string.security_email_used)
     MegaError.API_EMASTERONLY -> getString(R.string.security_master_only)
     MegaError.API_ETOOMANY -> getString(R.string.security_too_many)
-    else -> e.message ?: getString(R.string.error_title)
+    else -> resources.userMessage(e)
 }
 
 @Composable
@@ -323,7 +324,7 @@ fun SessionsScreen() {
                     .sortedWith(compareByDescending<SessionUi> { it.current }.thenByDescending { it.lastActive })
             }
         }.onSuccess { sessions = it; error = null }
-            .onFailure { error = it.message }
+            .onFailure { error = resources.userMessage(it) }
     }
 
     fun close(handle: Long) = scope.launch {

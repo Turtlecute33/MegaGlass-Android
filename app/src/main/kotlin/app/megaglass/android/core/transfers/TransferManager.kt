@@ -1,7 +1,9 @@
 package app.megaglass.android.core.transfers
 
+import android.content.res.Resources
 import androidx.compose.runtime.Immutable
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 import app.megaglass.android.core.mega.Mega
 import app.megaglass.android.core.mega.MegaException
 import app.megaglass.android.core.mega.await
@@ -121,7 +123,13 @@ data class TransfersState(
  * (parallel connections, chunk encryption and MACs in native code); this class only keeps a
  * snapshot for the UI and the notification, rebuilt at most [TICK_MS] apart.
  */
-class TransferManager(private val mega: Mega, private val scope: CoroutineScope, private val temporaryRoots: List<File> = emptyList()) {
+class TransferManager(
+    private val mega: Mega,
+    /** For the error text of failed transfers. */
+    private val res: Resources,
+    private val scope: CoroutineScope,
+    private val temporaryRoots: List<File> = emptyList(),
+) {
 
     private val api get() = mega.api
 
@@ -266,7 +274,8 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
 
         override fun onTransferFinish(api: MegaApiJava, transfer: MegaTransfer, e: MegaError) {
             if (!accepting || skip(transfer)) return
-            val error = if (e.errorCode == MegaError.API_OK) null else e.errorString ?: "Error ${e.errorCode}"
+            val error = if (e.errorCode == MegaError.API_OK) null
+            else res.userMessage(MegaException(e.errorCode, e.errorString.orEmpty(), fromSdk = true))
             val k = key(api, transfer.tag)
             var done: TransferItem? = null
             synchronized(lock) {
@@ -334,7 +343,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
                         file.setLastModified(System.currentTimeMillis())
                         VerifiedFiles.mark(file)
                     } catch (e: Exception) {
-                        result = item.copy(status = TransferStatus.FAILED, error = e.message ?: "Cannot verify downloaded file")
+                        result = item.copy(status = TransferStatus.FAILED, error = res.userMessage(e))
                     }
                 }
                 if (!accepting || epoch != sessionEpoch.get()) continue
@@ -541,9 +550,9 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
 
     fun pauseAll(pause: Boolean) {
         scope.launch(Dispatchers.IO) {
-            catching { api.await { pauseTransfers(pause, it) } }.onFailure { onError?.invoke(it.message ?: "Cannot pause transfers") }
+            catching { api.await { pauseTransfers(pause, it) } }.onFailure { onError?.invoke(res.userMessage(it)) }
             if (synchronized(lock) { records.keys.any { it < 0 } }) {
-                catching { mega.folderApi.await { pauseTransfers(pause, it) } }.onFailure { onError?.invoke(it.message ?: "Cannot pause transfers") }
+                catching { mega.folderApi.await { pauseTransfers(pause, it) } }.onFailure { onError?.invoke(res.userMessage(it)) }
             }
             markDirty()
         }
@@ -554,7 +563,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
     fun pause(tag: Int, pause: Boolean) {
         val (a, t) = owner(tag)
         scope.launch(Dispatchers.IO) {
-            catching { a.await { pauseTransferByTag(t, pause, it) } }.onFailure { onError?.invoke(it.message ?: "Cannot pause transfer") }
+            catching { a.await { pauseTransferByTag(t, pause, it) } }.onFailure { onError?.invoke(res.userMessage(it)) }
             markDirty()
         }
     }

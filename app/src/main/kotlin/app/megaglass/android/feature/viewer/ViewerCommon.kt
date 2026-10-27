@@ -238,7 +238,7 @@ object PreviewCache {
                     override fun onTransferFinish(api: MegaApiJava, transfer: MegaTransfer, e: MegaError) {
                         if (!cont.isActive) return
                         if (e.errorCode == MegaError.API_OK) cont.resume(Unit)
-                        else cont.resumeWithException(MegaException(e.errorCode, e.errorString ?: "Download failed"))
+                        else cont.resumeWithException(MegaException(e.errorCode, e.errorString ?: "Download failed", fromSdk = true))
                     }
                 })
                 cont.invokeOnCancellation { cancelled.complete(Unit) }

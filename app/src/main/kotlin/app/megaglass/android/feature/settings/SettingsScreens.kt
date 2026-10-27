@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.settings
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -279,7 +280,7 @@ fun TransferSettingsScreen() {
             versioning = on
             scope.launch {
                 catching { withContext(Dispatchers.IO) { api.await { setFileVersionsOption(!on, it) } } }
-                    .onFailure { versioning = !on; graph.messenger.show(it.message.orEmpty()) }
+                    .onFailure { versioning = !on; graph.messenger.show(graph.context.resources.userMessage(it)) }
             }
         },
         SettingRow.Link(
@@ -420,7 +421,7 @@ fun StorageSettingsScreen() {
                             StorageAction.OFFLINE -> graph.offline.clear()
                             StorageAction.VERSIONS -> graph.nodes.removeAllVersions()
                         }
-                    }.onFailure { graph.messenger.show(it.message.orEmpty()) }
+                    }.onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
                     reload++
                 }
             },

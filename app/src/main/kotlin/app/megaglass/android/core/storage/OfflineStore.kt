@@ -1,6 +1,7 @@
 package app.megaglass.android.core.storage
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import android.content.Context
 import androidx.compose.runtime.Immutable
@@ -86,7 +87,7 @@ class OfflineStore(
                         catching {
                             index.commit(id, key)
                             replaced?.let { removeCopy(it) }
-                        }.onFailure { transfers.onError?.invoke(it.message ?: "Cannot save offline copy") }
+                        }.onFailure { transfers.onError?.invoke(context.resources.userMessage(it)) }
                     }
                     index.discard(id)
                     refresh()

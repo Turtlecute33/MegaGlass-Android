@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.drive
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import android.content.ActivityNotFoundException
 import android.net.Uri
@@ -93,7 +94,7 @@ suspend fun uploadUris(uris: List<Uri>, parent: Long, shared: Boolean) {
 private fun launchUpload(block: suspend () -> Unit) {
     val graph = MegaGlassApp.graph
     graph.scope.launch {
-        catching { block() }.onFailure { graph.messenger.show(it.message ?: graph.context.getString(R.string.error_title)) }
+        catching { block() }.onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
     }
 }
 
@@ -132,7 +133,7 @@ fun rememberUploader(parent: Long): Uploader {
                 catching { graph.transfers.upload(listOf(LocalSource(f.absolutePath, f.name, temporary = true)), target) }.onFailure { e ->
                     // The photo is in no other place: it goes to the gallery.
                     val saved = withContext(Dispatchers.IO) { catching { graph.files.moveToGallery(f) }.isSuccess }
-                    graph.messenger.show(if (saved) resources.getString(R.string.photo_saved_to_gallery) else e.message ?: resources.getString(R.string.error_title))
+                    graph.messenger.show(if (saved) resources.getString(R.string.photo_saved_to_gallery) else resources.userMessage(e))
                 }
             }
         } else if (f != null) {

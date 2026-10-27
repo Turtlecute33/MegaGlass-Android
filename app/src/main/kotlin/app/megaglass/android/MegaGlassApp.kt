@@ -56,12 +56,12 @@ class AppGraph(val context: Context) {
     val images = MegaImages(context, mega)
     val nodes = NodeRepository(mega)
     val transfers = TransferManager(
-        mega, scope,
+        mega, context.resources, scope,
         listOf(File(context.cacheDir, "uploads"), File(context.cacheDir, "camera"), File(context.cacheDir, "edit"), File(context.filesDir, "pending-uploads")),
     )
     val offline = OfflineStore(context, transfers, scope, mega.events.filter { it.type == MegaEvent.EVENT_NODES_CURRENT })
     val session = Session(
-        mega, SessionStore(context), settings, scope, onLoggedOut = ::clearUserData,
+        mega, context.resources, SessionStore(context), settings, scope, onLoggedOut = ::clearUserData,
         onReady = { transfers.beginSession(); mega.holdSyncsWithoutAccess() },
     )
     val messenger = Messenger()

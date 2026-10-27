@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.drive
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
@@ -203,7 +204,7 @@ fun FolderPickerDialog(
                 scope.launch {
                     catching { graph.nodes.createFolder(target, name) }
                         .onSuccess { h -> graph.nodes.item(h)?.let { stack = stack + it } ?: reload++ }
-                        .onFailure { graph.messenger.show(it.message ?: "") }
+                        .onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
                 }
             },
             onDismiss = { creating = false },

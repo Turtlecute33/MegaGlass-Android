@@ -13,6 +13,15 @@
     <string name="more">More options</string>
     <string name="search">Search</string>
     <string name="error_title">Something went wrong</string>
+    <string name="error_quota">Your MEGA storage or transfer quota is full.</string>
+    <string name="error_access">You do not have permission to do this.</string>
+    <string name="error_not_found">This item is no longer available.</string>
+    <string name="error_exists">An item with this name already exists.</string>
+    <string name="error_too_many">Too many requests. Wait a few minutes and try again.</string>
+    <string name="error_network">Cannot connect to MEGA. Make sure that the network is on, then try again.</string>
+    <string name="error_ssl">The secure connection to MEGA failed. The network can block or change the connection, for example a Wi-Fi login page. Try again, or use a different network.</string>
+    <string name="error_io">Cannot read or write the file on this phone.</string>
+    <string name="error_no_space">Not enough free space on this phone.</string>
     <string name="no_app_to_open">No app can open this file</string>
     <string name="folder_not_local">Choose a folder in the device storage.</string>
     <string name="copied">Copied to clipboard</string>

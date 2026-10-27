@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.shared
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
@@ -98,7 +99,7 @@ class SharedViewModel : ViewModel() {
                         )
                     }
                 }
-            }.getOrElse { errors[0] = it.message; emptyList() }
+            }.getOrElse { errors[0] = res.userMessage(it); emptyList() }
             val outgoing = catching {
                 val shares = withContext(Dispatchers.IO) { api.getOutShares(order) }
                 val unverified = withContext(Dispatchers.IO) { api.getUnverifiedOutgoingShares(order).map { it.nodeHandle }.toSet() }
@@ -117,10 +118,10 @@ class SharedViewModel : ViewModel() {
                         SharedEntry(node.toItem(api), subtitle, unverified = handle in unverified)
                     }
                 }
-            }.getOrElse { errors[1] = it.message; emptyList() }
+            }.getOrElse { errors[1] = res.userMessage(it); emptyList() }
             val links = catching {
                 graph.nodes.publicLinks(s.sortOrder, s.showHidden).map { SharedEntry(it, null) }
-            }.getOrElse { errors[2] = it.message; emptyList() }
+            }.getOrElse { errors[2] = res.userMessage(it); emptyList() }
             // Folders by their shown date for Newest and Oldest (see dateComparator).
             val byDate = s.sortOrder.dateComparator()?.let { c -> compareBy<SharedEntry, NodeItem>(c) { it.item } }
             _state.update { st ->

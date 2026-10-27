@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.photos
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -221,7 +222,7 @@ fun CameraUploadsSettingsScreen() {
             onPick = { handle ->
                 scope.launch {
                     catching { CameraUploads.setFolder(graph.mega, handle) }
-                        .onFailure { graph.messenger.show(it.message ?: "") }
+                        .onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
                     folderVersion++
                 }
             },

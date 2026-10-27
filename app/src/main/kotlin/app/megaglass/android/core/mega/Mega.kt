@@ -41,9 +41,16 @@ import kotlin.coroutines.resumeWithException
 
 /**
  * A failed SDK request. [code] is a MegaError.API_* value. [syncError] is a MegaSync error
- * (0 for none) that tells why a sync request failed.
+ * (0 for none) that tells why a sync request failed. [fromSdk] is true when the message is the
+ * SDK error text, which is not for users (see userMessage).
  */
-class MegaException(val code: Int, message: String, val requestType: Int = -1, val syncError: Int = 0) : Exception(message)
+class MegaException(
+    val code: Int,
+    message: String,
+    val requestType: Int = -1,
+    val syncError: Int = 0,
+    val fromSdk: Boolean = false,
+) : Exception(message)
 
 /** Nodes changed. [all] means that the whole tree may have changed (for example after a reload). */
 class NodeChange(
@@ -358,7 +365,7 @@ suspend fun MegaApiJava.await(
             if (e.errorCode == MegaError.API_OK) {
                 cont.resume(request)
             } else {
-                cont.resumeWithException(MegaException(e.errorCode, e.errorString ?: "Error ${e.errorCode}", request.type, e.syncError))
+                cont.resumeWithException(MegaException(e.errorCode, e.errorString ?: "Error ${e.errorCode}", request.type, e.syncError, fromSdk = true))
             }
         }
     }

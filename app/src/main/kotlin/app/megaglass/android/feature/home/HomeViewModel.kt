@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.home
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -67,7 +68,7 @@ class HomeViewModel : ViewModel() {
     private suspend fun loadRecents() {
         catching { graph.nodes.recents(showHidden = graph.settings.current.showHidden) }
             .onSuccess { r -> _state.update { it.copy(recents = r, recentsError = null) } }
-            .onFailure { e -> _state.update { s -> s.copy(recents = s.recents ?: emptyList(), recentsError = e.message) } }
+            .onFailure { e -> _state.update { s -> s.copy(recents = s.recents ?: emptyList(), recentsError = graph.context.resources.userMessage(e)) } }
     }
 
     private fun loadName() = viewModelScope.launch {

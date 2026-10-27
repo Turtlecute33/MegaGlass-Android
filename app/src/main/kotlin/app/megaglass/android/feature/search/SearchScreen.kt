@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.search
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
@@ -153,7 +154,7 @@ class SearchViewModel(private val parent: Long) : ViewModel() {
             )
         }
         _state.update {
-            it.copy(results = result.getOrDefault(emptyList()), searching = false, error = result.exceptionOrNull()?.message)
+            it.copy(results = result.getOrDefault(emptyList()), searching = false, error = result.exceptionOrNull()?.let { graph.context.resources.userMessage(it) })
         }
     }
 

@@ -3,8 +3,10 @@ package app.megaglass.android.feature.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.megaglass.android.MegaGlassApp
+import app.megaglass.android.R
 import app.megaglass.android.core.mega.MegaException
 import app.megaglass.android.core.mega.TwoFactorRequired
+import app.megaglass.android.core.util.userMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +28,7 @@ data class AuthState(
 class AuthViewModel : ViewModel() {
 
     private val session = MegaGlassApp.graph.session
+    private val res get() = MegaGlassApp.graph.context.resources
 
     private val _state = MutableStateFlow(AuthState())
     val state: StateFlow<AuthState> = _state.asStateFlow()
@@ -94,12 +97,12 @@ class AuthViewModel : ViewModel() {
             try {
                 block()
             } catch (_: TimeoutCancellationException) {
-                _state.update { it.copy(error = "Connection timed out. Try again.") }
+                _state.update { it.copy(error = res.getString(R.string.auth_timed_out)) }
             } catch (e: MegaException) {
                 _state.update { it.copy(error = message(e)) }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                _state.update { it.copy(error = e.message) }
+                _state.update { it.copy(error = res.userMessage(e)) }
             } finally {
                 _state.update { it.copy(busy = false) }
             }
@@ -112,12 +115,12 @@ class AuthViewModel : ViewModel() {
     }
 
     private fun message(e: MegaException): String = when (e.code) {
-        MegaError.API_ENOENT -> "Wrong e-mail or password."
-        MegaError.API_EFAILED, MegaError.API_EEXPIRED -> "Wrong code. Try again."
-        MegaError.API_EEXIST -> "An account with this e-mail already exists."
-        MegaError.API_ETOOMANY -> "Too many attempts. Wait a few minutes and try again."
-        MegaError.API_EINCOMPLETE -> "This account is not confirmed yet. Check your e-mail."
-        MegaError.API_EBLOCKED -> "This account is blocked."
-        else -> e.message ?: "Error ${e.code}"
+        MegaError.API_ENOENT -> res.getString(R.string.auth_wrong_login)
+        MegaError.API_EFAILED, MegaError.API_EEXPIRED -> res.getString(R.string.auth_wrong_code)
+        MegaError.API_EEXIST -> res.getString(R.string.auth_email_used)
+        MegaError.API_ETOOMANY -> res.getString(R.string.auth_too_many)
+        MegaError.API_EINCOMPLETE -> res.getString(R.string.auth_not_confirmed)
+        MegaError.API_EBLOCKED -> res.getString(R.string.auth_blocked)
+        else -> res.userMessage(e)
     }
 }

@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.contacts
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 import app.megaglass.android.core.util.whileObserved
 
 import androidx.compose.runtime.Immutable
@@ -50,12 +51,12 @@ private fun MegaContactRequest.toItem() = ContactRequestItem(
 /** User text for contact errors. */
 internal fun contactError(e: Throwable): String {
     val res = MegaGlassApp.graph.context.resources
-    if (e !is MegaException) return e.message ?: res.getString(R.string.error_title)
+    if (e !is MegaException) return res.userMessage(e)
     return when (e.code) {
         MegaError.API_EEXIST -> res.getString(R.string.contact_error_exists)
         MegaError.API_EARGS -> res.getString(R.string.contact_error_args)
         MegaError.API_EACCESS -> res.getString(R.string.contact_error_access)
-        else -> e.message ?: res.getString(R.string.error_title)
+        else -> res.userMessage(e)
     }
 }
 

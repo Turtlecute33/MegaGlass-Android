@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.viewer
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
@@ -217,7 +218,7 @@ private fun Pager(list: List<MediaEntry>, start: Int, chrome: Boolean, onToggleC
                                 scope.launch {
                                     catching { downloadFolderLinkNode(entry.handle) }
                                         .onSuccess { graph.messenger.show(graph.context.resources.getQuantityString(R.plurals.download_started, 1, 1)) }
-                                        .onFailure { graph.messenger.show(it.message ?: graph.context.getString(R.string.error_title)) }
+                                        .onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
                                 }
                             }
                         })

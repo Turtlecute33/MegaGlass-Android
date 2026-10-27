@@ -13,6 +13,7 @@ import app.megaglass.android.core.mega.NodeItem
 import app.megaglass.android.core.util.FileType
 import app.megaglass.android.core.util.isEditableText
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -129,7 +130,7 @@ class AppNavigator(private val graph: AppGraph, val startTab: Tab) {
             item.type.isEditableText() && item.size <= TEXT_EDITOR_LIMIT -> navigate(TextEditor(item.handle, folderLink = folderLink))
             else -> graph.scope.launch {
                 catching { graph.opener.open(item.handle, item.name, item.size, folderLink) }
-                    .onFailure { graph.messenger.show(it.message ?: "Cannot open file") }
+                    .onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
             }
         }
     }

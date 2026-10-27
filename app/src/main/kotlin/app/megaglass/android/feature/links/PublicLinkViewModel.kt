@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.links
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Immutable
@@ -176,7 +177,7 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
             MegaError.API_EBLOCKED -> fail(res.getString(R.string.link_error_taken_down), R.drawable.ic_block)
             MegaError.API_ENOENT, MegaError.API_EEXPIRED -> fail(res.getString(R.string.link_error_not_found), R.drawable.ic_link_off)
             MegaError.API_EARGS -> fail(res.getString(R.string.link_error_invalid), R.drawable.ic_link_off)
-            else -> fail(e.message ?: res.getString(R.string.error_title), R.drawable.ic_cloud_off)
+            else -> fail(res.userMessage(e), R.drawable.ic_cloud_off)
         }
     }
 
@@ -369,7 +370,7 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
 
     private fun importError(e: Throwable): String = when ((e as? MegaException)?.code) {
         MegaError.API_EOVERQUOTA -> res.getString(R.string.link_error_quota)
-        else -> e.message ?: res.getString(R.string.error_title)
+        else -> res.userMessage(e)
     }
 
     /** Downloads into the download folder. The main SDK instance runs it, so it shows in Transfers. */
@@ -403,7 +404,7 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
             clearSelection()
             graph.messenger.show(res.getQuantityString(R.plurals.download_started, count, count))
         }
-    }.onFailure { graph.messenger.show(it.message ?: res.getString(R.string.error_title)) } }
+    }.onFailure { graph.messenger.show(res.userMessage(it)) } }
 
     /** Adds the files under [node] with their folder structure; each file is authorized for the main instance. */
     private fun addTree(node: MegaNode, dir: File, out: MegaDownloadItemList) {
@@ -465,7 +466,7 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
             done.cancel()
             _preparing.update { it - id }
             if (e is kotlinx.coroutines.CancellationException) throw e
-            graph.messenger.show(e.message ?: res.getString(R.string.error_title))
+            graph.messenger.show(res.userMessage(e))
         }
     }
 

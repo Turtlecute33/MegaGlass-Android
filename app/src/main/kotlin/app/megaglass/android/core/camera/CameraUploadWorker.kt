@@ -1,6 +1,7 @@
 package app.megaglass.android.core.camera
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -194,7 +195,7 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
             }
             throw e
         } catch (e: Exception) {
-            CameraUploads.setStatus(CuStatus.Failed(e.message ?: context.getString(R.string.cu_error)))
+            CameraUploads.setStatus(CuStatus.Failed(context.resources.userMessage(e, R.string.cu_error)))
             return Result.retry()
         }
     }

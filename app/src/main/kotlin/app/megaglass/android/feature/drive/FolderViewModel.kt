@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.drive
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 import app.megaglass.android.core.util.whileObserved
 
 import androidx.annotation.StringRes
@@ -125,7 +126,7 @@ class FolderViewModel(private val mode: DriveMode, requested: Long) : ViewModel(
                 }
             }.onFailure { e ->
                 // The folder itself is gone (deleted, or the share ended): its old items must not stay.
-                _state.update { it.copy(error = e.message, refreshing = false, items = emptyList(), selection = emptySet()) }
+                _state.update { it.copy(error = graph.context.resources.userMessage(e), refreshing = false, items = emptyList(), selection = emptySet()) }
             }
         }
     }
@@ -149,7 +150,7 @@ class FolderViewModel(private val mode: DriveMode, requested: Long) : ViewModel(
     fun clearSelection() = _state.update { it.copy(selection = emptySet()) }
 
     fun emptyRubbish() = viewModelScope.launch {
-        catching { nodes.emptyRubbish() }.onFailure { graph.messenger.show(it.message ?: "") }
+        catching { nodes.emptyRubbish() }.onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
     }
 
     val rootHandle get() = handle

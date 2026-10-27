@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.drive
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import android.content.Context
 import androidx.annotation.DrawableRes
@@ -179,7 +180,7 @@ class NodeActionsState internal constructor(
         if (!item.isFolder) scope.launch {
             catching { nodes.versionCount(item.handle) }.onSuccess { versions ->
                 if (sheetItem?.handle == item.handle) sheetVersions = versions
-            }.onFailure { messenger.show(it.message ?: str(R.string.error_title)) }
+            }.onFailure { messenger.show(appContext.resources.userMessage(it)) }
         }
     }
 
@@ -188,7 +189,7 @@ class NodeActionsState internal constructor(
      * and its result or error must still show.
      */
     private fun launch(block: suspend () -> Unit) = graph.scope.launch(Dispatchers.Main) {
-        catching { block() }.onFailure { messenger.show(it.message ?: str(R.string.error_title)) }
+        catching { block() }.onFailure { messenger.show(appContext.resources.userMessage(it)) }
     }
 
     fun run(action: NodeAction, items: List<NodeItem>) {
@@ -263,7 +264,7 @@ class NodeActionsState internal constructor(
             // App scope: the snackbar can outlive this screen.
             graph.scope.launch {
                 catching { parents.entries.groupBy({ it.value }, { it.key }).forEach { (p, h) -> nodes.move(h, p) } }
-                    .onFailure { messenger.show(it.message ?: str(R.string.error_title)) }
+                    .onFailure { messenger.show(appContext.resources.userMessage(it)) }
             }
         }
     }
@@ -451,7 +452,7 @@ private fun LinkDialog(item: NodeItem, state: NodeActionsState, onDismiss: () ->
     LaunchedEffect(item.handle) {
         catching { graph.nodes.exportLink(item.handle) }
             .onSuccess { link = it }
-            .onFailure { error = it.message }
+            .onFailure { error = graph.context.resources.userMessage(it) }
     }
     val full = link
     val withoutKey = full?.substringBefore('#')

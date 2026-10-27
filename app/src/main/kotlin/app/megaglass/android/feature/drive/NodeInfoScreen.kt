@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.drive
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -146,7 +147,7 @@ class NodeInfoViewModel(private val handle: Long) : ViewModel() {
     }
 
     fun saveDescription(text: String) = viewModelScope.launch {
-        catching { graph.nodes.setDescription(handle, text) }.onFailure { graph.messenger.show(it.message ?: "") }
+        catching { graph.nodes.setDescription(handle, text) }.onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
     }
 }
 
@@ -363,7 +364,7 @@ fun VersionsScreen(route: Versions) {
     // App scope: "Delete previous versions" must not stop halfway when the user leaves the screen.
     val act = { block: suspend () -> Unit ->
         graph.scope.launch(Dispatchers.Main) {
-            catching { block() }.onFailure { graph.messenger.show(it.message ?: "") }
+            catching { block() }.onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
             reload++
         }
         Unit

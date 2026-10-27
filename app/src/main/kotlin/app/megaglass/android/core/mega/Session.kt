@@ -2,6 +2,9 @@ package app.megaglass.android.core.mega
 
 import app.megaglass.android.core.util.catching
 
+import android.content.res.Resources
+import app.megaglass.android.R
+import app.megaglass.android.core.util.userMessage
 import app.megaglass.android.core.storage.AppSettings
 import app.megaglass.android.core.storage.SessionStore
 import app.megaglass.android.core.storage.Settings
@@ -51,6 +54,8 @@ class TwoFactorRequired : Exception("Two-factor authentication code required")
 /** Login, logout, and the saved session. */
 class Session(
     private val mega: Mega,
+    /** For the user text of the session states. */
+    private val res: Resources,
     private val store: SessionStore,
     private val settings: Settings,
     private val scope: CoroutineScope,
@@ -82,13 +87,13 @@ class Session(
         scope.launch {
             // The saved session stays valid, so Retry logs in again.
             mega.sdkLoggedOut.collect { code ->
-                _state.compareAndSet(SessionState.Ready, SessionState.Failed(if (code == MegaError.API_ESSL) INTERCEPTED else SDK_LOGGED_OUT))
+                _state.compareAndSet(SessionState.Ready, SessionState.Failed(res.getString(if (code == MegaError.API_ESSL) R.string.error_ssl else R.string.session_sdk_logged_out)))
             }
         }
         scope.launch {
             mega.events.collect { event ->
                 if (event.type == MegaEvent.EVENT_ACCOUNT_BLOCKED) {
-                    _state.value = SessionState.Blocked(event.text ?: "This account is blocked.")
+                    _state.value = SessionState.Blocked(event.text ?: res.getString(R.string.auth_blocked))
                 }
             }
         }
@@ -109,7 +114,7 @@ class Session(
             lifecycle.withLock {
                 if (cleanupRequired) { clearLocal(); return@launch }
                 val saved = catching { withContext(Dispatchers.IO) { store.load() } }.getOrElse {
-                    _state.value = SessionState.Failed("Cannot read the saved session. Try again.")
+                    _state.value = SessionState.Failed(res.getString(R.string.session_read_failed))
                     return@launch
                 }
                 if (saved == null) {
@@ -120,7 +125,7 @@ class Session(
                     _state.value = SessionState.Loading(SessionState.Stage.LOGIN, null)
                     try {
                         val sent = withTimeoutOrNull(LOGIN_TIMEOUT_MS) { api.await { fastLogin(saved, it) } }
-                        if (sent == null) throw MegaException(MegaError.API_EAGAIN, TIMED_OUT)
+                        if (sent == null) throw MegaException(MegaError.API_EAGAIN, res.getString(R.string.auth_timed_out))
                         fetchNodes()
                     } catch (e: Exception) {
                         // A timed-out request continues in the SDK, and Retry would send a second
@@ -133,7 +138,7 @@ class Session(
                     if (e is MegaException && (e.code == MegaError.API_ESID || e.code == MegaError.API_ENOENT)) {
                         clearLocal()
                     } else {
-                        _state.value = SessionState.Failed(e.message ?: "")
+                        _state.value = SessionState.Failed(res.userMessage(e))
                     }
                 }
             }
@@ -158,7 +163,7 @@ class Session(
                 if (sent == null) {
                     // The SDK request continues; without this a late success logs in behind the login screen.
                     abortLogin()
-                    throw MegaException(MegaError.API_EAGAIN, TIMED_OUT)
+                    throw MegaException(MegaError.API_EAGAIN, res.getString(R.string.auth_timed_out))
                 }
             } catch (e: Exception) {
                 if (_state.value != SessionState.Closing) _state.value = SessionState.LoggedOut
@@ -190,7 +195,7 @@ class Session(
         coroutineScope {
             val watchdog = launch {
                 while (System.nanoTime() - progressAt.get() < FETCH_STALL_MS * 1_000_000) delay(1_000)
-                throw MegaException(MegaError.API_EAGAIN, TIMED_OUT)
+                throw MegaException(MegaError.API_EAGAIN, res.getString(R.string.auth_timed_out))
             }
             try {
                 api.await(onUpdate = { r ->
@@ -240,7 +245,7 @@ class Session(
                 withTimeoutOrNull(LOGOUT_TIMEOUT_MS) { catching { api.await { localLogout(it) } } }
                 // ESID: the session ended on the server already (for example, from another device).
                 val endedOnServer = (remote?.exceptionOrNull() as? MegaException)?.code == MegaError.API_ESID
-                if (!localOnly && !endedOnServer) _notice.value = SERVER_SESSION_ACTIVE
+                if (!localOnly && !endedOnServer) _notice.value = res.getString(R.string.session_server_active)
             }
             clearLocal()
         }
@@ -255,7 +260,7 @@ class Session(
             _state.value = SessionState.LoggedOut
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            _state.value = SessionState.Failed("Could not remove local account data. Try logging out again.")
+            _state.value = SessionState.Failed(res.getString(R.string.session_cleanup_failed))
         }
     }
 
@@ -271,12 +276,5 @@ class Session(
         const val LOGOUT_TIMEOUT_MS = 15_000L
         const val LOGIN_TIMEOUT_MS = 90_000L
         const val FETCH_STALL_MS = 180_000L
-        const val TIMED_OUT = "Connection timed out. Try again."
-        const val INTERCEPTED = "The secure connection to MEGA failed. The network can block or change the " +
-            "connection, for example a Wi-Fi login page. Try again, or use a different network."
-        const val SDK_LOGGED_OUT = "The connection to MEGA stopped because of an error. Try again."
-        const val SERVER_SESSION_ACTIVE = "The session could not be ended on the MEGA server. You are logged out on " +
-            "this device, but the session stays active on the server until it expires. To end it now, close it in " +
-            "MEGA on the web (Settings > Security > Session history)."
     }
 }

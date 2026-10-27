@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.photos
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
@@ -71,7 +72,7 @@ class PhotosViewModel : ViewModel() {
                     }
                     loadAlbums()
                 }
-                .onFailure { e -> _state.update { it.copy(all = it.all ?: emptyList(), error = e.message) } }
+                .onFailure { e -> _state.update { it.copy(all = it.all ?: emptyList(), error = graph.context.resources.userMessage(e)) } }
         }
     }
 
@@ -110,7 +111,7 @@ class PhotosViewModel : ViewModel() {
         }.onSuccess {
             clearSelection()
             onCreated(it)
-        }.onFailure { graph.messenger.show(it.message ?: "") }
+        }.onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
     }
 
     fun addSelectionTo(albumId: Long, done: (Int) -> Unit) = viewModelScope.launch {
@@ -120,7 +121,7 @@ class PhotosViewModel : ViewModel() {
                 clearSelection()
                 done(handles.size)
             }
-            .onFailure { graph.messenger.show(it.message ?: "") }
+            .onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
     }
 
     companion object {
@@ -187,7 +188,7 @@ class AlbumViewModel(private val id: Long, private val isSystem: Boolean, privat
                     val items = PhotosRepository.systemAlbum(id, all).map { AlbumEntry(it.handle, it) }
                     _state.update { it.copy(name = systemName, entries = items, error = null) }
                 }
-                .onFailure { e -> _state.update { it.copy(name = systemName, entries = it.entries ?: emptyList(), error = e.message) } }
+                .onFailure { e -> _state.update { it.copy(name = systemName, entries = it.entries ?: emptyList(), error = graph.context.resources.userMessage(e)) } }
         } else {
             val name = withContext(Dispatchers.IO) { PhotosRepository.albumName(id) }
             if (name == null) {
@@ -195,7 +196,7 @@ class AlbumViewModel(private val id: Long, private val isSystem: Boolean, privat
                 return
             }
             val entries = catching { PhotosRepository.albumEntries(id, showHidden) }.getOrElse { e ->
-                _state.update { it.copy(name = name, entries = it.entries ?: emptyList(), error = e.message) }
+                _state.update { it.copy(name = name, entries = it.entries ?: emptyList(), error = graph.context.resources.userMessage(e)) }
                 return
             }
             val exported = withContext(Dispatchers.IO) { graph.mega.api.isExportedSet(id) }
@@ -221,7 +222,7 @@ class AlbumViewModel(private val id: Long, private val isSystem: Boolean, privat
     fun clearSelection() = _state.update { it.copy(selection = emptySet()) }
 
     private fun run(block: suspend () -> Unit) = viewModelScope.launch {
-        catching { block() }.onFailure { graph.messenger.show(it.message ?: "") }
+        catching { block() }.onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
     }
 
     fun rename(name: String) = run { PhotosRepository.renameAlbum(id, name) }

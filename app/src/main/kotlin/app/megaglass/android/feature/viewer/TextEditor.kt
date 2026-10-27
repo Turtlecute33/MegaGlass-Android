@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.viewer
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.userMessage
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
@@ -182,7 +183,7 @@ fun TextEditorScreen(route: TextEditor) {
             if (canEdit) editorState.edit { replace(0, length, content) }
             original = content
             text = content
-        }.onFailure { error = it.message ?: resources.getString(R.string.error_title) }
+        }.onFailure { error = resources.userMessage(it) }
     }
     LaunchedEffect(editorState, original) {
         snapshotFlow { editorState.text.toString() }.collect { dirty = canEdit && it != original }
@@ -238,7 +239,7 @@ fun TextEditorScreen(route: TextEditor) {
                     }.getOrDefault(false)
                     graph.messenger.show(resources.getString(if (versioned) R.string.editor_saved_version else R.string.editor_saved, savedTitle))
                     if (m.closeAfterSave && !m.cleared && !dirty) nav.backFrom(route)
-                }.onFailure { graph.messenger.show(it.message ?: resources.getString(R.string.error_title)) }
+                }.onFailure { graph.messenger.show(resources.userMessage(it)) }
             } finally {
                 sessionMonitor.cancel()
                 saving = false
