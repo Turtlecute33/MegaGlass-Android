@@ -58,7 +58,16 @@ android {
     packaging {
         // Keep libmega.so uncompressed and page-aligned so that it maps directly from the APK.
         jniLibs { useLegacyPackaging = false }
-        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        resources {
+            // Licence texts also in the library folders (META-INF/androidx/...): assets/third_party_notices.txt
+            // has them. Library version files and Kotlin metadata are not read at run time. META-INF/services
+            // (ServiceLoader) and version-control-info.textproto stay.
+            excludes += setOf(
+                "/META-INF/{AL2.0,LGPL2.1}", "META-INF/versions/**", "META-INF/*.md", "META-INF/LICENSE*",
+                "META-INF/NOTICE*", "META-INF/**/LICENSE*", "META-INF/**/NOTICE*", "META-INF/*.version",
+                "DebugProbesKt.bin", "kotlin/**",
+            )
+        }
     }
 
     lint { abortOnError = true }
@@ -66,6 +75,9 @@ android {
 
 androidComponents {
     onVariants(selector().withBuildType("release")) { variant ->
+        // androidx.graphics.path loads its native code only below Android 14; from Android 14 the platform's
+        // PathIterator does the work, and minSdk is 35.
+        variant.packaging.jniLibs.excludes.add("lib/*/libandroidx.graphics.path.so")
         // Without a release key, the release APK stays unsigned. Local values only in the lambda, so that
         // the configuration cache can store it without the build script.
         signingProps?.let { props ->
