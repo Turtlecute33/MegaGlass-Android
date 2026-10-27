@@ -93,6 +93,7 @@ import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.IconAction
 import app.megaglass.android.ui.components.LoadingBox
 import app.megaglass.android.ui.components.NodeCollection
+import app.megaglass.android.ui.components.NoLearning
 import app.megaglass.android.ui.components.rememberStorageAccess
 import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.nav.MediaSource
@@ -311,22 +312,25 @@ private fun SecretPrompt(
         Spacer(Modifier.height(8.dp))
         Text(text, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(24.dp))
-        OutlinedTextField(
-            value = value,
-            onValueChange = { value = it },
-            label = { Text(label) },
-            singleLine = true,
-            isError = wrong,
-            supportingText = if (wrong) { { Text(wrongText) } } else null,
-            visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = if (password) KeyboardType.Password else KeyboardType.Ascii,
-                imeAction = ImeAction.Done,
-                autoCorrectEnabled = false,
-            ),
-            keyboardActions = KeyboardActions(onDone = { if (value.isNotBlank()) onSubmit(value) }),
-            modifier = Modifier.widthIn(max = 440.dp).fillMaxWidth().focusRequester(focus),
-        )
+        // Ascii keeps the key visible and the layout as it is; the keyboard must not learn the key.
+        NoLearning {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { value = it },
+                label = { Text(label) },
+                singleLine = true,
+                isError = wrong,
+                supportingText = if (wrong) { { Text(wrongText) } } else null,
+                visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (password) KeyboardType.Password else KeyboardType.Ascii,
+                    imeAction = ImeAction.Done,
+                    autoCorrectEnabled = false,
+                ),
+                keyboardActions = KeyboardActions(onDone = { if (value.isNotBlank()) onSubmit(value) }),
+                modifier = Modifier.widthIn(max = 440.dp).fillMaxWidth().focusRequester(focus),
+            )
+        }
         Spacer(Modifier.height(16.dp))
         Button(
             onClick = { onSubmit(value) },

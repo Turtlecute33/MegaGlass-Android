@@ -7,6 +7,8 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.PersistableBundle
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -46,6 +48,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.InterceptPlatformTextInput
+import androidx.compose.ui.platform.PlatformTextInputInterceptor
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
+import androidx.compose.ui.platform.PlatformTextInputSession
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
@@ -242,6 +248,25 @@ fun TextInputDialog(
         confirmButton = { Button(onClick = submit, enabled = error == null) { Text(confirmLabel) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+/**
+ * The keyboard must not learn the text of the fields in [content] (IME_FLAG_NO_PERSONALIZED_LEARNING):
+ * for secrets such as a link key (MEGAGLASS-PRIV-003).
+ */
+@Composable
+fun NoLearning(content: @Composable () -> Unit) = InterceptPlatformTextInput(NoLearningInput, content)
+
+private object NoLearningInput : PlatformTextInputInterceptor {
+    override suspend fun interceptStartInputMethod(
+        request: PlatformTextInputMethodRequest,
+        nextHandler: PlatformTextInputSession,
+    ): Nothing = nextHandler.startInputMethod(object : PlatformTextInputMethodRequest {
+        override fun createInputConnection(outAttributes: EditorInfo): InputConnection =
+            request.createInputConnection(outAttributes).also {
+                outAttributes.imeOptions = outAttributes.imeOptions or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+            }
+    })
 }
 
 /** Characters that MEGA does not allow in names. */
