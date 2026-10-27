@@ -9,6 +9,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import app.megaglass.android.core.FileOpener
 import app.megaglass.android.core.camera.CameraUploads
 import app.megaglass.android.feature.contacts.ContactDirectory
+import app.megaglass.android.feature.photos.PhotosRepository
 import app.megaglass.android.feature.viewer.PreviewCache
 import app.megaglass.android.feature.viewer.StreamServer
 import app.megaglass.android.feature.viewer.PlaybackQueue
@@ -97,6 +98,9 @@ class AppGraph(val context: Context) {
         scope.launch {
             nodes.changes.filter { it.imagesChanged.isNotEmpty() }.collect { change -> change.imagesChanged.forEach(images::invalidate) }
         }
+        // The cached photo timeline is stale after each node change. Undispatched: no change
+        // can arrive before the collector starts (MEGAGLASS-PERF-004).
+        scope.launch(start = CoroutineStart.UNDISPATCHED) { nodes.changes.collect { PhotosRepository.onNodesChanged() } }
     }
 
     private suspend fun clearUserData() {
@@ -120,6 +124,7 @@ class AppGraph(val context: Context) {
         ContactDirectory.clearIfCreated()
         folderSorts.clear()
         images.clear()
+        PhotosRepository.clear()
         offline.clear()
         files.openDir.deleteRecursively()
         File(context.cacheDir, "preview").deleteRecursively()

@@ -123,4 +123,31 @@ class InvalidationsTest {
             collector.cancelAndJoin()
         }
     }
+
+    @Test fun theCacheKeepsAValueUntilAChange() = runBlocking {
+        val cache = GenerationCache<String, Int>()
+        var loads = 0
+        suspend fun get(key: String) = cache.get(key) { ++loads }
+        assertEquals(1, get("a"))
+        assertEquals(1, get("a"))
+        // Another key loads again and replaces the value.
+        assertEquals(2, get("b"))
+        assertEquals(3, get("a"))
+        cache.invalidate()
+        assertEquals(4, get("a"))
+        assertEquals(4, get("a"))
+        cache.clear()
+        assertEquals(5, get("a"))
+    }
+
+    @Test fun aLoadThatAChangeOverlapsIsNotKept() = runBlocking {
+        val cache = GenerationCache<String, Int>()
+        var loads = 0
+        // The change arrives while the first load runs: its result is from before the change.
+        assertEquals(1, cache.get("a") { cache.invalidate(); ++loads })
+        assertEquals(2, cache.get("a") { ++loads })
+        assertEquals(2, cache.get("a") { ++loads })
+        assertEquals(3, cache.get("b") { cache.clear(); ++loads })
+        assertEquals(4, cache.get("b") { ++loads })
+    }
 }

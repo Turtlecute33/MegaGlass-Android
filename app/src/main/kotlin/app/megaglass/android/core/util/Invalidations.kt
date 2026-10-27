@@ -48,3 +48,34 @@ fun <T : Any> invalidationEmitter(scope: CoroutineScope, flow: MutableSharedFlow
         }
     }
 }
+
+/**
+ * The last value of a slow load, kept until the next [invalidate]. A load that runs while a
+ * change arrives does not store its value, so the next [get] loads again.
+ */
+class GenerationCache<K : Any, V : Any> {
+    private class Entry<K, V>(val generation: Long, val key: K, val value: V)
+
+    private val lock = Any()
+    private var generation = 0L
+    private var entry: Entry<K, V>? = null
+
+    /** The cached value is stale: the next [get] loads again. */
+    fun invalidate() {
+        synchronized(lock) { generation++ }
+    }
+
+    /** Removes the cached value from memory (for example, at logout). */
+    fun clear() {
+        synchronized(lock) { generation++; entry = null }
+    }
+
+    /** The cached value for [key], or else the result of [load]. */
+    suspend fun get(key: K, load: suspend () -> V): V {
+        val (current, cached) = synchronized(lock) { generation to entry }
+        if (cached != null && cached.generation == current && cached.key == key) return cached.value
+        val value = load()
+        synchronized(lock) { if (generation == current) entry = Entry(current, key, value) }
+        return value
+    }
+}

@@ -10,6 +10,7 @@ import app.megaglass.android.core.mega.cancellable
 import app.megaglass.android.core.mega.keepAlive
 import app.megaglass.android.core.mega.toItem
 import app.megaglass.android.core.util.FileType
+import app.megaglass.android.core.util.GenerationCache
 import app.megaglass.android.ui.nav.Album
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -82,8 +83,23 @@ object PhotosRepository {
     private fun isShown(node: MegaNode, showHidden: Boolean): Boolean =
         !api.isInRubbish(node) && (showHidden || !(node.isMarkedSensitive || api.isSensitiveInherited(node)))
 
-    /** All photos and videos in Cloud drive, newest first. */
-    suspend fun timeline(filter: MediaFilter, showHidden: Boolean): List<MediaItem> = withContext(Dispatchers.IO) {
+    /** The last timeline, until the next node change (MEGAGLASS-PERF-004). */
+    private val timelines = GenerationCache<Pair<MediaFilter, Boolean>, List<MediaItem>>()
+
+    /** Call on each node change: the next [timeline] searches again. */
+    fun onNodesChanged() = timelines.invalidate()
+
+    /** Removes the cached timeline (logout). */
+    fun clear() = timelines.clear()
+
+    /**
+     * All photos and videos in Cloud drive, newest first. The full search is slow for large
+     * accounts, so the result stays cached until the next node change.
+     */
+    suspend fun timeline(filter: MediaFilter, showHidden: Boolean): List<MediaItem> =
+        timelines.get(filter to showHidden) { search(filter, showHidden) }
+
+    private suspend fun search(filter: MediaFilter, showHidden: Boolean): List<MediaItem> = withContext(Dispatchers.IO) {
         val f = MegaSearchFilter.createInstance()
         f.byLocation(MegaApiJava.SEARCH_TARGET_ROOTNODE)
         f.byNodeType(MegaNode.TYPE_FILE)
