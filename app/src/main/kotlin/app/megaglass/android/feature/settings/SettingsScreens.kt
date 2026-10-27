@@ -3,6 +3,9 @@ package app.megaglass.android.feature.settings
 import app.megaglass.android.core.util.catching
 import app.megaglass.android.core.util.userMessage
 
+import android.app.NotificationManager
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -47,6 +50,8 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.megaglass.android.BuildConfig
 import app.megaglass.android.MegaGlassApp
@@ -232,6 +237,11 @@ fun TransferSettingsScreen() {
     var purgeDays by remember { mutableStateOf<Int?>(null) }
     var choosePurge by remember { mutableStateOf(false) }
     var chooseLocation by remember { mutableStateOf(false) }
+    // A denied permission has a way back; the state can change in the system settings (MEGAGLASS-UX-015).
+    var notificationsOff by remember { mutableStateOf(false) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        notificationsOff = !context.getSystemService(NotificationManager::class.java).areNotificationsEnabled()
+    }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -257,6 +267,23 @@ fun TransferSettingsScreen() {
         }
     }
 
+    val notificationRows = if (!notificationsOff) emptyList() else listOf(
+        SettingRow.Link(
+            R.drawable.ic_notifications,
+            stringResource(R.string.settings_notifications_off),
+            summary = stringResource(R.string.settings_notifications_off_summary),
+        ) {
+            graph.lock.expectReturn()
+            try {
+                context.startActivity(
+                    Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName),
+                )
+            } catch (_: ActivityNotFoundException) {
+                graph.messenger.show(resources.getString(R.string.no_app_to_open))
+            }
+        },
+    )
     val speedRows = listOf(
         SettingRow.Toggle(
             R.drawable.ic_bolt,
@@ -296,6 +323,7 @@ fun TransferSettingsScreen() {
     val locationTitle = stringResource(R.string.settings_downloads)
     val cloudTitle = stringResource(R.string.settings_cloud)
     SettingsScaffold(title = stringResource(R.string.settings_transfers)) {
+        settingsGroup(null, notificationRows)
         settingsGroup(speedTitle, speedRows)
         settingsGroup(locationTitle, locationRows)
         if (!storage.granted) {

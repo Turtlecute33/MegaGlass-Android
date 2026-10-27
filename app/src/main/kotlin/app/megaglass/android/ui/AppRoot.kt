@@ -1,6 +1,7 @@
 package app.megaglass.android.ui
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -50,6 +51,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavEntry
@@ -79,6 +82,10 @@ import app.megaglass.android.ui.theme.MegaGlassTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
@@ -183,8 +190,21 @@ private fun ReadyContent(incoming: MutableStateFlow<IncomingAction?>) {
     val locked by graph.lock.locked.collectAsStateWithLifecycle()
     var uploadUris by remember { mutableStateOf<List<Uri>?>(null) }
 
+    // Transfers and camera uploads show their progress in a notification: ask when the first one
+    // starts, not at login. Not above the lock, and only while the app shows (MEGAGLASS-UX-015).
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
-    LaunchedEffect(Unit) { notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(Unit) {
+        if (graph.context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return@LaunchedEffect
+        val cameraUploadsWereOn = graph.settings.current.cameraUploads
+        merge(
+            graph.transfers.state.filter { it.active.isNotEmpty() },
+            graph.settings.state.filter { it.cameraUploads && !cameraUploadsWereOn },
+        ).first()
+        combine(lifecycle.currentStateFlow, graph.lock.locked) { state, locked -> state.isAtLeast(Lifecycle.State.RESUMED) && !locked }
+            .first { it }
+        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
 
     LaunchedEffect(action) {
         when (val a = action) {

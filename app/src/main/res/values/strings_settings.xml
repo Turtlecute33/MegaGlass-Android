@@ -34,6 +34,8 @@
     <string name="settings_photo_columns">Photos per row</string>
 
     <!-- Transfers -->
+    <string name="settings_notifications_off">Notifications are off</string>
+    <string name="settings_notifications_off_summary">Turn them on to see the progress of transfers and camera uploads</string>
     <string name="settings_speed">Speed</string>
     <string name="settings_fast_transfers">Fast transfers</string>
     <string name="settings_fast_on">8 parallel connections for each file</string>
