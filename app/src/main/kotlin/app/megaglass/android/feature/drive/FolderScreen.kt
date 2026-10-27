@@ -262,6 +262,7 @@ private fun DriveFolder(mode: DriveMode, handle: Long) {
 
     if (newFolder) {
         val invalid = stringResource(R.string.invalid_name)
+        val exists = stringResource(R.string.name_exists)
         TextInputDialog(
             title = stringResource(R.string.new_folder),
             label = stringResource(R.string.name),
@@ -276,7 +277,7 @@ private fun DriveFolder(mode: DriveMode, handle: Long) {
             onDismiss = { newFolder = false },
             validate = { name ->
                 invalidNameError(name, invalid)
-                    ?: if (state.items.orEmpty().any { it.isFolder && it.name.equals(name, ignoreCase = true) }) invalid else null
+                    ?: if (state.items.orEmpty().any { it.isFolder && it.name.equals(name, ignoreCase = true) }) exists else null
             },
         )
     }

@@ -37,6 +37,7 @@
     <string name="link">Link</string>
     <string name="offline">Offline</string>
     <string name="invalid_name">A name cannot contain \\ / : * ? \" &lt; &gt; |</string>
+    <string name="name_exists">A folder with this name already exists</string>
 
     <!-- Navigation -->
     <string name="tab_home">Home</string>
