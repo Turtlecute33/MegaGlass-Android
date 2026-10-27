@@ -47,9 +47,12 @@ tasks.named("preBuild") {
         }
         if (!provenance.exists()) throw GradleException("Native build provenance is missing. Rebuild with scripts/build-sdk.sh.")
         val versions = Properties().apply { provenance.inputStream().use { load(it) } }
+        // Every native component, also the ones that the SDK manifest pins (MEGAGLASS-SEC-012): an SDK
+        // update that changes one of them must update this map too.
         val expected = mapOf(
             "openssl" to "3.6.5", "curl" to "8.23.0", "libsodium" to "1.0.22", "zlib" to "1.3.2", "sqlite3" to "3.53.4",
-            "libmediainfo" to "26.10",
+            "libmediainfo" to "26.10", "cryptopp" to "8.9.0", "icu" to "74.2", "libuv" to "1.51.0",
+            "tinyxml2" to "11.0.0", "zstd" to "1.5.7", "libzen" to "0.4.41",
         )
         if (expected.any { (name, version) -> versions.getProperty(name) != version }) {
             throw GradleException("Native dependencies are out of date. Rebuild with scripts/build-sdk.sh.")
