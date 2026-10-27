@@ -26,7 +26,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.megaglass.android.R
@@ -35,7 +40,7 @@ import kotlin.math.roundToInt
 
 /**
  * Dots for the entered digits. Each change of [shakeKey] (when it is not 0) shakes the row
- * and gives haptic feedback for a wrong code.
+ * and gives haptic feedback for a wrong code. TalkBack reads the count of entered digits.
  */
 @Composable
 fun PinDots(length: Int, filled: Int, shakeKey: Int, modifier: Modifier = Modifier) {
@@ -48,8 +53,13 @@ fun PinDots(length: Int, filled: Int, shakeKey: Int, modifier: Modifier = Modifi
             offset.animateTo(x, spring(dampingRatio = Spring.DampingRatioHighBouncy, stiffness = Spring.StiffnessHigh))
         }
     }
+    val description = pluralStringResource(R.plurals.pin_dots_state, length, filled, length)
     Row(
-        modifier.offset { IntOffset(offset.value.roundToInt(), 0) },
+        modifier.offset { IntOffset(offset.value.roundToInt(), 0) }
+            .semantics {
+                stateDescription = description
+                liveRegion = LiveRegionMode.Polite
+            },
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

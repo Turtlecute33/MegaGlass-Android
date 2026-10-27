@@ -166,6 +166,10 @@
         <item quantity="one">Wrong passcode. %d attempt left before log-out.</item>
         <item quantity="other">Wrong passcode. %d attempts left before log-out.</item>
     </plurals>
+    <plurals name="pin_dots_state">
+        <item quantity="one">%1$d of %2$d digit entered</item>
+        <item quantity="other">%1$d of %2$d digits entered</item>
+    </plurals>
     <string name="lock_delete">Delete</string>
     <string name="lock_use_biometric">Unlock with biometrics</string>
     <string name="lock_biometric_title">Unlock MegaGlass</string>

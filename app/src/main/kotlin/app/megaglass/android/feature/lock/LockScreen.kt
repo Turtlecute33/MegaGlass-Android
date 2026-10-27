@@ -40,6 +40,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -96,6 +99,8 @@ fun LockScreen() {
     val scope = rememberCoroutineScope()
     var code by remember { mutableStateOf("") }
     var shake by remember { mutableIntStateOf(0) }
+    // A wrong code shows a message until the next digit.
+    var wrong by remember { mutableStateOf(false) }
     val attempts = settings.lockFailures
     var checking by remember { mutableStateOf(false) }
     var wiping by remember { mutableStateOf(false) }
@@ -162,6 +167,7 @@ fun LockScreen() {
                 return@launch
             }
             shake++
+            wrong = true
             code = ""
             if (graph.lock.failures >= MAX_ATTEMPTS) wipe()
         }
@@ -181,11 +187,17 @@ fun LockScreen() {
             Text(stringResource(R.string.lock_title), style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
             val left = (MAX_ATTEMPTS - attempts).coerceAtLeast(0)
+            val warn = attempts >= WARN_AFTER || wrong
             Text(
-                if (attempts >= WARN_AFTER) pluralStringResource(R.plurals.lock_attempts_left, left, left)
-                else stringResource(R.string.lock_subtitle),
+                when {
+                    attempts >= WARN_AFTER -> pluralStringResource(R.plurals.lock_attempts_left, left, left)
+                    wrong -> stringResource(R.string.security_wrong_passcode)
+                    else -> stringResource(R.string.lock_subtitle)
+                },
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (attempts >= WARN_AFTER) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (warn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                // TalkBack reads each wrong-code message, but not the return to the normal text.
+                modifier = Modifier.semantics { if (warn) liveRegion = LiveRegionMode.Polite },
             )
             Spacer(Modifier.height(32.dp))
             PinDots(length = length, filled = code.length, shakeKey = shake)
@@ -193,6 +205,7 @@ fun LockScreen() {
             NumberPad(
                 onDigit = { d ->
                     if (checking || wiping || code.length >= length) return@NumberPad
+                    wrong = false
                     code += d
                     if (code.length == length) check(code)
                 },
