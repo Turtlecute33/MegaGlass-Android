@@ -29,12 +29,14 @@ import app.megaglass.android.core.storage.AppSettings
 import app.megaglass.android.core.transfers.Direction
 import app.megaglass.android.core.transfers.Purpose
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
@@ -107,15 +109,21 @@ object CameraUploads {
         }
         // Uploads can outlive their worker (time limit, changed settings) or run without one
         // (resumed by the SDK after a restart). They also stop when Wi-Fi or charging is lost;
-        // the next run queues them again.
+        // the next run queues them again. The check runs only while camera uploads are in the
+        // queue, so an idle process has no timer (MEGAGLASS-PERF-009).
         graph.scope.launch {
-            graph.transfers.state.sample(POLICY_CHECK_MS).collect { state ->
-                if (state.active.none { it.direction == Direction.UPLOAD && it.purpose == Purpose.CAMERA }) return@collect
-                val s = graph.settings.current
-                if (!s.cameraUploads || (s.cuWifiOnly && isMetered(context)) || (s.cuRequireCharging && !isPluggedIn(context))) {
-                    graph.transfers.cancelUploads(Purpose.CAMERA)
+            graph.transfers.state
+                .map { state -> state.active.any { it.direction == Direction.UPLOAD && it.purpose == Purpose.CAMERA } }
+                .distinctUntilChanged()
+                .collectLatest { active ->
+                    while (active) {
+                        val s = graph.settings.current
+                        if (!s.cameraUploads || (s.cuWifiOnly && isMetered(context)) || (s.cuRequireCharging && !isPluggedIn(context))) {
+                            graph.transfers.cancelUploads(Purpose.CAMERA)
+                        }
+                        delay(POLICY_CHECK_MS)
+                    }
                 }
-            }
         }
     }
 

@@ -25,7 +25,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import nz.mega.sdk.MegaApiJava
@@ -132,7 +131,9 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
     private val lock = Any()
     private val records = LinkedHashMap<Int, Record>()
     private val finished = ArrayDeque<TransferItem>()
-    @Volatile private var dirty = true
+    /** A change since the last snapshot. Without changes the snapshot loop waits and does not poll (MEGAGLASS-PERF-009). */
+    private val changed = Channel<Unit>(Channel.CONFLATED)
+    private fun markDirty() { changed.trySend(Unit) }
     @Volatile private var overQuota = false
 
     private val _state = MutableStateFlow(TransfersState())
@@ -170,14 +171,14 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
 
     /** One unit of [pending] work. [done] counts once, and not after the session ended. */
     private inner class Pending {
-        init { pending.incrementAndGet(); dirty = true }
+        init { pending.incrementAndGet(); markDirty() }
         private val session = sessionEpoch.get()
         private val open = AtomicBoolean(true)
 
         fun done() {
             if (open.getAndSet(false) && session == sessionEpoch.get()) {
                 pending.updateAndGet { maxOf(0, it - 1) }
-                dirty = true
+                markDirty()
             }
         }
     }
@@ -241,7 +242,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
                 if (parent != 0) tokens[parent]?.let { tokens[k] = it }
                 records.size == 1
             }
-            dirty = true
+            markDirty()
             // Once per busy period: a folder transfer starts thousands of files.
             if (first) onActive?.invoke()
         }
@@ -255,7 +256,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
                 if (r == null) records[k] = Record(transfer.toItem(k), parentOf(api, transfer))
                 else r.item = transfer.toItem(k, r.item.fileCount)
             }
-            dirty = true
+            markDirty()
         }
 
         override fun onTransferTemporaryError(api: MegaApiJava, transfer: MegaTransfer, e: MegaError) {
@@ -290,7 +291,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
                 }
                 if (records.isEmpty()) overQuota = false
             }
-            dirty = true
+            markDirty()
             done?.let { completionQueue.trySend(sessionEpoch.get() to it) }
         }
 
@@ -305,7 +306,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
                 val r = records[k] ?: return
                 r.item = transfer.toItem(k, fileCount)
             }
-            dirty = true
+            markDirty()
         }
     }
 
@@ -338,20 +339,19 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
                     finished.removeAll { it.tag == item.tag && it.finishedAt == item.finishedAt }
                     finished.addFirst(result)
                     while (finished.size > MAX_HISTORY) finished.removeLast()
-                    dirty = true
+                    markDirty()
                 }
                 _completed.emit(result)
             }
         }
+        markDirty()
         scope.launch(Dispatchers.Default) {
-            while (isActive) {
-                if (dirty) {
-                    dirty = false
-                    val epoch = sessionEpoch.get()
-                    val current = snapshot()
-                    synchronized(lock) {
-                        if (accepting && epoch == sessionEpoch.get()) _state.value = current
-                    }
+            // A change during a snapshot sends again, so the next snapshot comes after TICK_MS.
+            for (signal in changed) {
+                val epoch = sessionEpoch.get()
+                val current = snapshot()
+                synchronized(lock) {
+                    if (accepting && epoch == sessionEpoch.get()) _state.value = current
                 }
                 delay(TICK_MS)
             }
@@ -542,7 +542,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
             if (synchronized(lock) { records.keys.any { it < 0 } }) {
                 catching { mega.folderApi.await { pauseTransfers(pause, it) } }.onFailure { onError?.invoke(it.message ?: "Cannot pause transfers") }
             }
-            dirty = true
+            markDirty()
         }
     }
 
@@ -552,7 +552,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
         val (a, t) = owner(tag)
         scope.launch(Dispatchers.IO) {
             catching { a.await { pauseTransferByTag(t, pause, it) } }.onFailure { onError?.invoke(it.message ?: "Cannot pause transfer") }
-            dirty = true
+            markDirty()
         }
     }
 
@@ -656,12 +656,12 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
 
     fun removeFromHistory(item: TransferItem) {
         synchronized(lock) { finished.removeAll { it.tag == item.tag && it.finishedAt == item.finishedAt } }
-        dirty = true
+        markDirty()
     }
 
     fun clearHistory() {
         synchronized(lock) { finished.clear() }
-        dirty = true
+        markDirty()
     }
 
     fun beginSession() { accepting = true }
@@ -677,7 +677,7 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
         }
         overQuota = false
         _state.value = TransfersState()
-        dirty = true
+        markDirty()
     }
 
     private companion object {
