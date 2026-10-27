@@ -8,6 +8,7 @@ import android.util.AtomicFile
 import java.io.File
 import java.io.IOException
 import java.security.KeyStore
+import java.security.ProviderException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -67,15 +68,24 @@ class SessionStore(context: Context) {
         val store = KeyStore.getInstance(KEYSTORE).apply { load(null) }
         (store.getKey(ALIAS, null) as? SecretKey)?.let { return it }
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE)
-        generator.init(
-            KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setKeySize(256)
-                .build(),
-        )
-        return generator.generateKey()
+        // StrongBox first, then the TEE (MEGAGLASS-SEC-009). ProviderException also covers
+        // StrongBoxUnavailableException and vendor StrongBox faults.
+        return try {
+            generator.init(spec(strongBox = true))
+            generator.generateKey()
+        } catch (_: ProviderException) {
+            generator.init(spec(strongBox = false))
+            generator.generateKey()
+        }
     }
+
+    private fun spec(strongBox: Boolean) =
+        KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .setIsStrongBoxBacked(strongBox)
+            .build()
 
     private companion object {
         const val KEYSTORE = "AndroidKeyStore"
