@@ -96,7 +96,9 @@ scripts/build-sdk.sh          # builds libmega.so (arm64-v8a) and the Java bindi
 ```
 
 The first SDK build compiles all native dependencies with vcpkg and takes a while. Later builds
-use them again.
+use them again. `build-sdk.sh` resets Vendor/mega-sdk to the pinned commit and applies
+`patches/` again, so it removes all other changes there: put SDK changes in a patch. It stops if
+Vendor/vcpkg has local changes.
 
 The release APK is about 33 MB (estimate); libmega.so is about 25 MB of it.
 
@@ -160,7 +162,8 @@ With an Android 15 or later arm64 emulator connected, run
 need a MEGA account. Workflows that need a login still need a dedicated test account.
 
 The [alpha audit](docs/ALPHA_AUDIT.md) lists the fixes and the remaining test gaps. The
-[validation record](docs/ALPHA_AUDIT_VALIDATION.md) has the measured results and artifact hashes.
+[validation record](docs/ALPHA_AUDIT_VALIDATION.md) is a snapshot of the 2026-10-15 run. Each
+native build records its versions and digests in `sdk/src/main/assets/mega-build.properties`.
 
 </details>
 

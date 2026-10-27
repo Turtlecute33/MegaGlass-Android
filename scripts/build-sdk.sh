@@ -19,12 +19,17 @@ export VCPKG_DISABLE_METRICS=1
 [[ -f "$ANDROID_NDK_HOME/ndk-build" ]] || { print -u2 "NDK not found: $ANDROID_NDK_HOME"; exit 1; }
 [[ -x "$VCPKG_DIR/vcpkg" ]] || { print -u2 "Run scripts/bootstrap-sdk.sh first"; exit 1; }
 
-# Build only the pinned SDK, with every local patch applied.
+# Build only the pinned SDK with exactly the local patches: the reset and the clean remove all
+# other changes in Vendor/mega-sdk (MEGAGLASS-SEC-007).
 source "$ROOT/scripts/sdk-version.sh"
 [[ "$(git -C "$SDK_DIR" rev-parse HEAD)" == "$SDK_COMMIT" ]] || { print -u2 "Vendor/mega-sdk is not at the pinned commit. Run scripts/bootstrap-sdk.sh"; exit 1; }
+git -C "$SDK_DIR" reset -q --hard "$SDK_COMMIT"
+git -C "$SDK_DIR" clean -qfdx
 for patch in "$ROOT"/patches/mega-sdk-*.patch(N); do
-  git -C "$SDK_DIR" apply --reverse --check "$patch" 2>/dev/null || { print -u2 "Patch is not applied: ${patch:t}. Run scripts/bootstrap-sdk.sh"; exit 1; }
+  git -C "$SDK_DIR" apply "$patch" || { print -u2 "Patch does not apply: ${patch:t}"; exit 1; }
 done
+# The vcpkg bootstrap adds untracked files (the tool, the downloads), so only tracked files count.
+[[ -z "$(git -C "$VCPKG_DIR" status --porcelain --untracked-files=no)" ]] || { print -u2 "Vendor/vcpkg has local changes"; exit 1; }
 
 # The vcpkg dependencies are installed during the configure step. The overlay ports in
 # scripts/ports come before the SDK's own overlay ports, so they replace them.

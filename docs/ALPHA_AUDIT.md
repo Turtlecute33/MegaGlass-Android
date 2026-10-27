@@ -115,7 +115,7 @@ and checked before builds. A fresh checkout must run both SDK scripts as documen
   invalid destination while logged out. No authenticated server mutations are performed.
 - Build/check commands: `:app:testDebugUnitTest`, `:app:connectedDebugAndroidTest`,
   `:app:assembleDebug`, `:app:assembleRelease`, `:app:lintDebug`, `:sdk:lintDebug`.
-  Exact latest outcomes are recorded in `ALPHA_AUDIT_VALIDATION.md` after the final run.
+  The outcomes of the 2026-10-15 run are in `ALPHA_AUDIT_VALIDATION.md` (a dated snapshot).
 - Clean-device startup smoke: welcome screen rendered on Android 15; native SDK loaded without
   linkage failure. The emulator uses separate temporary data. No existing AVD user data or
   real device was used for these tests.

@@ -1,6 +1,10 @@
-# Final audit validation
+# Final audit validation (snapshot of 2026-10-15)
 
 Recorded 2026-10-15T02:33:43+00:00.
+
+This is a dated snapshot of one run. It does not show later changes: more SDK patches,
+MediaInfoLib 26.10 and new native build flags. Each native build writes its own versions,
+patch digest, tool versions and binary digest to `sdk/src/main/assets/mega-build.properties`.
 
 The final combined build completed successfully with strict lint enabled.
 
