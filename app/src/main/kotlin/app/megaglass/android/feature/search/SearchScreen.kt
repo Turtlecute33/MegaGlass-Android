@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -78,6 +79,9 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import nz.mega.sdk.MegaApiJava
+
+/** The most results that a search shows. */
+private const val RESULT_LIMIT = 500
 
 enum class TypeFilter(@StringRes val label: Int, val category: Int, val folders: Boolean = false) {
     ALL(R.string.filter_all, MegaApiJava.FILE_TYPE_DEFAULT),
@@ -142,7 +146,7 @@ class SearchViewModel(private val parent: Long) : ViewModel() {
                 foldersOnly = s.type.folders,
                 order = if (s.query.isBlank()) SortOrder.MODIFIED_DESC else graph.settings.current.sortOrder,
                 showHidden = graph.settings.current.showHidden,
-                limit = 500,
+                limit = RESULT_LIMIT.toLong(),
             )
         }.getOrDefault(emptyList())
         _state.update { it.copy(results = result, searching = false) }
@@ -219,6 +223,8 @@ fun SearchScreen(route: Search) {
                     onMore = actions::openMenu,
                     contentPadding = PaddingValues(bottom = 120.dp + padding.calculateBottomPadding()),
                     modifier = Modifier.fillMaxSize(),
+                    // The list stops at the limit: tell the user that more results can exist (MEGAGLASS-UX-009).
+                    footer = if (results.size >= RESULT_LIMIT) { { LimitNote() } } else null,
                 )
             }
             AnimatedVisibility(
@@ -232,6 +238,17 @@ fun SearchScreen(route: Search) {
         }
     }
     NodeActionsHost(actions)
+}
+
+@Composable
+private fun LimitNote() {
+    Text(
+        stringResource(R.string.search_limit_note, RESULT_LIMIT),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+    )
 }
 
 @Composable

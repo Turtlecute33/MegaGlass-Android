@@ -64,6 +64,23 @@ fun SortOrder.dateComparator(): Comparator<NodeItem>? = when (this) {
 fun List<NodeItem>.sortedFor(order: SortOrder): List<NodeItem> = order.dateComparator()?.let(::sortedWith) ?: this
 
 /**
+ * Reads [page] (offset to items) page by page and keeps the items that pass [keep], until
+ * [limit] items are kept or a page has fewer than [limit] items (the last page). The items
+ * stay in the page order (MEGAGLASS-UX-009).
+ */
+internal inline fun <T> keptPages(limit: Long, page: (offset: Long) -> List<T>, keep: (T) -> Boolean): List<T> {
+    val out = ArrayList<T>()
+    var offset = 0L
+    while (out.size < limit) {
+        val items = page(offset)
+        items.filterTo(out, keep)
+        if (items.size < limit) break
+        offset += limit
+    }
+    return out.take(limit.toInt())
+}
+
+/**
  * Runs a blocking SDK query that takes a cancel token. The SDK holds its lock for the whole
  * query, so a query that nobody waits for any more (a cancelled coroutine) must stop.
  */
@@ -308,12 +325,17 @@ class NodeRepository(private val mega: Mega) {
         // ONLY_TRUE excludes sensitive nodes and nodes in sensitive folders (ONLY_FALSE returns only sensitive ones).
         if (!showHidden) filter.bySensitivity(MegaSearchFilter.BOOL_FILTER_ONLY_TRUE)
         if (modifiedAfter > 0) filter.byModificationTime(modifiedAfter, Long.MAX_VALUE / 1000)
-        val page = if (limit > 0) nz.mega.sdk.MegaSearchPage.createInstance(0, limit) else null
-        cancellable { token -> api.search(filter, order.sdkOrder, token, page) }
-            // SEARCH_TARGET_ALL also covers the Rubbish bin; deleted items do not belong in the results.
-            .filter { parent != null || scope != SearchScope.ALL || !api.isInRubbish(it) }
-            .map { it.toItem(api) }
-            .sortedFor(order)
+        // SEARCH_TARGET_ALL also covers the Rubbish bin; deleted items do not belong in the results.
+        val keep = { n: MegaNode -> parent != null || scope != SearchScope.ALL || !api.isInRubbish(n) }
+        val nodes = if (limit > 0) {
+            // The next pages take the place of the removed Rubbish bin matches (MEGAGLASS-UX-009).
+            keptPages(limit, { offset ->
+                cancellable { token -> api.search(filter, order.sdkOrder, token, nz.mega.sdk.MegaSearchPage.createInstance(offset, limit)) }
+            }, keep)
+        } else {
+            cancellable { token -> api.search(filter, order.sdkOrder, token, null) }.filter(keep)
+        }
+        nodes.map { it.toItem(api) }.sortedFor(order)
     }
 
     suspend fun favourites(order: SortOrder, showHidden: Boolean): List<NodeItem> =

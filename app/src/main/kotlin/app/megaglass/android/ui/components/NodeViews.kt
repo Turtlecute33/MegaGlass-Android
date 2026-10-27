@@ -318,6 +318,7 @@ fun NodeCollection(
     gridState: LazyGridState = rememberLazyGridState(),
     folderLink: Boolean = false,
     header: (@Composable () -> Unit)? = null,
+    footer: (@Composable () -> Unit)? = null,
 ) {
     val selecting = selection.isNotEmpty()
     if (grid) {
@@ -346,6 +347,7 @@ fun NodeCollection(
                     modifier = Modifier.animateItem(),
                 )
             }
+            if (footer != null) item(key = "footer", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) { footer() }
         }
     } else {
         LazyColumn(state = listState, modifier = modifier, contentPadding = contentPadding) {
@@ -363,6 +365,7 @@ fun NodeCollection(
                     modifier = Modifier.animateItem(),
                 )
             }
+            if (footer != null) item(key = "footer") { footer() }
         }
     }
 }
