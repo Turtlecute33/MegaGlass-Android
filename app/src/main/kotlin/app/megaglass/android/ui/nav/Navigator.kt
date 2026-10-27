@@ -28,7 +28,15 @@ data class StackEntry(val tab: Tab, val route: Route, val id: Long)
  * [startTab] (a setting); Back at its root closes the app.
  */
 @Stable
-class AppNavigator(private val graph: AppGraph, val startTab: Tab) {
+class AppNavigator(
+    private val graph: AppGraph,
+    val startTab: Tab,
+    /** Set for the offline-only stack (MEGAGLASS-UX-002): Back at its root calls it. */
+    private val onExit: (() -> Unit)? = null,
+) {
+
+    /** No ready session: the stack starts at Offline and opens only local routes. */
+    val offlineOnly: Boolean get() = onExit != null
 
     private val stacks = LinkedHashMap<Tab, SnapshotStateList<StackEntry>>()
     private var nextId = 0L
@@ -41,7 +49,7 @@ class AppNavigator(private val graph: AppGraph, val startTab: Tab) {
     val currentRoute: Route get() = backStack.lastOrNull()?.route ?: Home
 
     init {
-        stacks[startTab] = mutableStateListOf(entry(startTab, startTab.root))
+        stacks[startTab] = mutableStateListOf(entry(startTab, if (offlineOnly) Offline else startTab.root))
         rebuild()
     }
 
@@ -54,12 +62,14 @@ class AppNavigator(private val graph: AppGraph, val startTab: Tab) {
     }
 
     fun navigate(route: Route) {
+        if (offlineOnly && !route.isLocal()) return
         stacks.getValue(currentTab).add(entry(currentTab, route))
         rebuild()
     }
 
     /** Replaces the top entry of the current tab. */
     fun replace(route: Route) {
+        if (offlineOnly && !route.isLocal()) return
         val stack = stacks.getValue(currentTab)
         if (stack.size > 1) stack.removeAt(stack.lastIndex)
         stack.add(entry(currentTab, route))
@@ -80,7 +90,7 @@ class AppNavigator(private val graph: AppGraph, val startTab: Tab) {
         }
     }
 
-    /** Returns false when there is nothing to go back to (the app should close). */
+    /** Returns false when there is nothing to go back to (the app should close, or the offline-only stack). */
     fun back(): Boolean {
         val stack = stacks.getValue(currentTab)
         if (stack.size > 1) {
@@ -95,6 +105,7 @@ class AppNavigator(private val graph: AppGraph, val startTab: Tab) {
             rebuild()
             return true
         }
+        onExit?.invoke()
         return false
     }
 
@@ -153,6 +164,17 @@ class AppNavigator(private val graph: AppGraph, val startTab: Tab) {
     companion object {
         const val TEXT_EDITOR_LIMIT = 5L * 1024 * 1024
     }
+}
+
+/** Routes that use only local files: the offline screens and the viewers of [AppNavigator.openLocal]. */
+private fun Route.isLocal() = when (this) {
+    Offline, is OfflineFolder -> true
+    is ImageViewer -> source is MediaSource.Local
+    is VideoPlayer -> localPath != null
+    is AudioPlayer -> localPath != null
+    is PdfViewer -> localPath != null
+    is TextEditor -> localPath != null
+    else -> false
 }
 
 val LocalNavigator = staticCompositionLocalOf<AppNavigator> { error("No AppNavigator") }

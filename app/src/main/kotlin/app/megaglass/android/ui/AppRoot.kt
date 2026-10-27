@@ -2,6 +2,7 @@ package app.megaglass.android.ui
 
 import android.Manifest
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,10 +24,14 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -45,6 +51,10 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import androidx.navigation3.ui.NavDisplay
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.mega.SessionState
@@ -58,13 +68,16 @@ import app.megaglass.android.ui.components.LocalAppLocked
 import app.megaglass.android.ui.nav.AppNavigator
 import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.nav.MainScaffold
+import app.megaglass.android.ui.nav.NavigationViewModels
 import app.megaglass.android.ui.nav.Folder
 import app.megaglass.android.ui.nav.PublicLink
+import app.megaglass.android.ui.nav.RouteContent
 import app.megaglass.android.ui.nav.SettingsAbout
 import app.megaglass.android.ui.nav.Tab
 import app.megaglass.android.ui.nav.Transfers
 import app.megaglass.android.ui.theme.MegaGlassTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
@@ -85,21 +98,29 @@ fun AppRoot(incoming: MutableStateFlow<IncomingAction?>) {
     val session by graph.session.state.collectAsStateWithLifecycle()
     val locked by graph.lock.locked.collectAsStateWithLifecycle()
 
+    // Offline files while the resume waits or failed; a ready session or a logout closes them (MEGAGLASS-UX-002).
+    var showOffline by remember { mutableStateOf(false) }
+    val screen = session.screenKey()
+    val resuming = screen == "loading" || screen == "failed"
+    LaunchedEffect(resuming) { if (!resuming) showOffline = false }
+
     MegaGlassTheme(settings) {
         Surface(color = MaterialTheme.colorScheme.surface) {
             Box(Modifier.fillMaxSize()) {
                 CompositionLocalProvider(LocalAppLocked provides (locked && graph.lock.isEnabled)) {
-                    AnimatedContent(
-                        targetState = session.screenKey(),
+                    if (showOffline && resuming) {
+                        OfflineOnlyHost(onClose = { showOffline = false })
+                    } else AnimatedContent(
+                        targetState = screen,
                         transitionSpec = { fadeIn() togetherWith fadeOut() },
                         label = "session",
                     ) { key ->
                         when (key) {
                             "starting" -> Box(Modifier.fillMaxSize())
                             "out" -> AuthScreen()
-                            "loading" -> LoadingSession(session as? SessionState.Loading)
+                            "loading" -> LoadingSession(session as? SessionState.Loading, onOffline = { showOffline = true })
                             "blocked" -> BlockedScreen((session as? SessionState.Blocked)?.message.orEmpty())
-                            "failed" -> ResumeFailedScreen((session as? SessionState.Failed)?.message.orEmpty())
+                            "failed" -> ResumeFailedScreen((session as? SessionState.Failed)?.message.orEmpty(), onOffline = { showOffline = true })
                             else -> ReadyContent(incoming)
                         }
                     }
@@ -192,8 +213,50 @@ private fun ReadyContent(incoming: MutableStateFlow<IncomingAction?>) {
     }
 }
 
+/**
+ * Offline files without a ready session (MEGAGLASS-UX-002). A stack and ViewModels of its own,
+ * which open only local routes. AppRoot keeps it below the lock.
+ */
 @Composable
-private fun LoadingSession(state: SessionState.Loading?) {
+private fun OfflineOnlyHost(onClose: () -> Unit) {
+    val graph = MegaGlassApp.graph
+    val nav = remember { AppNavigator(graph, Tab.HOME, onExit = onClose) }
+    val viewModels = remember { NavigationViewModels() }
+    DisposableEffect(viewModels) { onDispose { viewModels.close() } }
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) { graph.messenger.messages.collect { snackbar.showSnackbar(it.text, withDismissAction = true) } }
+    // Back at the root returns to the session screen; NavDisplay takes Back when it has more entries.
+    BackHandler { nav.back() }
+    CompositionLocalProvider(LocalNavigator provides nav) {
+        Box(Modifier.fillMaxSize()) {
+            NavDisplay(
+                backStack = nav.backStack,
+                onBack = { nav.back() },
+                entryDecorators = listOf(
+                    rememberSaveableStateHolderNavEntryDecorator(),
+                    rememberViewModelStoreNavEntryDecorator(viewModelStoreOwner = viewModels),
+                ),
+                entryProvider = { e -> NavEntry(e, contentKey = e.id) { RouteContent(it.route) } },
+            )
+            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
+        }
+    }
+}
+
+/** Shows the offline files button: the resume can wait up to 90 s without a network (MEGAGLASS-UX-002). */
+@Composable
+private fun OfflineButton(onClick: () -> Unit) {
+    val offline by MegaGlassApp.graph.offline.handles.collectAsStateWithLifecycle()
+    if (offline.isNotEmpty()) TextButton(onClick = onClick) { Text(stringResource(R.string.offline_open)) }
+}
+
+@Composable
+private fun LoadingSession(state: SessionState.Loading?, onOffline: () -> Unit) {
+    var offerOffline by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(5_000)
+        offerOffline = true
+    }
     Column(
         Modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
@@ -210,11 +273,15 @@ private fun LoadingSession(state: SessionState.Loading?) {
             Spacer(Modifier.height(16.dp))
             LinearWavyProgressIndicator(progress = { progress }, modifier = Modifier.width(200.dp))
         }
+        if (offerOffline) {
+            Spacer(Modifier.height(24.dp))
+            OfflineButton(onOffline)
+        }
     }
 }
 
 @Composable
-private fun ResumeFailedScreen(message: String) {
+private fun ResumeFailedScreen(message: String, onOffline: () -> Unit) {
     val scope = rememberCoroutineScope()
     var confirmLogout by remember { mutableStateOf(false) }
     Column(
@@ -232,7 +299,8 @@ private fun ResumeFailedScreen(message: String) {
         Text(message, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(24.dp))
         Button(onClick = { MegaGlassApp.graph.session.start() }) { Text(stringResource(R.string.retry)) }
-        androidx.compose.material3.TextButton(onClick = { confirmLogout = true }) {
+        OfflineButton(onOffline)
+        TextButton(onClick = { confirmLogout = true }) {
             Text(stringResource(R.string.logout))
         }
     }

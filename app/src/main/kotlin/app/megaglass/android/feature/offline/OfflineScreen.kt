@@ -141,7 +141,8 @@ fun OfflineScreen(path: String?) {
                                     }
                                 }
                             },
-                            onInfo = if (entry.handle != MegaApiJava.INVALID_HANDLE) { { nav.navigate(NodeInfo(entry.handle)) } } else null,
+                            // Without a ready session the cloud is not available (MEGAGLASS-UX-002).
+                            onInfo = if (entry.handle != MegaApiJava.INVALID_HANDLE && !nav.offlineOnly) { { nav.navigate(NodeInfo(entry.handle)) } } else null,
                             onRemove = if (entry.handle != MegaApiJava.INVALID_HANDLE) { { removing = entry } } else null,
                             modifier = Modifier.animateItem(),
                         )
