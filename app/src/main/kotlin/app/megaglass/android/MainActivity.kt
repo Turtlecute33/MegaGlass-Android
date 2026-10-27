@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -16,6 +15,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import app.megaglass.android.feature.links.findMegaLink
 import app.megaglass.android.ui.AppRoot
 import app.megaglass.android.ui.IncomingAction
+import app.megaglass.android.ui.theme.edgeToEdge
+import app.megaglass.android.ui.theme.isDark
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.launch
@@ -25,11 +26,12 @@ class MainActivity : ComponentActivity() {
     private val incoming = MutableStateFlow<IncomingAction?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        val settings = MegaGlassApp.graph.settings
+        // The bar icons follow the app theme, also after a system dark-mode change (MEGAGLASS-UX-007).
+        edgeToEdge { res -> settings.current.themeMode.isDark(res.configuration.isNightModeActive) }
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) handle(intent)
 
-        val settings = MegaGlassApp.graph.settings
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.CREATED) {
                 settings.state.distinctUntilChangedBy { it.secureScreen to (it.passcodeHash != null) }.collect { s ->

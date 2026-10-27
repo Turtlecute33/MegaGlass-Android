@@ -1,5 +1,10 @@
 package app.megaglass.android.ui.theme
 
+import android.content.res.Resources
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.compose.LocalActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialExpressiveTheme
@@ -11,6 +16,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -138,17 +144,40 @@ private fun ColorScheme.pureBlack() = copy(
     surfaceContainerHighest = Color(0xFF222222),
 )
 
-@Composable
-fun isDarkTheme(settings: AppSettings): Boolean = when (settings.themeMode) {
-    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+/** Dark or light for this mode; [systemDark] is the system setting. */
+fun ThemeMode.isDark(systemDark: Boolean): Boolean = when (this) {
+    ThemeMode.SYSTEM -> systemDark
     ThemeMode.LIGHT -> false
     ThemeMode.DARK -> true
 }
 
 @Composable
+fun isDarkTheme(settings: AppSettings): Boolean = settings.themeMode.isDark(isSystemInDarkTheme())
+
+// The navigation bar scrims of the default enableEdgeToEdge() (internal in androidx.activity).
+private val LightScrim = android.graphics.Color.argb(0xe6, 0xff, 0xff, 0xff)
+private val DarkScrim = android.graphics.Color.argb(0x80, 0x1b, 0x1b, 0x1b)
+
+/**
+ * Edge to edge, with bar icons for the app theme and not only for the system theme
+ * (MEGAGLASS-UX-007). After a configuration change (for example a system dark-mode change),
+ * the activity runs the [dark] of its first call again, so that one must read the current settings.
+ */
+fun ComponentActivity.edgeToEdge(dark: (Resources) -> Boolean) = enableEdgeToEdge(
+    statusBarStyle = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT, dark),
+    navigationBarStyle = SystemBarStyle.auto(LightScrim, DarkScrim, dark),
+)
+
+@Composable
 fun MegaGlassTheme(settings: AppSettings, content: @Composable () -> Unit) {
     val dark = isDarkTheme(settings)
     val context = LocalContext.current
+    // A change of the app theme is not a configuration change: set the bar icons again.
+    val activity = LocalActivity.current as? ComponentActivity
+    DisposableEffect(activity, dark) {
+        activity?.edgeToEdge { dark }
+        onDispose {}
+    }
     val colors = remember(dark, settings.dynamicColor, settings.pureBlack) {
         val base = when {
             settings.dynamicColor && dark -> dynamicDarkColorScheme(context)
