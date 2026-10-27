@@ -43,6 +43,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -253,7 +254,7 @@ fun SearchScreen(route: Search) {
 @Composable
 private fun LimitNote() {
     Text(
-        stringResource(R.string.search_limit_note, RESULT_LIMIT),
+        pluralStringResource(R.plurals.search_limit_note, RESULT_LIMIT, RESULT_LIMIT),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,

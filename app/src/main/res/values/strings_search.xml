@@ -15,5 +15,8 @@
     <string name="search_start">Search your cloud</string>
     <string name="search_start_hint">Type a name or choose a filter.</string>
     <string name="no_results">No results</string>
-    <string name="search_limit_note">The list shows only the first %1$d results. To find more, type more of the name or add a filter.</string>
+    <plurals name="search_limit_note">
+        <item quantity="one">The list shows only the first result. To find more, type more of the name or add a filter.</item>
+        <item quantity="other">The list shows only the first %1$d results. To find more, type more of the name or add a filter.</item>
+    </plurals>
 </resources>
