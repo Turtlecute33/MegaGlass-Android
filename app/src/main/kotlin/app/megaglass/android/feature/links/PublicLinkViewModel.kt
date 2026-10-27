@@ -212,6 +212,8 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
             val closed = withTimeoutOrNull(15_000L) { folderApi.await { localLogout(it) }; true }
             if (closed != true) throw java.io.IOException("Could not close the previous folder link")
         }
+        // Files of an earlier link, also from before a process stop.
+        withContext(Dispatchers.IO) { graph.mega.clearFolderCache() }
         _ui.value = LinkUi.Fetching(null)
         folderApi.await { loginToFolder(l.url, it) }
         folderApi.await(onUpdate = { r ->
@@ -489,6 +491,8 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
             graph.mega.folderSessionLock.withLock {
                 if (folderOwner == graph.mega.folderOwner.value) {
                     withTimeoutOrNull(15_000L) { catching { folderApi.await { localLogout(it) } } }
+                    // The local logout keeps the node cache of the link.
+                    if (folderApi.isLoggedIn == 0) withContext(Dispatchers.IO) { graph.mega.clearFolderCache() }
                 }
             }
         }

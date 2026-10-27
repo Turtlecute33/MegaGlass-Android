@@ -303,9 +303,18 @@ class Mega(context: Context) {
             if (folderApiInstance.isInitialized() && folderApi.isLoggedIn != 0) {
                 withTimeoutOrNull(LOGOUT_TIMEOUT_MS) { catching { folderApi.await { localLogout(it) } } }
             }
-            folderDir.listFiles()?.forEach { it.deleteRecursively() }
+            clearFolderCache()
         }
         baseDir.listFiles()?.forEach { it.deleteRecursively() }
+    }
+
+    /**
+     * Deletes the SDK files of public folder links: their node cache has the names of all files
+     * in the link (MEGAGLASS-PRIV-002). Call only with [folderSessionLock] held and [folderApi]
+     * logged out.
+     */
+    fun clearFolderCache() {
+        folderDir.listFiles()?.forEach { it.deleteRecursively() }
     }
 
     companion object {
