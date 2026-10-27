@@ -329,6 +329,9 @@ class TransferManager(private val mega: Mega, private val scope: CoroutineScope,
                     try {
                         val file = File(item.localPath)
                         if (!file.isFile || file.length() != item.total) throw IOException("Downloaded file is incomplete")
+                        // The SDK sets the date of the cloud file. The cache trim needs the download time:
+                        // it removes the oldest copies first and keeps the copies of the last minutes (MEGAGLASS-PERF-012).
+                        file.setLastModified(System.currentTimeMillis())
                         VerifiedFiles.mark(file)
                     } catch (e: Exception) {
                         result = item.copy(status = TransferStatus.FAILED, error = e.message ?: "Cannot verify downloaded file")

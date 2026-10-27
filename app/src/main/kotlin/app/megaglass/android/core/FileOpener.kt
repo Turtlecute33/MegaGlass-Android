@@ -11,9 +11,11 @@ import app.megaglass.android.core.security.AppLock
 import app.megaglass.android.core.storage.LocalFiles
 import app.megaglass.android.core.storage.localFileName
 import app.megaglass.android.core.storage.VerifiedFiles
+import app.megaglass.android.core.storage.trimImageCache
 import app.megaglass.android.core.transfers.Purpose
 import app.megaglass.android.core.transfers.TransferManager
 import app.megaglass.android.core.transfers.TransferStatus
+import app.megaglass.android.feature.viewer.PreviewCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -98,9 +100,19 @@ class FileOpener(
     private fun cacheFile(handle: Long, name: String) =
         File(File(files.openDir, MegaApiJava.handleToBase64(handle)), localFileName(name))
 
+    /**
+     * Removes the oldest copies in cache/open over the size limit, before a new open or share
+     * (MEGAGLASS-PERF-012). Not while a download or a share batch waits: its files must stay.
+     */
+    suspend fun trimCopies() {
+        if (_preparing.value.isNotEmpty() || synchronized(shareBatch) { shareBatch.isNotEmpty() }) return
+        withContext(Dispatchers.IO) { trimImageCache(files.openDir, PreviewCache.BUDGET) }
+    }
+
     /** Opens a cloud file in another app. */
     suspend fun open(handle: Long, name: String, size: Long, folderLink: Boolean = false) {
         if (handle in _preparing.value) return
+        trimCopies()
         val target = cacheFile(handle, name)
         if (withContext(Dispatchers.IO) { VerifiedFiles.contains(target, size) }) {
             withContext(Dispatchers.Main) { view(target) }
@@ -118,6 +130,7 @@ class FileOpener(
     /** Shares cloud files (as files, not links) with another app. */
     suspend fun share(items: List<Triple<Long, String, Long>>) {
         if (items.any { it.first in _preparing.value }) throw java.io.IOException("A selected file is already being prepared")
+        trimCopies()
         val batch = Purpose.SHARE + ":" + System.nanoTime()
         val ready = mutableListOf<File>()
         val pending = mutableListOf<Pair<Long, File>>()

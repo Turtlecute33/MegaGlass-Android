@@ -21,9 +21,11 @@ import app.megaglass.android.core.storage.localFileName
 import app.megaglass.android.core.storage.VerifiedFiles
 import app.megaglass.android.core.storage.ensureDirectory
 import app.megaglass.android.core.storage.availableName
+import app.megaglass.android.core.storage.trimImageCache
 import app.megaglass.android.core.transfers.Purpose
 import app.megaglass.android.core.transfers.TransferStatus
 import app.megaglass.android.core.util.FileType
+import app.megaglass.android.feature.viewer.PreviewCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -436,6 +438,9 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
             is LinkUi.FolderLink -> withContext(Dispatchers.IO) { folderApi.getNodeByHandle(id)?.let { folderApi.authorizeNode(it) } }
             else -> null
         } ?: return@launch
+        // Before a new copy, the oldest copies over the size limit go (MEGAGLASS-PERF-012).
+        if (purpose == Purpose.OPEN) graph.opener.trimCopies()
+        else if (_preparing.value.isEmpty()) withContext(Dispatchers.IO) { trimImageCache(cacheDir, PreviewCache.BUDGET) }
         val dir = File(if (purpose == Purpose.OPEN) graph.files.openDir else cacheDir, MegaApiJava.handleToBase64(node.handle))
         val target = File(dir, localFileName(node.name.orEmpty()))
         if (withContext(Dispatchers.IO) { VerifiedFiles.contains(target, node.size) }) {
