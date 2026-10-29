@@ -1,17 +1,14 @@
 package app.megaglass.android.feature.viewer
 
-import app.megaglass.android.core.util.catching
-
 import androidx.compose.runtime.Immutable
 import app.megaglass.android.MegaGlassApp
-import app.megaglass.android.core.mega.MegaException
 import app.megaglass.android.core.mega.NodeItem
 import app.megaglass.android.core.mega.toItem
 import app.megaglass.android.core.storage.SortOrder
+import app.megaglass.android.core.storage.displayName
 import app.megaglass.android.core.storage.localFileName
 import app.megaglass.android.core.storage.VerifiedFiles
 import app.megaglass.android.core.storage.ensureDirectory
-import app.megaglass.android.core.storage.replaceFile
 import app.megaglass.android.core.storage.trimImageCache
 import app.megaglass.android.core.transfers.Purpose
 import app.megaglass.android.core.transfers.TransferStatus
@@ -20,28 +17,19 @@ import app.megaglass.android.feature.photos.MediaFilter
 import app.megaglass.android.feature.photos.PhotosRepository
 import app.megaglass.android.ui.nav.MediaSource
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import nz.mega.sdk.MegaApiJava
-import nz.mega.sdk.MegaError
-import nz.mega.sdk.MegaTransfer
-import nz.mega.sdk.MegaTransferListenerInterface
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
-import java.io.OutputStream
 import java.util.concurrent.Executors
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 /** One item a viewer can show: a cloud node (account or folder link) or a local file. */
 @Immutable
@@ -81,7 +69,7 @@ private fun NodeItem.toEntry(folderLink: Boolean) = MediaEntry(
 private fun File.toEntry() = MediaEntry(
     key = "f:$absolutePath",
     handle = MegaApiJava.INVALID_HANDLE,
-    name = name,
+    name = displayName(name),
     type = FileType.of(name),
     size = length(),
     hasThumbnail = false,
@@ -146,8 +134,8 @@ private fun children(api: MegaApiJava, parent: Long, order: SortOrder, types: Se
 
 /**
  * Local copies of cloud files for the in-app viewers (originals of images, PDFs, texts), in
- * cache/preview. Account nodes download through the transfer engine (parallel connections);
- * folder-link nodes stream through their own SDK instance.
+ * cache/preview. Account and folder-link nodes download through the transfer engine (parallel
+ * connections), which checks the integrity of the file.
  */
 object PreviewCache {
 
@@ -172,7 +160,7 @@ object PreviewCache {
                 if (VerifiedFiles.contains(target, size)) return@withContext target
                 target.parentFile!!.ensureDirectory()
                 VerifiedFiles.forget(target)
-                val downloaded = if (folderLink) stream(handle, target, size, onProgress) else transfer(handle, target, onProgress)
+                val downloaded = transfer(handle, target, folderLink, onProgress)
                 if (downloaded.length() != size) throw IOException("Downloaded file is incomplete")
                 // The SDK sets the date of the cloud file. The size limit needs the download time:
                 // it removes the oldest copies first and keeps the copies of the last minutes.
@@ -184,7 +172,7 @@ object PreviewCache {
         }
     }
 
-    private suspend fun transfer(handle: Long, target: File, onProgress: (Float) -> Unit): File = coroutineScope {
+    private suspend fun transfer(handle: Long, target: File, folderLink: Boolean, onProgress: (Float) -> Unit): File = coroutineScope {
         val transfers = MegaGlassApp.graph.transfers
         val path = target.absolutePath
         // Undispatched: the collectors subscribe before the download starts.
@@ -195,7 +183,7 @@ object PreviewCache {
             transfers.state.collect { s -> s.viewerProgress[path]?.let(onProgress) }
         }
         try {
-            transfers.downloadTo(handle, target, Purpose.PREVIEW)
+            transfers.downloadTo(handle, target, Purpose.PREVIEW, folderLink)
             val item = done.await()
             if (item.status != TransferStatus.COMPLETED) throw IOException(item.error ?: "Download failed")
             target
@@ -207,52 +195,6 @@ object PreviewCache {
         } finally {
             progress.cancel()
             done.cancel()
-        }
-    }
-
-    /** Streams a node into [target] without the transfer queue. */
-    private suspend fun stream(handle: Long, target: File, size: Long, onProgress: (Float) -> Unit): File = withContext(Dispatchers.IO) {
-        val api = MegaGlassApp.graph.mega.folderApi
-        val node = api.getNodeByHandle(handle) ?: throw MegaException(MegaError.API_ENOENT, "Item not found")
-        val tmp = File.createTempFile("preview", ".part", target.parentFile)
-        val out = FileOutputStream(tmp)
-        val cancelled = CompletableDeferred<Unit>()
-        try {
-            if (node.size > 0) suspendCancellableCoroutine { cont ->
-                // A failing write stops the streaming transfer.
-                val guarded = object : OutputStream() {
-                    override fun write(b: Int) = write(byteArrayOf(b.toByte()))
-                    override fun write(b: ByteArray, off: Int, len: Int) {
-                        if (cancelled.isCompleted) throw IOException("Cancelled")
-                        out.write(b, off, len)
-                    }
-                }
-                api.startUnbufferedDownload(node, 0, node.size, guarded, object : MegaTransferListenerInterface {
-                    override fun onTransferStart(api: MegaApiJava, transfer: MegaTransfer) {}
-                    override fun onTransferUpdate(api: MegaApiJava, transfer: MegaTransfer) {
-                        if (size > 0) onProgress(transfer.transferredBytes.toFloat() / size)
-                    }
-                    override fun onTransferTemporaryError(api: MegaApiJava, transfer: MegaTransfer, e: MegaError) {}
-                    override fun onTransferData(api: MegaApiJava, transfer: MegaTransfer, buffer: ByteArray) = true
-                    override fun onFolderTransferUpdate(
-                        api: MegaApiJava, transfer: MegaTransfer, stage: Int, folderCount: Long,
-                        createdFolderCount: Long, fileCount: Long, currentFolder: String?, currentFileLeafName: String?,
-                    ) {}
-                    override fun onTransferFinish(api: MegaApiJava, transfer: MegaTransfer, e: MegaError) {
-                        if (!cont.isActive) return
-                        if (e.errorCode == MegaError.API_OK) cont.resume(Unit)
-                        else cont.resumeWithException(MegaException(e.errorCode, e.errorString ?: "Download failed", fromSdk = true))
-                    }
-                })
-                cont.invokeOnCancellation { cancelled.complete(Unit) }
-            }
-            out.close()
-            if (tmp.length() != node.size) throw IOException("Downloaded file is incomplete")
-            replaceFile(tmp, target)
-            target
-        } finally {
-            catching { out.close() }
-            tmp.delete()
         }
     }
 }

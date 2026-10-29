@@ -50,9 +50,13 @@ class MegaImages(context: Context, private val mega: Mega) {
     private val thumbs = File(root, "thumbs").apply { mkdirs() }
     private val previews = File(root, "previews").apply { mkdirs() }
     private val avatars = File(root, "avatars").apply { mkdirs() }
+    /** Images of folder-link nodes. Mega.clearFolderCache deletes them when the link closes. */
+    private val links = File(root, "links")
 
-    fun file(image: NodeImage): File =
-        File(if (image.preview) previews else thumbs, MegaApiJava.handleToBase64(image.handle) + ".jpg")
+    fun file(image: NodeImage): File {
+        val dir = if (image.preview) previews else thumbs
+        return File(if (image.folderLink) File(links, dir.name) else dir, MegaApiJava.handleToBase64(image.handle) + ".jpg")
+    }
 
     fun file(avatar: UserAvatar): File = File(avatars, privateCacheKey(avatar.user) + ".jpg")
 

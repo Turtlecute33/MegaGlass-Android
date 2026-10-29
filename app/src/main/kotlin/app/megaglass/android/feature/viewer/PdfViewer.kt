@@ -69,12 +69,17 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
+import app.megaglass.android.core.storage.displayName
 import app.megaglass.android.ui.components.BackButton
 import app.megaglass.android.ui.components.ErrorState
 import app.megaglass.android.ui.components.IconAction
 import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.nav.PdfViewer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -93,7 +98,7 @@ internal fun pdfPageRatio(width: Int, height: Int): Float =
  * Renders PDF pages with the platform PdfRenderer. One page renders at a time (the renderer is
  * not thread-safe); rendered pages stay in a memory cache sized from the app memory class.
  */
-private class PdfDocument(file: File, context: Context) {
+private class PdfDocument(file: File, context: Context, job: Job) {
     private val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
     private val renderer = try { PdfRenderer(fd) } catch (e: Exception) { fd.close(); throw e }
     private val lock = Mutex()
@@ -101,7 +106,8 @@ private class PdfDocument(file: File, context: Context) {
     /** Width / height of each page. */
     private var closed = false
     val ratios: List<Float> = try {
-        (0 until pageCount).map { i -> renderer.openPage(i).use { pdfPageRatio(it.width, it.height) } }
+        // A cancel of [job] stops the scan: a file with very many pages does not continue after Back.
+        (0 until pageCount).map { i -> job.ensureActive(); renderer.openPage(i).use { pdfPageRatio(it.width, it.height) } }
     } catch (e: Exception) { renderer.close(); fd.close(); throw e }
     private val cache = object : LruCache<Int, Bitmap>(cacheBytes(context)) {
         override fun sizeOf(key: Int, value: Bitmap) = value.allocationByteCount
@@ -191,8 +197,16 @@ fun PdfViewerScreen(route: PdfViewer) {
     LaunchedEffect(file) {
         val f = file ?: return@LaunchedEffect
         // Opening reads every page size: off the main thread.
-        document = withContext(Dispatchers.IO) { catching { PdfDocument(f, context) }.getOrNull() }
-        if (document == null) error = resources.getString(R.string.viewer_pdf_error)
+        var opened: PdfDocument? = null
+        try {
+            withContext(Dispatchers.IO) { opened = catching { PdfDocument(f, context, coroutineContext.job) }.getOrNull() }
+        } catch (e: CancellationException) {
+            // The screen closed after the document opened: nothing else closes it.
+            opened?.close()
+            throw e
+        }
+        document = opened
+        if (opened == null) error = resources.getString(R.string.viewer_pdf_error)
     }
     DisposableEffect(document) {
         val doc = document
@@ -207,7 +221,7 @@ fun PdfViewerScreen(route: PdfViewer) {
             TopAppBar(
                 title = {
                     Column {
-                        Text(title, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                        Text(displayName(title), maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                         document?.let {
                             Text(
                                 stringResource(R.string.viewer_page, page + 1, it.pageCount),

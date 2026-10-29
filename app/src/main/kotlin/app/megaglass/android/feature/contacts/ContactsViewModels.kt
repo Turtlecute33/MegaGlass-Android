@@ -76,7 +76,7 @@ class ContactsViewModel : ViewModel() {
 
     init {
         load()
-        viewModelScope.launch { directory.changes.debounce(200).collect { load() } }
+        viewModelScope.launch { directory.changes.whileObserved(_state.subscriptionCount).debounce(200).collect { load() } }
     }
 
     fun load() = viewModelScope.launch {

@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.core.mega.await
 import app.megaglass.android.core.media.UserAvatar
+import app.megaglass.android.core.storage.displayName as safeDisplayName
 import app.megaglass.android.ui.components.Avatar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -124,7 +125,7 @@ class ContactDirectory private constructor() {
         val last = async { catching { api.await { getUserAttribute(user, MegaApiJava.USER_ATTR_LASTNAME, it) }.text }.getOrNull() }
         val alias = async { catching { api.await { getUserAlias(user.handle, it) }.name }.getOrNull() }
         Names(
-            full = listOfNotNull(first.await(), last.await()).joinToString(" ").trim(),
+            full = safeDisplayName(listOfNotNull(first.await(), last.await()).joinToString(" ").trim()),
             alias = alias.await()?.trim()?.takeIf { it.isNotEmpty() },
         )
     }

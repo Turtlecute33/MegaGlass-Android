@@ -60,6 +60,7 @@ import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.media.NodeImage
 import app.megaglass.android.core.mega.MegaException
+import app.megaglass.android.core.storage.localFileName
 import app.megaglass.android.core.transfers.AlreadyPreparingException
 import app.megaglass.android.core.transfers.Purpose
 import app.megaglass.android.core.util.FileType
@@ -122,7 +123,7 @@ suspend fun downloadFolderLinkNode(handle: Long) = withContext(Dispatchers.IO) {
     val authorized = graph.mega.folderApi.authorizeNode(node) ?: node
     val dir = graph.files.downloadDir(graph.settings.current)
     graph.mega.api.startDownload(
-        authorized, dir.absolutePath + java.io.File.separator, null, Purpose.DOWNLOAD, false, null,
+        authorized, dir.absolutePath + java.io.File.separator, localFileName(node.name ?: "file"), Purpose.DOWNLOAD, false, null,
         MegaTransfer.COLLISION_CHECK_FINGERPRINT, MegaTransfer.COLLISION_RESOLUTION_NEW_WITH_N,
     )
     graph.transfers.onActive?.invoke()

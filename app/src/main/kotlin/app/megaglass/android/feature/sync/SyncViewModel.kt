@@ -163,8 +163,8 @@ class SyncViewModel : ViewModel() {
                 val s = list.get(i)
                 StallItem(
                     reason = stallReason(s.reason()),
-                    localPath = if (s.pathCount(false) > 0) s.path(false, 0).orEmpty() else "",
-                    cloudPath = if (s.pathCount(true) > 0) s.path(true, 0).orEmpty() else "",
+                    localPath = if (s.pathCount(false) > 0) displayName(s.path(false, 0).orEmpty()) else "",
+                    cloudPath = if (s.pathCount(true) > 0) displayName(s.path(true, 0).orEmpty()) else "",
                 )
             }
         }

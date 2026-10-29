@@ -9,6 +9,7 @@ import app.megaglass.android.core.mega.await
 import app.megaglass.android.core.mega.cancellable
 import app.megaglass.android.core.mega.keepAlive
 import app.megaglass.android.core.mega.toItem
+import app.megaglass.android.core.storage.displayName
 import app.megaglass.android.core.util.FileType
 import app.megaglass.android.core.util.GenerationCache
 import app.megaglass.android.ui.nav.Album
@@ -156,8 +157,8 @@ object PhotosRepository {
             val cover = shown.firstOrNull { it.first == coverElement } ?: shown.firstOrNull()
             AlbumInfo(
                 id = set.id(),
-                name = set.name() ?: "",
-                count = shown.size,
+                name = displayName(set.name() ?: ""),
+                count = shown.distinctBy { it.second }.size,
                 cover = cover?.second ?: MegaApiJava.INVALID_HANDLE,
                 isSystem = false,
                 isExported = set.isExported,
@@ -166,7 +167,10 @@ object PhotosRepository {
         }
     }
 
-    /** Items of a user album, newest first. Elements whose node is gone are left out. */
+    /**
+     * Items of a user album, newest first. Elements whose node is gone are left out. A node that
+     * is in the album more than one time shows one time: the grid and the viewer use it as key.
+     */
     suspend fun albumEntries(id: Long, showHidden: Boolean): List<AlbumEntry> = withContext(Dispatchers.IO) {
         val elements = api.getSetElements(id)
         elements.keepAlive {
@@ -174,11 +178,11 @@ object PhotosRepository {
             val e = elements.get(i)
             val node = api.getNodeByHandle(e.node())?.takeIf { isShown(it, showHidden) } ?: return@mapNotNull null
             AlbumEntry(e.id(), node.toMedia(api))
-        }.sortedByDescending { it.media.takenAt }
+        }.distinctBy { it.media.handle }.sortedByDescending { it.media.takenAt }
         }
     }
 
-    fun albumName(id: Long): String? = api.getSet(id)?.name()
+    fun albumName(id: Long): String? = api.getSet(id)?.name()?.let(::displayName)
 
     suspend fun createAlbum(name: String): Long = withContext(Dispatchers.IO) {
         api.await { createSet(name, MegaSet.SET_TYPE_ALBUM, it) }.keepAlive { it.megaSet.id() }
@@ -208,9 +212,12 @@ object PhotosRepository {
         Unit
     }
 
-    suspend fun removeFromAlbum(id: Long, elementIds: Collection<Long>) = withContext(Dispatchers.IO) {
+    /** Removes nodes from an album, with all their elements: a node can be in it more than one time. */
+    suspend fun removeFromAlbum(id: Long, handles: Collection<Long>) = withContext(Dispatchers.IO) {
+        val elements = api.getSetElements(id)
+        val ids = elements.keepAlive { (0 until it.size()).map { i -> it.get(i) }.filter { e -> e.node() in handles }.map { e -> e.id() } }
         val list = MegaHandleList.createInstance()
-        elementIds.forEach(list::addMegaHandle)
+        ids.forEach(list::addMegaHandle)
         if (list.size() > 0) api.await { removeSetElements(id, list, it) }
         Unit
     }

@@ -207,7 +207,10 @@ private fun ReadyContent(incoming: MutableStateFlow<IncomingAction?>) {
     }
 
     LaunchedEffect(action) {
-        when (val a = action) {
+        val a = action ?: return@LaunchedEffect
+        // An incoming action waits for the unlock.
+        graph.lock.locked.first { !it }
+        when (a) {
             is IncomingAction.OpenLink -> navigator.navigate(PublicLink(a.url))
             is IncomingAction.Upload -> uploadUris = a.uris
             IncomingAction.ShowTransfers -> navigator.navigate(Transfers)
@@ -219,7 +222,6 @@ private fun ReadyContent(incoming: MutableStateFlow<IncomingAction?>) {
                 navigator.navigate(if (found) Folder(node.handle) else SettingsAbout)
                 android.util.Log.i("MegaGlassDebug", "open path: found=$found")
             }
-            null -> return@LaunchedEffect
         }
         incoming.value = null
     }

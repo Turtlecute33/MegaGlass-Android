@@ -235,9 +235,7 @@ class AlbumViewModel(private val id: Long, private val isSystem: Boolean, privat
     fun add(handles: Collection<Long>) = run { PhotosRepository.addToAlbum(id, handles) }
 
     fun removeSelected() = run {
-        val selected = _state.value.selection
-        val elements = _state.value.entries.orEmpty().filter { it.media.handle in selected }.map { it.elementId }
-        PhotosRepository.removeFromAlbum(id, elements)
+        PhotosRepository.removeFromAlbum(id, _state.value.selection)
         clearSelection()
     }
 

@@ -74,6 +74,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.compose.ContentFrame
 import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
+import app.megaglass.android.core.storage.displayName
 import app.megaglass.android.core.util.Format
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.IconAction
@@ -152,7 +153,7 @@ fun VideoPlayerScreen(route: VideoPlayer) {
         val job = graph.scope.launchIo {
             val path = route.localPath
             if (path != null) {
-                title = File(path).name
+                title = displayName(File(path).name)
                 uri = Uri.fromFile(File(path))
                 return@launchIo
             }
@@ -161,7 +162,7 @@ fun VideoPlayerScreen(route: VideoPlayer) {
                 loadError = notFound
                 return@launchIo
             }
-            title = node.name ?: ""
+            title = displayName(node.name ?: "")
             // An offline copy plays from the device, also without a network (MEGAGLASS-UX-003).
             val copy = if (route.folderLink) null else graph.offline.fileFor(route.handle)
             if (copy != null) {

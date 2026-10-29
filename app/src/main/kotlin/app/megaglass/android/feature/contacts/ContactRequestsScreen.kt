@@ -115,7 +115,7 @@ private fun RequestCard(item: ContactRequestItem, busy: Boolean, vm: ContactRequ
             }
             item.message?.takeIf { !item.outgoing }?.let { msg ->
                 Spacer(Modifier.padding(top = 12.dp))
-                Text("“$msg”", style = MaterialTheme.typography.bodyMedium)
+                Text("“$msg”", style = MaterialTheme.typography.bodyMedium, maxLines = 4, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.padding(top = 12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {

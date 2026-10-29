@@ -51,6 +51,7 @@ import app.megaglass.android.R
 import app.megaglass.android.core.storage.LocalSource
 import app.megaglass.android.core.mega.SessionState
 import app.megaglass.android.core.mega.awaitResult
+import app.megaglass.android.core.storage.displayName
 import app.megaglass.android.core.storage.localFileName
 import app.megaglass.android.core.transfers.Purpose
 import app.megaglass.android.core.transfers.TransferStatus
@@ -237,7 +238,7 @@ fun TextEditorScreen(route: TextEditor) {
                         val (code, request) = withContext(Dispatchers.IO) { graph.mega.api.awaitResult { getFileVersionsOption(it) } }
                         code == MegaError.API_ENOENT || code == MegaError.API_OK && !request.flag
                     }.getOrDefault(false)
-                    graph.messenger.show(resources.getString(if (versioned) R.string.editor_saved_version else R.string.editor_saved, savedTitle))
+                    graph.messenger.show(resources.getString(if (versioned) R.string.editor_saved_version else R.string.editor_saved, displayName(savedTitle)))
                     if (m.closeAfterSave && !m.cleared && !dirty) nav.backFrom(route)
                 }.onFailure { graph.messenger.show(resources.userMessage(it)) }
             } finally {
@@ -255,7 +256,7 @@ fun TextEditorScreen(route: TextEditor) {
             TopAppBar(
                 title = {
                     Column {
-                        Text(title, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                        Text(displayName(title), maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                         Text(
                             stringResource(
                                 when {

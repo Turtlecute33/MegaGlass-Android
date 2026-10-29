@@ -73,7 +73,10 @@ Compose with Material 3 Expressive for the interface. Chat and calls are not inc
 - Files are encrypted on the device before upload.
 - The session is encrypted with a key in the Android Keystore and is not included in backups.
 - Thumbnails, previews and offline files stay in app-private storage.
+- Copies of files that you open with other apps stay in the app cache, up to a size limit, until
+  you use Clear cache or log out.
 - The app passcode is stored only as a salted PBKDF2 hash.
+- The app lock is a screen lock. It does not encrypt the session or local files.
 
 ## Download
 

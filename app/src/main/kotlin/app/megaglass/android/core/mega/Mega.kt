@@ -83,6 +83,8 @@ class Mega(context: Context) {
     private val userAgent = "MegaGlass/${BuildConfig.VERSION_NAME} (Android)"
     private val baseDir = File(context.filesDir, "mega").apply { mkdirs() }
     private val folderDir = File(context.cacheDir, "mega-folder")
+    /** Decrypted copies of folder-link files: the images of MegaImages and the viewer copies of PreviewCache. */
+    private val folderCopies = listOf(File(context.cacheDir, "images/links"), File(context.cacheDir, "preview/links"))
     private val packageName = context.packageName
 
     val api: MegaGlassApi = MegaGlassApi(APP_KEY, userAgent, baseDir.absolutePath + File.separator)
@@ -331,11 +333,12 @@ class Mega(context: Context) {
 
     /**
      * Deletes the SDK files of public folder links: their node cache has the names of all files
-     * in the link (MEGAGLASS-PRIV-002). Call only with [folderSessionLock] held and [folderApi]
-     * logged out.
+     * in the link (MEGAGLASS-PRIV-002). Also deletes the decrypted copies of their files. Call only
+     * with [folderSessionLock] held and [folderApi] logged out.
      */
     fun clearFolderCache() {
         folderDir.listFiles()?.forEach { it.deleteRecursively() }
+        folderCopies.forEach { it.deleteRecursively() }
     }
 
     companion object {
