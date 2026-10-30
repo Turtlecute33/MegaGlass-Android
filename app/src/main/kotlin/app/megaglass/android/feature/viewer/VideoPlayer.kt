@@ -202,8 +202,9 @@ fun VideoPlayerScreen(route: VideoPlayer) {
         player.prepare()
         player.playWhenReady = true
     }
-    LaunchedEffect(ui) {
-        while (true) {
+    // The timer runs only while the video plays. At other times, player events update the state.
+    LaunchedEffect(ui, ui.isPlaying) {
+        while (ui.isPlaying) {
             ui.update()
             delay(250)
         }
@@ -211,8 +212,10 @@ fun VideoPlayerScreen(route: VideoPlayer) {
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { player.pause() }
 
     val view = LocalView.current
-    DisposableEffect(view) {
-        view.keepScreenOn = true
+    // The screen stays on only while the video plays or loads.
+    val keepOn = (ui.isPlaying || ui.buffering) && loadError == null
+    DisposableEffect(view, keepOn) {
+        view.keepScreenOn = keepOn
         onDispose { view.keepScreenOn = false }
     }
     val activity = LocalActivity.current

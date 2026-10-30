@@ -36,7 +36,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 | MEGAGLASS-AND-OPT-01 | Hide the transfer pill while a selection toolbar shows | ui-ux | S | low | applied |
 | MEGAGLASS-AND-OPT-02 | Do not reopen the keyboard on return to a search; make Back close the Contacts search | ui-ux | S | low | applied |
 | MEGAGLASS-AND-OPT-03 | Open the Open with, Send and link-file chooser only when the app is in front and unlocked | security (app lock), stability | S | low | rejected (owner, 2026-10-30) |
-| MEGAGLASS-AND-OPT-04 | Keep the screen on only while a video plays | battery | S | low | approved |
+| MEGAGLASS-AND-OPT-04 | Keep the screen on only while a video plays | battery | S | low | applied |
 | MEGAGLASS-AND-OPT-05 | Drop duplicate nodes from paged search results | stability | S | low | rejected (owner, 2026-10-30) |
 | MEGAGLASS-AND-OPT-06 | Leave the unused DataStore native library out of the APK | minimalism | S | low | approved |
 | MEGAGLASS-AND-OPT-07 | Keep the activity on font, bold-text, language, keyboard and wallpaper-colour changes | stability | S | low | approved |
@@ -89,7 +89,8 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: UI-only change in one composable. The 475a5c8 a11y timeout lines stay the same. No storage, schema, preference, key or dependency change.
 - **Verify**: Device or emulator: play a video, pause it, and wait longer than the screen timeout: the screen turns off. While the video plays, the screen stays on. While paused, the buffered bar does not move (accepted).
 - **Effort**: S. **Risk**: low. **Net lines**: about +1 (estimate).
-- **Status**: approved
+- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests). Added to the written change: `&& loadError == null`. When a stream or not-found error shows, the player gets no events, so `buffering` keeps its start value (true). Not checked: no run-time check on a device or emulator of the screen timeout after a pause, an end or an error, or of the screen-on state while the video plays.
+- **Status**: applied
 
 ### MEGAGLASS-AND-OPT-05: Drop duplicate nodes from paged search results
 - **What**: With a limit, NodeRepository.search reads results page by page by offset (keptPages: offset 0, 500, ...). Each page is a separate api.search. The app reads a second page when page 1 had 500 items and some were Rubbish bin matches (scope ALL, no parent). Node changes that arrive between two pages are applied before page 2. When a new node sorts before the offset, the last node of page 1 comes again as the first node of page 2. The typical case is a blank query with a type or date filter (MODIFIED_DESC) while camera uploads or a sync add photos. NodeCollection keys its lazy items by `it.handle`. Thus a duplicate throws IllegalArgumentException ('Key ... was already used') and the app crashes. SearchViewModel searches again 1 s after each burst of node changes, so the race repeats while uploads add nodes.
