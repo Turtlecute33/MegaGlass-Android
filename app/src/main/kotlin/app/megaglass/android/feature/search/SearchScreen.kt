@@ -183,7 +183,8 @@ fun SearchScreen(route: Search) {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val selecting = state.selection.isNotEmpty()
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    // Open the keyboard only for a new search. On return from a result, the results stay visible.
+    LaunchedEffect(Unit) { if (!state.active) focus.requestFocus() }
     BackHandler(enabled = selecting) { vm.clearSelection() }
 
     Scaffold(

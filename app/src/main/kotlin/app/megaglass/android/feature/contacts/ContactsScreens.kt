@@ -182,7 +182,8 @@ fun ContactsScreen() {
 @Composable
 internal fun SearchTopBar(query: String, onQuery: (String) -> Unit, onClose: () -> Unit) {
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    // Open the keyboard only for a new search. On return from a contact, the matches stay visible.
+    LaunchedEffect(Unit) { if (query.isEmpty()) focus.requestFocus() }
     TopAppBar(
         title = {
             TextField(
