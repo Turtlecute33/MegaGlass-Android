@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import app.megaglass.android.core.storage.AppSettings
 import app.megaglass.android.core.storage.ThemeMode
@@ -178,7 +179,8 @@ fun MegaGlassTheme(settings: AppSettings, content: @Composable () -> Unit) {
         activity?.edgeToEdge { dark }
         onDispose {}
     }
-    val colors = remember(dark, settings.dynamicColor, settings.pureBlack) {
+    // The activity keeps a wallpaper-colour change (assetsPaths): the configuration key reads the dynamic colours again.
+    val colors = remember(dark, settings.dynamicColor, settings.pureBlack, LocalConfiguration.current) {
         val base = when {
             settings.dynamicColor && dark -> dynamicDarkColorScheme(context)
             settings.dynamicColor -> dynamicLightColorScheme(context)

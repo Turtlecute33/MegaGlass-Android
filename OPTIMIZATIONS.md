@@ -39,7 +39,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 | MEGAGLASS-AND-OPT-04 | Keep the screen on only while a video plays | battery | S | low | applied |
 | MEGAGLASS-AND-OPT-05 | Drop duplicate nodes from paged search results | stability | S | low | rejected (owner, 2026-10-30) |
 | MEGAGLASS-AND-OPT-06 | Leave the unused DataStore native library out of the APK | minimalism | S | low | applied |
-| MEGAGLASS-AND-OPT-07 | Keep the activity on font, bold-text, language, keyboard and wallpaper-colour changes | stability | S | low | approved |
+| MEGAGLASS-AND-OPT-07 | Keep the activity on font, bold-text, language, keyboard and wallpaper-colour changes | stability | S | low | applied |
 | MEGAGLASS-AND-OPT-08 | Ask before Remove link on an album, as for files | ui-ux | S | low | approved |
 | MEGAGLASS-AND-OPT-09 | Remove the unused serialization plugin, an unused dependency and unused build lines | minimalism | S | low | approved |
 | MEGAGLASS-AND-OPT-10 | Delete dead properties and functions | minimalism | S | low | approved |
@@ -126,7 +126,8 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: Changes one manifest attribute (1813fb8) and adds one remember key in the theme (not a Report line). FLAG_SECURE, setRecentsScreenshotEnabled and the lock activityObserver stay and still apply, because the window and activity stay alive. No storage, schema, preference key or key-handling change. No dependency.
 - **Verify**: Not checked on a device. Emulator (API 36+): open the text editor, type, change the font size: the content and back stack stay. Change the wallpaper with dynamic colour on: the colours change. If not, remove assetsPaths.
 - **Effort**: S. **Risk**: low. **Net lines**: about +1 (estimate).
-- **Status**: approved
+- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests), and `./gradlew :app:assembleRelease` and `./gradlew :app:lintDebug` passed in separate commands. Release APK: `aapt2 dump xmltree` and `apkanalyzer manifest print` show MainActivity configChanges 0xd0003ff4 (the 7 earlier flags plus fontScale, fontWeightAdjustment, locale, layoutDirection, keyboard, navigation and assetsPaths). Not checked: no run-time check on a device or emulator (the text editor and the back stack stay after a font size change; the dynamic colours follow a wallpaper change, so assetsPaths can stay).
+- **Status**: applied
 
 ### MEGAGLASS-AND-OPT-08: Ask before Remove link on an album, as for files
 - **What**: In an album, overflow > Remove link disables the public album link immediately. There is no confirmation and no 'Link removed' message. Remove link on files and folders (item sheet, toolbar overflow, Node info) asks first (MEGAGLASS-UX-012), because the link stops working for all persons who have it.
