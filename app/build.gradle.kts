@@ -61,6 +61,11 @@ android {
         buildConfig = true
     }
 
+    androidResources {
+        // The UI is English only. Do not ship the library translations, so that all text is in English.
+        localeFilters += listOf("en")
+    }
+
     packaging {
         // Keep libmega.so uncompressed and page-aligned so that it maps directly from the APK.
         jniLibs { useLegacyPackaging = false }
