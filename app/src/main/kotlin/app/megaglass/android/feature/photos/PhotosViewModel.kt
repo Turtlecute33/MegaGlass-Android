@@ -7,6 +7,7 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.megaglass.android.MegaGlassApp
+import app.megaglass.android.R
 import app.megaglass.android.core.util.FileType
 import app.megaglass.android.core.util.whileObserved
 import kotlinx.coroutines.Dispatchers
@@ -248,5 +249,8 @@ class AlbumViewModel(private val id: Long, private val isSystem: Boolean, privat
 
     fun link(onLink: (String) -> Unit) = run { onLink(PhotosRepository.albumLink(id)) }
 
-    fun removeLink() = run { PhotosRepository.removeAlbumLink(id) }
+    fun removeLink() = run {
+        PhotosRepository.removeAlbumLink(id)
+        graph.messenger.show(graph.context.getString(R.string.link_removed))
+    }
 }

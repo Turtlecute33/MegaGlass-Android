@@ -40,7 +40,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 | MEGAGLASS-AND-OPT-05 | Drop duplicate nodes from paged search results | stability | S | low | rejected (owner, 2026-10-30) |
 | MEGAGLASS-AND-OPT-06 | Leave the unused DataStore native library out of the APK | minimalism | S | low | applied |
 | MEGAGLASS-AND-OPT-07 | Keep the activity on font, bold-text, language, keyboard and wallpaper-colour changes | stability | S | low | applied |
-| MEGAGLASS-AND-OPT-08 | Ask before Remove link on an album, as for files | ui-ux | S | low | approved |
+| MEGAGLASS-AND-OPT-08 | Ask before Remove link on an album, as for files | ui-ux | S | low | applied |
 | MEGAGLASS-AND-OPT-09 | Remove the unused serialization plugin, an unused dependency and unused build lines | minimalism | S | low | approved |
 | MEGAGLASS-AND-OPT-10 | Delete dead properties and functions | minimalism | S | low | approved |
 
@@ -138,7 +138,8 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: Adds a guard. It applies the UX-012 rule to one more place and does not change ccaa166 code or the c2d551e run helper. No new strings. No storage, schema or key change.
 - **Verify**: Emulator with a test account (owner only): share an album, then overflow > Remove link. A dialog shows. Cancel keeps the link. Confirm removes it and shows 'Link removed'.
 - **Effort**: S. **Risk**: low. **Net lines**: about +12 (estimate).
-- **Status**: approved
+- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests). Not checked: no run-time check on a device or emulator (the dialog shows, Cancel keeps the link, Confirm removes it and shows 'Link removed'), because this needs a test account.
+- **Status**: applied
 
 ### MEGAGLASS-AND-OPT-09: Remove the unused serialization plugin, an unused dependency and unused build lines
 - **What**: The app never serializes routes. AppNavigator keeps the back stack in memory, and NavEntry uses contentKey = e.id (a Long). app/src uses no rememberNavBackStack, Json, serializer() or rememberSerializable. But Routes.kt has 50 @Serializable annotations, the Kotlin serialization compiler plugin is applied, and proguard-rules.pro:1-5 keeps Companion and serializer() of each route. Its comment says that the app saves navigation keys, which is not true. Also: compose-material3-adaptive-layout is declared, but no file imports it. The sdk module declares core-ktx but uses only exifinterface. composeCompiler.reportsDestination writes Compose stability reports on each compile, and nothing reads them. sdk/consumer-rules.pro:3 repeats what line 2 (`-keep class nz.mega.sdk.** { *; }`) already keeps.

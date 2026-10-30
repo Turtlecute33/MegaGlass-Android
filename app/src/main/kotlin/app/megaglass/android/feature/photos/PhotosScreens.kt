@@ -458,6 +458,7 @@ fun AlbumScreen(route: Album) {
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
+    var removingLink by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf(false) }
     var link by remember { mutableStateOf<String?>(null) }
     BackHandler(enabled = selecting) { vm.clearSelection() }
@@ -517,7 +518,7 @@ fun AlbumScreen(route: Album) {
                                             leadingIcon = { Ic(R.drawable.ic_link_off) },
                                             onClick = {
                                                 menu = false
-                                                vm.removeLink()
+                                                removingLink = true
                                             },
                                         )
                                     }
@@ -593,6 +594,18 @@ fun AlbumScreen(route: Album) {
             icon = R.drawable.ic_delete,
             onConfirm = { vm.delete() },
             onDismiss = { deleting = false },
+        )
+    }
+    // A removed link stops working for everyone who has it (MEGAGLASS-UX-012).
+    if (removingLink) {
+        ConfirmDialog(
+            title = stringResource(R.string.action_remove_link),
+            text = pluralStringResource(R.plurals.remove_link_text, 1),
+            confirmLabel = stringResource(R.string.action_remove_link),
+            destructive = true,
+            icon = R.drawable.ic_link_off,
+            onConfirm = { vm.removeLink() },
+            onDismiss = { removingLink = false },
         )
     }
     if (picking) {
