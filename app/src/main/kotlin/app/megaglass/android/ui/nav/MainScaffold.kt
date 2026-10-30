@@ -36,12 +36,14 @@ import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffo
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
@@ -107,6 +109,9 @@ fun MainScaffold(nav: AppNavigator) {
         merge(graph.mega.alerts, graph.mega.contactRequests).collect { badge = count() }
     }
 
+    // Selection toolbars on screen. The transfer pill hides while one shows, so that it does not take their taps.
+    val toolbars = remember { mutableIntStateOf(0) }
+
     val adaptive = currentWindowAdaptiveInfo()
     val suiteType = if (fullScreen) NavigationSuiteType.None
     else NavigationSuiteScaffoldDefaults.navigationSuiteType(adaptive)
@@ -142,7 +147,7 @@ fun MainScaffold(nav: AppNavigator) {
                 entryProvider = { e ->
                     NavEntry(e, contentKey = e.id, metadata = mapOf(TAB_METADATA to e.tab.name)) {
                         Box(propagateMinConstraints = true) {
-                            RouteContent(it.route)
+                            CompositionLocalProvider(LocalSelectionToolbars provides toolbars) { RouteContent(it.route) }
                             // A screen that is leaving (or shown behind a Back gesture) takes no taps,
                             // so a second tap on Back or on an item does not navigate again.
                             if (nav.backStack.lastOrNull()?.id != it.id) Spacer(Modifier.matchParentSize().pointerInput(Unit) {})
@@ -152,7 +157,7 @@ fun MainScaffold(nav: AppNavigator) {
             )
             // Also in the text editor: a save waits for paused uploads, which Transfers resumes.
             TransferPill(
-                visible = (!fullScreen || route is TextEditor) && route != Transfers,
+                visible = (!fullScreen || route is TextEditor) && route != Transfers && toolbars.intValue == 0,
                 onClick = { nav.navigate(Transfers) },
                 // Full-screen routes draw behind the system navigation bar.
                 modifier = Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(16.dp),
@@ -169,6 +174,18 @@ private fun forward(): ContentTransform =
 private fun backward(): ContentTransform =
     (slideInHorizontally(tween(320)) { -it / 12 } + fadeIn(tween(220))) togetherWith
         (slideOutHorizontally(tween(320)) { it / 6 } + fadeOut(tween(160)) + scaleOut(tween(320), targetScale = 0.96f))
+
+private val LocalSelectionToolbars = staticCompositionLocalOf { mutableIntStateOf(0) }
+
+/** Call in a selection toolbar: the transfer pill hides while the toolbar shows, so that the pill does not cover its buttons. */
+@Composable
+fun HideTransferPill() {
+    val toolbars = LocalSelectionToolbars.current
+    DisposableEffect(toolbars) {
+        toolbars.intValue++
+        onDispose { toolbars.intValue-- }
+    }
+}
 
 /** Small floating progress for running transfers; opens the Transfers screen. */
 @Composable

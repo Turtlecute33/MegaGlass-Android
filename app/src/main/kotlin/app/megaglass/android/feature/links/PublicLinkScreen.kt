@@ -95,6 +95,7 @@ import app.megaglass.android.ui.components.LoadingBox
 import app.megaglass.android.ui.components.NodeCollection
 import app.megaglass.android.ui.components.NoLearning
 import app.megaglass.android.ui.components.rememberStorageAccess
+import app.megaglass.android.ui.nav.HideTransferPill
 import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.nav.MediaSource
 import app.megaglass.android.ui.nav.PublicLink
@@ -244,6 +245,7 @@ fun PublicLinkScreen(route: PublicLink) {
                         enter = slideInVertically { it } + fadeIn(),
                         exit = slideOutVertically { it } + fadeOut(),
                     ) {
+                        HideTransferPill()
                         HorizontalFloatingToolbar(
                             expanded = true,
                             modifier = Modifier.navigationBarsPadding().padding(bottom = 16.dp),

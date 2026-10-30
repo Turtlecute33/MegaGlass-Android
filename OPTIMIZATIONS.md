@@ -33,7 +33,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 
 | ID | Finding | Area | Effort | Risk | Status |
 |---|---|---|---|---|---|
-| MEGAGLASS-AND-OPT-01 | Hide the transfer pill while a selection toolbar shows | ui-ux | S | low | approved |
+| MEGAGLASS-AND-OPT-01 | Hide the transfer pill while a selection toolbar shows | ui-ux | S | low | applied |
 | MEGAGLASS-AND-OPT-02 | Do not reopen the keyboard on return to a search; make Back close the Contacts search | ui-ux | S | low | approved |
 | MEGAGLASS-AND-OPT-03 | Open the Open with, Send and link-file chooser only when the app is in front and unlocked | security (app lock), stability | S | low | rejected (owner, 2026-10-30) |
 | MEGAGLASS-AND-OPT-04 | Keep the screen on only while a video plays | battery | S | low | approved |
@@ -53,7 +53,8 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: Compose UI only. DriveCommon.kt:131 (selectionActions call, b5d1d22, Report) does not change. No storage, schema, preference key, key handling or dependency change.
 - **Verify**: Before the change, confirm the overlap with one emulator screenshot (start a large download, then long-press a file in Drive). After the change: the pill hides while the toolbar shows and comes back when the selection ends. No unit test covers this.
 - **Effort**: S. **Risk**: low. **Net lines**: about +9 (estimate).
-- **Status**: approved
+- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests). Not checked: no screenshot before or after the change, and no run-time check of the pill and the toolbars on a device or emulator.
+- **Status**: applied
 
 ### MEGAGLASS-AND-OPT-02: Do not reopen the keyboard on return to a search; make Back close the Contacts search
 - **What**: Search: the user opens a result and goes back. Then the keyboard opens again over the results, each time. Contacts: the same occurs after ContactDetail. During a Contacts search, the system Back leaves the Contacts screen, but the app-bar arrow only closes the search. The Contacts clear (X) button has the TalkBack label 'Close', but it only clears the text (Search uses 'Clear').

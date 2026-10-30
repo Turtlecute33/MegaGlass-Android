@@ -39,6 +39,7 @@ import app.megaglass.android.core.mega.NodeItem
 import app.megaglass.android.core.storage.SortOrder
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.IconAction
+import app.megaglass.android.ui.nav.HideTransferPill
 import kotlinx.coroutines.launch
 import nz.mega.sdk.MegaShare
 
@@ -128,6 +129,7 @@ fun SelectionToolbar(
     modifier: Modifier = Modifier,
 ) {
     if (selected.isEmpty()) return
+    HideTransferPill()
     val (main, extra) = selectionActions(selected, context)
     var more by remember { mutableStateOf(false) }
     HorizontalFloatingToolbar(
