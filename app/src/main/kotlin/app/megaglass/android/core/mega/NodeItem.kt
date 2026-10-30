@@ -36,16 +36,12 @@ data class NodeItem(
     val duration: Int,
     val folders: Int = 0,
     val files: Int = 0,
-    val versions: Int = 0,
     /** For incoming shares: the access level (MegaShare.ACCESS_*). */
     val access: Int = MegaShare.ACCESS_OWNER,
     /** For incoming shares: the owner e-mail. */
     val owner: String? = null,
 ) {
-    val isImage get() = type == FileType.IMAGE
     val isVideo get() = type == FileType.VIDEO
-    val canWrite get() = access >= MegaShare.ACCESS_READWRITE
-    val canManage get() = access >= MegaShare.ACCESS_FULL
     val showsThumbnail get() = hasThumbnail && type.showsUploaderImage
 }
 

@@ -41,8 +41,6 @@ data class Contact(
     /** Avatar colour that MEGA assigns to the user, as ARGB. 0 when unknown. */
     val color: Int,
     val verified: Boolean,
-    /** Seconds since epoch when the contact was added. */
-    val since: Long,
     val avatarVersion: Int,
 )
 
@@ -115,7 +113,6 @@ class ContactDirectory private constructor() {
             alias = n.alias,
             color = parseColor(api.getUserAvatarColor(user)),
             verified = catching { api.areCredentialsVerified(user) }.getOrDefault(false),
-            since = user.timestamp,
             avatarVersion = avatarVersions[user.handle] ?: 0,
         )
     }

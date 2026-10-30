@@ -32,7 +32,6 @@ import nz.mega.sdk.MegaShare
 enum class DriveMode(@StringRes val title: Int) { CLOUD(R.string.cloud_drive), RUBBISH(R.string.rubbish_bin), BACKUPS(R.string.backups) }
 
 data class FolderState(
-    val handle: Long = ROOT,
     val title: String = "",
     val path: List<Crumb> = emptyList(),
     val items: List<NodeItem>? = null,
@@ -111,7 +110,6 @@ class FolderViewModel(private val mode: DriveMode, requested: Long) : ViewModel(
                 val isRoot = top != null && path.size == 1
                 _state.update { st ->
                     st.copy(
-                        handle = handle,
                         title = self?.name.orEmpty(),
                         path = path,
                         items = items,

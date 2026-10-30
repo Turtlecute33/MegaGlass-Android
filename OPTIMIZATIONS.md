@@ -42,7 +42,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 | MEGAGLASS-AND-OPT-07 | Keep the activity on font, bold-text, language, keyboard and wallpaper-colour changes | stability | S | low | applied |
 | MEGAGLASS-AND-OPT-08 | Ask before Remove link on an album, as for files | ui-ux | S | low | applied |
 | MEGAGLASS-AND-OPT-09 | Remove the unused serialization plugin, an unused dependency and unused build lines | minimalism | S | low | approved |
-| MEGAGLASS-AND-OPT-10 | Delete dead properties and functions | minimalism | S | low | approved |
+| MEGAGLASS-AND-OPT-10 | Delete dead properties and functions | minimalism | S | low | applied |
 
 ### MEGAGLASS-AND-OPT-01: Hide the transfer pill while a selection toolbar shows
 - **What**: While a user transfer runs, the floating transfer pill (bottom left) shows on top of the selection toolbar (bottom centre). The pill gets the taps on the left toolbar buttons (Download, then Get link or Move), and these taps open Transfers. This occurs in Drive, Search, Shared, Photos, Albums, Favourites and categories. In the folder-link toolbar (2 buttons), it occurs only when the pill also shows the speed text.
@@ -161,7 +161,8 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: git blame: all lines come from 1813fb8; Format.percent and FormatTest from caff632 (alpha audit, not a Report commit). The app never calls Settings.reset(), so its removal keeps the DataStore keys the same. No storage format, preference key or encryption change.
 - **Verify**: Check: `:app:testDebugUnitTest`, `:app:lintDebug` and `:app:assembleDebug` compile (a missed caller makes the build fail). Open Contacts on the emulator: the list loads as before.
 - **Effort**: S. **Risk**: low. **Net lines**: about -25 (estimate).
-- **Status**: approved
+- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (106 tests), then `./gradlew :app:lintDebug` passed. Not checked: no run-time check of the Contacts list on a device or emulator.
+- **Status**: applied
 
 ## Areas in good shape
 

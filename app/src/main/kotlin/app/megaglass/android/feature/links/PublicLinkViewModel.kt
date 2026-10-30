@@ -118,9 +118,6 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
     private var folderOwner: Long? = null
     private var albumOwner: Long? = null
 
-    /** The link with its key, for import. */
-    val resolvedUrl: String get() = link.url
-
     init {
         open()
         viewModelScope.launch {

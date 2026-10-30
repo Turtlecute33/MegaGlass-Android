@@ -23,7 +23,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -56,9 +55,8 @@ class FileOpener(
     private val lock: AppLock,
     private val scope: CoroutineScope,
 ) {
-    private val _preparing = MutableStateFlow<Set<Long>>(emptySet())
     /** Nodes that are downloading before they open. */
-    val preparing: StateFlow<Set<Long>> = _preparing
+    private val _preparing = MutableStateFlow<Set<Long>>(emptySet())
 
     private val shareBatch = mutableMapOf<String, MutableSet<String>>()
 

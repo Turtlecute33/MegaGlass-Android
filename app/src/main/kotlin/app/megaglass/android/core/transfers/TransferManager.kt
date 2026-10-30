@@ -92,7 +92,6 @@ data class TransferItem(
 ) {
     val progress: Float get() = if (total > 0) (transferred.toFloat() / total).coerceIn(0f, 1f) else 0f
     val purpose: String get() = Purpose.of(appData)
-    val isFinished get() = status == TransferStatus.COMPLETED || status == TransferStatus.FAILED || status == TransferStatus.CANCELLED
 }
 
 @Immutable

@@ -41,9 +41,7 @@ data class StorageInfo(
     val versions: Long,
     val transferUsed: Long,
     val transferMax: Long,
-) {
-    val fraction: Float get() = if (max > 0) used.toFloat() / max else 0f
-}
+)
 
 @Immutable
 data class AccountInfo(

@@ -165,8 +165,4 @@ class Settings(context: Context, scope: CoroutineScope) {
     /** Changes the settings and returns the new values. */
     suspend fun update(transform: (AppSettings) -> AppSettings): AppSettings =
         store.edit { prefs -> prefs.write(transform(prefs.toSettings())) }.toSettings()
-
-    suspend fun reset() {
-        store.edit { it.clear() }
-    }
 }

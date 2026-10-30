@@ -58,6 +58,4 @@ object Format {
             else -> "${s / 3600} h ${(s % 3600) / 60} min"
         }
     }
-
-    fun percent(part: Long, total: Long): Int = if (total <= 0) 0 else (part.toDouble() / total * 100).toInt().coerceIn(0, 100)
 }

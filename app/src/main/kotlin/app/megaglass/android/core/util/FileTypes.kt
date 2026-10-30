@@ -5,8 +5,6 @@ import android.webkit.MimeTypeMap
 enum class FileType {
     FOLDER, IMAGE, VIDEO, AUDIO, PDF, DOCUMENT, SPREADSHEET, PRESENTATION, ARCHIVE, CODE, TEXT, APK, OTHER;
 
-    val isMedia get() = this == IMAGE || this == VIDEO
-
     companion object {
         private val byExtension: Map<String, FileType> = buildMap {
             fun put(type: FileType, vararg ext: String) = ext.forEach { put(it, type) }
