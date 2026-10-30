@@ -1,11 +1,11 @@
 # Optimizations
 
 Review of MegaGlass for Android on 2026-10-30, at commit 82e41e5 on branch main.
-Status: review only. No change is applied yet. The owner selects the items to apply.
+Status: the owner selected the items. 7 items are applied on branch optimize (see Results).
 
 Rules for this list: the security-review changes stay as they are. The security review is the audit of 2026-10-27. Its changes are the commits with a 'Report: <ID>' line (run: `git log --grep='Report:' --format='%h %s'`). /Users/user/Documents/Github/android/NEXT-STEPS.md has the status of each item (sections 5 and 6, and the appendix section for this app). No change to storage formats, database schemas, preference keys or encryption. Each applied item is one commit, so that you can revert it alone.
 
-Effort: S = under 1 hour, M = up to half a day, L = more. Status: proposed, approved, applied (<commit>), rejected. applied = done; git log --grep=<ID> shows the commit.
+Effort: S = under 1 hour, M = up to half a day, L = more. Status: proposed, approved, applied (<commit>), not applied: <reason>, rejected. applied = done; git log --grep=<ID> shows the commit.
 
 ## Summary
 
@@ -41,7 +41,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 | MEGAGLASS-AND-OPT-06 | Leave the unused DataStore native library out of the APK | minimalism | S | low | applied |
 | MEGAGLASS-AND-OPT-07 | Keep the activity on font, bold-text, language, keyboard and wallpaper-colour changes | stability | S | low | applied |
 | MEGAGLASS-AND-OPT-08 | Ask before Remove link on an album, as for files | ui-ux | S | low | applied |
-| MEGAGLASS-AND-OPT-09 | Remove the unused serialization plugin, an unused dependency and unused build lines | minimalism | S | low | approved |
+| MEGAGLASS-AND-OPT-09 | Remove the unused serialization plugin, an unused dependency and unused build lines | minimalism | S | low | not applied: the verification-metadata step was blocked (see Results) |
 | MEGAGLASS-AND-OPT-10 | Delete dead properties and functions | minimalism | S | low | applied |
 
 ### MEGAGLASS-AND-OPT-01: Hide the transfer pill while a selection toolbar shows
@@ -150,7 +150,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: git blame: all deleted lines come from 1813fb8, 774e497 or caff632, no 'Report:' commit. The SEC-010 version line (51f639f) and the json dependency line stay. 00fb064 (SEC-012) changed only the preBuild check in sdk/build.gradle.kts. The kept sdk rule still keeps all members, native methods included, so JNI and SWIG directors work as before. The app does not persist the navigation state, so no stored data changes.
 - **Verify**: Merged from two lens findings (serialization plugin; unused dependencies and build settings). Both remove unused build config and need the same verification-metadata regeneration. Check: `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`, then `:app:assembleRelease` in a separate command. `./gradlew :app:dependencies` shows kotlinx-serialization-core 1.12.0. Do a cold-start smoke test and go through each tab on the emulator. The Compose reports can be a manual check tool: the owner must confirm.
 - **Effort**: S. **Risk**: low. **Net lines**: about -18 (estimate).
-- **Status**: approved
+- **Status**: not applied: the tool classifier blocked the step that makes gradle/verification-metadata.xml again (owner rule). The owner selects a route (see Results).
 
 ### MEGAGLASS-AND-OPT-10: Delete dead properties and functions
 - **What**: R8 usage.txt and grep agree that the app never uses these: Settings.reset(); Format.percent() (only FormatTest calls it); NodeItem.versions, isImage, canWrite and canManage; TransferItem.isFinished; FileType.isMedia; the public FileOpener.preparing flow; PublicLinkViewModel.resolvedUrl; StorageInfo.fraction; Contact.since (a JNI MegaUser.getTimestamp read per contact that nothing shows); FolderState.handle (set, never read).
@@ -185,3 +185,30 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 
 - MEGAGLASS-AND-OPT-06, commit 1 (`androidResources { localeFilters += listOf("en") }`, about 518 KB): removed. It reverses a decision of eb730fa (Report: MEGAGLASS-PERF-006). That commit keeps the string locales on purpose, so that library text and TalkBack labels keep the device language. Only the DataStore .so exclude stays in MEGAGLASS-AND-OPT-06.
   - Owner decision (2026-10-30): apply it again, as commit 1 of MEGAGLASS-AND-OPT-06 (see that item).
+
+## Results
+
+Branch optimize, 2026-10-30, at commit 461d02f. This pass did not use adb, an emulator or a device.
+
+- **Applied**: MEGAGLASS-AND-OPT-01 (aef599d), MEGAGLASS-AND-OPT-02 (6168cc2, 1f1ee81), MEGAGLASS-AND-OPT-04 (02dd0e0), MEGAGLASS-AND-OPT-06 (0a517dd, c6dfa4d), MEGAGLASS-AND-OPT-07 (3db8ca4), MEGAGLASS-AND-OPT-08 (d1b2568), MEGAGLASS-AND-OPT-10 (461d02f).
+- **Size**: release APK before: 32,750,754 bytes (0.2.5 / 10, built from 82e41e5). After: 32,211,804 bytes (0.2.5 / 10, built from 461d02f). The APK is 538,950 bytes smaller (1.6 %). Most of it is the library translations (resources.arsc: 619,140 to 96,660 bytes). The DataStore .so was about 15 KB (estimate). The README now gives about 32 MB (estimate).
+- **Checks**: each command ran alone, with JAVA_HOME=/opt/homebrew/opt/openjdk@21.
+  - `./gradlew :app:testDebugUnitTest`: pass. 106 tests, 0 failures (also with `--rerun`).
+  - `./gradlew :app:lintDebug`: pass. 0 errors, 27 warnings. All warnings are on lines from before this branch.
+  - `./gradlew :app:assembleDebug`: pass.
+  - `./gradlew :app:assembleRelease`: pass, on a clean tree (checkReleaseTree). The 3 Kotlin warnings (deprecated rememberModalBottomSheetState) are on lines of 1813fb8. `unzip -l`: libmega.so is the only native library.
+- **Not applied**:
+  - MEGAGLASS-AND-OPT-09 (approved): the owner rule says to make gradle/verification-metadata.xml again after each commit, and the tool classifier blocked this step. Routes for the owner:
+    - (a) Allow the step. Keep only the configuration block of the file, use one new empty GRADLE_USER_HOME, and run as separate commands: `--write-verification-metadata sha256 :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`, then `:app:assembleDebugAndroidTest`, then `:app:assembleRelease` after the commit. Accept the result only if the diff removes nothing but the expected components.
+    - (b) Keep the file and delete only the entries of the removed components. Commit 1: kotlin-serialization and kotlin-serialization-compiler-plugin-embeddable 2.4.21, and the org.jetbrains.kotlin.plugin.serialization marker. Commit 2: adaptive-layout and adaptive-layout-android 1.3.0. Then prove each commit with strict verification from an empty GRADLE_USER_HOME.
+    - Commit 1 also adds a comment above `implementation(libs.kotlinx.serialization.json)`: it holds kotlinx-serialization-core at the MEGAGLASS-SEC-010 version. Without it, the next unused-dependency scan can remove the line.
+  - MEGAGLASS-AND-OPT-03 and MEGAGLASS-AND-OPT-05: rejected (owner, 2026-10-30).
+  - MEGAGLASS-SHARED-1: rejected (owner, 2026-10-30) for this version.
+- **Owner checks by hand** (device; this app has no Windows check):
+  - MEGAGLASS-AND-OPT-01: start a large download, then select files in Drive and in a folder link. The pill hides while the toolbar shows, and it comes back when the selection ends.
+  - MEGAGLASS-AND-OPT-02: search, open a result, go back: no keyboard. Open Search again: the keyboard opens. Do the same in Contacts with ContactDetail. In a Contacts search, system Back closes the search and the screen stays. TalkBack reads 'Clear' on the X.
+  - MEGAGLASS-AND-OPT-04: play a video, pause it, and wait longer than the screen timeout: the screen turns off. Do the same at the end of a video and after a stream error. While the video plays, the screen stays on.
+  - MEGAGLASS-AND-OPT-06: library text and TalkBack labels are in English. Change a setting and restart the app: the setting stays. Also review the two commits (0a517dd, c6dfa4d): the automatic review did not accept this item, and this record does not have its reason.
+  - MEGAGLASS-AND-OPT-07 (API 36+): open the text editor, type, and change the font size: the text and the back stack stay. With dynamic colour on, change the wallpaper: the colours change. If not, remove assetsPaths.
+  - MEGAGLASS-AND-OPT-08 (test account): share an album, then overflow > Remove link. A dialog shows. Cancel keeps the link. Confirm removes it and shows 'Link removed'.
+  - MEGAGLASS-AND-OPT-10: open Contacts. The list loads as before.

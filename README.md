@@ -108,7 +108,7 @@ use them again. `build-sdk.sh` resets Vendor/mega-sdk to the pinned commit and a
 `patches/` again, so it removes all other changes there: put SDK changes in a patch. It stops if
 Vendor/vcpkg has local changes.
 
-The release APK is about 33 MB (estimate); libmega.so is about 25 MB of it.
+The release APK is about 32 MB (estimate); libmega.so is about 25 MB of it.
 
 A release build stops if the git tree has changes that are not committed, because the APK
 records the commit that it was built from. Commit (and tag) the version change first.
