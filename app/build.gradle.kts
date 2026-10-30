@@ -93,6 +93,8 @@ androidComponents {
         // androidx.graphics.path loads its native code only below Android 14; from Android 14 the platform's
         // PathIterator does the work, and minSdk is 35.
         variant.packaging.jniLibs.excludes.add("lib/*/libandroidx.graphics.path.so")
+        // Only MultiProcessDataStoreFactory loads this library. The app uses single-process DataStore.
+        variant.packaging.jniLibs.excludes.add("lib/*/libdatastore_shared_counter.so")
         // Without a release key, the release APK stays unsigned. Local values only in the lambda, so that
         // the configuration cache can store it without the build script.
         signingProps?.let { props ->

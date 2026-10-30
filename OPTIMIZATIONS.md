@@ -38,7 +38,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 | MEGAGLASS-AND-OPT-03 | Open the Open with, Send and link-file chooser only when the app is in front and unlocked | security (app lock), stability | S | low | rejected (owner, 2026-10-30) |
 | MEGAGLASS-AND-OPT-04 | Keep the screen on only while a video plays | battery | S | low | applied |
 | MEGAGLASS-AND-OPT-05 | Drop duplicate nodes from paged search results | stability | S | low | rejected (owner, 2026-10-30) |
-| MEGAGLASS-AND-OPT-06 | Leave the unused DataStore native library out of the APK | minimalism | S | low | approved |
+| MEGAGLASS-AND-OPT-06 | Leave the unused DataStore native library out of the APK | minimalism | S | low | applied |
 | MEGAGLASS-AND-OPT-07 | Keep the activity on font, bold-text, language, keyboard and wallpaper-colour changes | stability | S | low | approved |
 | MEGAGLASS-AND-OPT-08 | Ask before Remove link on an album, as for files | ui-ux | S | low | approved |
 | MEGAGLASS-AND-OPT-09 | Remove the unused serialization plugin, an unused dependency and unused build lines | minimalism | S | low | approved |
@@ -114,7 +114,8 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Verify**: After the build: unzip -l shows no libdatastore_shared_counter.so. Change a setting and restart: the setting stays. After a DataStore update, check again that R8 still removes NativeSharedCounter.
 - **Effort**: S. **Risk**: low. **Net lines**: about +2 (estimate).
 - **Owner decision**: English-only library strings in all apps. This reverses the eb730fa (MEGAGLASS-PERF-006) decision ON PURPOSE. Make two commits: first the localeFilters part from the section 'Removed after the constraint check' (the commit body says that the owner reversed PERF-006 for one rule in all apps), then the DataStore .so exclude.
-- **Status**: approved
+- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests) after each commit, and `./gradlew :app:assembleRelease` passed in a separate command. Release APK: `unzip -l` shows no libdatastore_shared_counter.so, `apkanalyzer resources configs --type string` shows only `default`, resources.arsc is 96,660 bytes (before: 619,140), usage.txt still lists NativeSharedCounter as removed, and the APK is about 539 KB smaller (estimate: 32,750,754 to 32,211,800 bytes; the earlier APK is from 82e41e5). Not checked: no run-time check on a device (library text and TalkBack labels in English, a setting that stays after a restart).
+- **Status**: applied
 
 ### MEGAGLASS-AND-OPT-07: Keep the activity on font, bold-text, language, keyboard and wallpaper-colour changes
 - **What**: MainActivity handles only orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|uiMode in place. Other configuration changes recreate it: font size, bold text, language, a hardware keyboard on Android 15-16, and a wallpaper colour change with dynamic colour (the default) on Android 16+. ReadyContent only `remember`s the navigator (it is not a ViewModel as in the owner template), and NavigationViewModels is closed in onDispose. A recreation resets the back stack to the start tab and clears each entry ViewModel. Effects: TextEditorModel drops unsaved edits with no discard dialog, PublicLinkViewModel.onCleared logs out of the open folder link, an open video closes, and a pending IncomingAction (a share that waits for the unlock) is lost.
