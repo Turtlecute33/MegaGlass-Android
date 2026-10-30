@@ -1,7 +1,7 @@
 # Optimizations
 
 Review of MegaGlass for Android on 2026-10-30, at commit 82e41e5 on branch main.
-Status: the owner selected the items. 7 items are applied on branch optimize (see Results).
+Status: the owner selected the items. All approved items are applied on branch optimize (see Results).
 
 Rules for this list: the security-review changes stay as they are. The security review is the audit of 2026-10-27. Its changes are the commits with a 'Report: <ID>' line (run: `git log --grep='Report:' --format='%h %s'`). /Users/user/Documents/Github/android/NEXT-STEPS.md has the status of each item (sections 5 and 6, and the appendix section for this app). No change to storage formats, database schemas, preference keys or encryption. Each applied item is one commit, so that you can revert it alone.
 
@@ -41,7 +41,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 | MEGAGLASS-AND-OPT-06 | Leave the unused DataStore native library out of the APK | minimalism | S | low | applied |
 | MEGAGLASS-AND-OPT-07 | Keep the activity on font, bold-text, language, keyboard and wallpaper-colour changes | stability | S | low | applied |
 | MEGAGLASS-AND-OPT-08 | Ask before Remove link on an album, as for files | ui-ux | S | low | applied |
-| MEGAGLASS-AND-OPT-09 | Remove the unused serialization plugin, an unused dependency and unused build lines | minimalism | S | low | not applied: the verification-metadata step was blocked (see Results) |
+| MEGAGLASS-AND-OPT-09 | Remove the unused serialization plugin, an unused dependency and unused build lines | minimalism | S | low | applied |
 | MEGAGLASS-AND-OPT-10 | Delete dead properties and functions | minimalism | S | low | applied |
 
 ### MEGAGLASS-AND-OPT-01: Hide the transfer pill while a selection toolbar shows
@@ -150,7 +150,8 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: git blame: all deleted lines come from 1813fb8, 774e497 or caff632, no 'Report:' commit. The SEC-010 version line (51f639f) and the json dependency line stay. 00fb064 (SEC-012) changed only the preBuild check in sdk/build.gradle.kts. The kept sdk rule still keeps all members, native methods included, so JNI and SWIG directors work as before. The app does not persist the navigation state, so no stored data changes.
 - **Verify**: Merged from two lens findings (serialization plugin; unused dependencies and build settings). Both remove unused build config and need the same verification-metadata regeneration. Check: `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`, then `:app:assembleRelease` in a separate command. `./gradlew :app:dependencies` shows kotlinx-serialization-core 1.12.0. Do a cold-start smoke test and go through each tab on the emulator. The Compose reports can be a manual check tool: the owner must confirm.
 - **Effort**: S. **Risk**: low. **Net lines**: about -18 (estimate).
-- **Status**: not applied: the tool classifier blocked the step that makes gradle/verification-metadata.xml again (owner rule). The owner selects a route (see Results).
+- **Verified**: Applied by hand after the agent was blocked, with route (b): only the entries of the removed components left gradle/verification-metadata.xml (3 plugin entries in commit 1, adaptive-layout and adaptive-layout-android in commit 2); a missing entry fails the build. `./gradlew :app:dependencies` and `buildEnvironment`: only those components leave the graph; kotlinx-serialization-core stays 1.12.0. `:app:testDebugUnitTest` (106 tests), `:app:assembleDebug`, `:app:lintDebug`, `:app:assembleDebugAndroidTest` and `:app:assembleRelease` pass. The release APK is 16,384 B smaller after commit 1 and has no kotlinx.serialization package. One part is not applied: the sdk keeps core-ktx, because without it the sdk resolves androidx.annotation-jvm 1.8.1, and that needs a new trusted checksum in the verification metadata. A comment in sdk/build.gradle.kts gives the reason.
+- **Status**: applied
 
 ### MEGAGLASS-AND-OPT-10: Delete dead properties and functions
 - **What**: R8 usage.txt and grep agree that the app never uses these: Settings.reset(); Format.percent() (only FormatTest calls it); NodeItem.versions, isImage, canWrite and canManage; TransferItem.isFinished; FileType.isMedia; the public FileOpener.preparing flow; PublicLinkViewModel.resolvedUrl; StorageInfo.fraction; Contact.since (a JNI MegaUser.getTimestamp read per contact that nothing shows); FolderState.handle (set, never read).
@@ -176,7 +177,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - Release build: R8 full mode, shrinkResources, Log.v/d/i stripped, baseline profile, arm64-v8a only, page-aligned libmega.so. The broad keep nz.mega.sdk.** is necessary for SWIG and JNI. The other broad keep (app/proguard-rules.pro:1-5) is not necessary (MEGAGLASS-AND-OPT-09).
 - App resources are clean: the app uses all 767 strings and plurals, 160 drawables and all colours (231e030).
 - No over-abstraction: no DI framework, no factories. A scan of 646 non-override functions found none without a caller (except the dead members in MEGAGLASS-AND-OPT-10).
-- The app uses all runtime dependencies, except the two that MEGAGLASS-AND-OPT-09 removes (compose-material3-adaptive-layout and the sdk core-ktx). WorkManager stays (camera uploads need a dataSync foreground run of up to 5 h).
+- The app uses all runtime dependencies, except compose-material3-adaptive-layout, which MEGAGLASS-AND-OPT-09 removes. The sdk core-ktx stays on purpose (see MEGAGLASS-AND-OPT-09). WorkManager stays (camera uploads need a dataSync foreground run of up to 5 h).
 - Shared empty, loading and error states with Retry (UX-005). Destructive actions ask first or give Undo. Back clears the selection in the main lists. Errors map to user text in one place (UX-008).
 - The release artifact app-release.apk is 0.2.5 / versionCode 10, the same as build.gradle.kts, and was built after HEAD 82e41e5. Thus the artifact measurements apply to HEAD.
 - Not proposed again: MEGAGLASS-PERF-003 (skipped, measured), process death opens on Home, the per-keystroke search reset (ALPHA_AUDIT A22), the removed Photos and Shared tabs.
@@ -198,10 +199,7 @@ Branch optimize, 2026-10-30, at commit 461d02f. This pass did not use adb, an em
   - `./gradlew :app:assembleDebug`: pass.
   - `./gradlew :app:assembleRelease`: pass, on a clean tree (checkReleaseTree). The 3 Kotlin warnings (deprecated rememberModalBottomSheetState) are on lines of 1813fb8. `unzip -l`: libmega.so is the only native library.
 - **Not applied**:
-  - MEGAGLASS-AND-OPT-09 (approved): the owner rule says to make gradle/verification-metadata.xml again after each commit, and the tool classifier blocked this step. Routes for the owner:
-    - (a) Allow the step. Keep only the configuration block of the file, use one new empty GRADLE_USER_HOME, and run as separate commands: `--write-verification-metadata sha256 :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`, then `:app:assembleDebugAndroidTest`, then `:app:assembleRelease` after the commit. Accept the result only if the diff removes nothing but the expected components.
-    - (b) Keep the file and delete only the entries of the removed components. Commit 1: kotlin-serialization and kotlin-serialization-compiler-plugin-embeddable 2.4.21, and the org.jetbrains.kotlin.plugin.serialization marker. Commit 2: adaptive-layout and adaptive-layout-android 1.3.0. Then prove each commit with strict verification from an empty GRADLE_USER_HOME.
-    - Commit 1 also adds a comment above `implementation(libs.kotlinx.serialization.json)`: it holds kotlinx-serialization-core at the MEGAGLASS-SEC-010 version. Without it, the next unused-dependency scan can remove the line.
+  - none of the approved items. MEGAGLASS-AND-OPT-09 was blocked for the agent and then applied by hand (route b), without the sdk core-ktx removal.
   - MEGAGLASS-AND-OPT-03 and MEGAGLASS-AND-OPT-05: rejected (owner, 2026-10-30).
   - MEGAGLASS-SHARED-1: rejected (owner, 2026-10-30) for this version.
 - **Owner checks by hand** (device; this app has no Windows check):

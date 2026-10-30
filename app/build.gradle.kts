@@ -123,10 +123,6 @@ kotlin {
     }
 }
 
-composeCompiler {
-    reportsDestination = layout.buildDirectory.dir("compose_compiler")
-}
-
 // The APK records HEAD as its source revision, so a release build needs a clean tree. A git
 // error stops the build too, and untracked files count whatever the user's git settings are.
 val checkReleaseTree = tasks.register("checkReleaseTree") {
@@ -158,7 +154,6 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.material3.navigation.suite)
     implementation(libs.compose.material3.adaptive)
-    implementation(libs.compose.material3.adaptive.layout)
 
     implementation(libs.navigation3.runtime)
     implementation(libs.navigation3.ui)

@@ -32,6 +32,8 @@ androidComponents {
 kotlin { jvmToolchain(21) }
 
 dependencies {
+    // No sdk code uses it: it keeps androidx.annotation at the version of the app (and of the
+    // verification metadata). Without it, exifinterface asks for an older annotation-jvm.
     implementation(libs.core.ktx)
     implementation(libs.exifinterface)
 }
