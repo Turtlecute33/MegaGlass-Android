@@ -3,7 +3,7 @@
 Review of MegaGlass for Android on 2026-10-30, at commit 82e41e5 on branch main.
 Status: the owner selected the items. All approved items are applied on branch optimize (see Results).
 
-Rules for this list: the security-review changes stay as they are. The security review is the audit of 2026-10-27. Its changes are the commits with a 'Report: <ID>' line (run: `git log --grep='Report:' --format='%h %s'`). /Users/user/Documents/Github/android/NEXT-STEPS.md has the status of each item (sections 5 and 6, and the appendix section for this app). No change to storage formats, database schemas, preference keys or encryption. Each applied item is one commit, so that you can revert it alone.
+Rules for this list: the security-review changes stay as they are. The security review is the audit of 2026-10-27. Its changes are the commits with a 'Report: <ID>' line (run: `git log --grep='^Report:' --format='%h %s'`; the `^` leaves out commits that only name a Report ID in their text, such as 0a517dd). /Users/user/Documents/Github/android/NEXT-STEPS.md has the status of each item (sections 5 and 6, and the appendix section for this app). No change to storage formats, database schemas, preference keys or encryption. Each applied item is one commit, so that you can revert it alone.
 
 Effort: S = under 1 hour, M = up to half a day, L = more. Status: proposed, approved, applied (<commit>), not applied: <reason>, rejected. applied = done; git log --grep=<ID> shows the commit.
 
@@ -206,7 +206,7 @@ Branch optimize, 2026-10-30, at commit 461d02f. This pass did not use adb, an em
   - MEGAGLASS-AND-OPT-01: start a large download, then select files in Drive and in a folder link. The pill hides while the toolbar shows, and it comes back when the selection ends.
   - MEGAGLASS-AND-OPT-02: search, open a result, go back: no keyboard. Open Search again: the keyboard opens. Do the same in Contacts with ContactDetail. In a Contacts search, system Back closes the search and the screen stays. TalkBack reads 'Clear' on the X.
   - MEGAGLASS-AND-OPT-04: play a video, pause it, and wait longer than the screen timeout: the screen turns off. Do the same at the end of a video and after a stream error. While the video plays, the screen stays on.
-  - MEGAGLASS-AND-OPT-06: library text and TalkBack labels are in English. Change a setting and restart the app: the setting stays. Also review the two commits (0a517dd, c6dfa4d): the automatic review did not accept this item, and this record does not have its reason.
+  - MEGAGLASS-AND-OPT-06: library text and TalkBack labels are in English. Change a setting and restart the app: the setting stays. The automatic review found one problem: the body of 0a517dd names 'Report: MEGAGLASS-PERF-006' in a sentence, so an unanchored `git log --grep='Report:'` lists it. The owner chose the anchored grep above; the history stays as it is.
   - MEGAGLASS-AND-OPT-07 (API 36+): open the text editor, type, and change the font size: the text and the back stack stay. With dynamic colour on, change the wallpaper: the colours change. If not, remove assetsPaths.
   - MEGAGLASS-AND-OPT-08 (test account): share an album, then overflow > Remove link. A dialog shows. Cancel keeps the link. Confirm removes it and shows 'Link removed'.
   - MEGAGLASS-AND-OPT-10: open Contacts. The list loads as before.
