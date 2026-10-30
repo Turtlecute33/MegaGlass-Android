@@ -34,7 +34,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 | ID | Finding | Area | Effort | Risk | Status |
 |---|---|---|---|---|---|
 | MEGAGLASS-AND-OPT-01 | Hide the transfer pill while a selection toolbar shows | ui-ux | S | low | applied |
-| MEGAGLASS-AND-OPT-02 | Do not reopen the keyboard on return to a search; make Back close the Contacts search | ui-ux | S | low | approved |
+| MEGAGLASS-AND-OPT-02 | Do not reopen the keyboard on return to a search; make Back close the Contacts search | ui-ux | S | low | applied |
 | MEGAGLASS-AND-OPT-03 | Open the Open with, Send and link-file chooser only when the app is in front and unlocked | security (app lock), stability | S | low | rejected (owner, 2026-10-30) |
 | MEGAGLASS-AND-OPT-04 | Keep the screen on only while a video plays | battery | S | low | approved |
 | MEGAGLASS-AND-OPT-05 | Drop duplicate nodes from paged search results | stability | S | low | rejected (owner, 2026-10-30) |
@@ -65,7 +65,8 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: Compose focus and back handling only. SearchScreen.kt:162 (15957d8, Report) does not change. Uses an existing string. No storage, key or dependency change.
 - **Verify**: Emulator: search, open a result, go back: no keyboard. Open Search fresh: the keyboard opens. In Contacts, start a search and push system Back: the search closes and the screen stays. TalkBack reads 'Clear' on the X.
 - **Effort**: S. **Risk**: low. **Net lines**: about +2 (estimate).
-- **Status**: approved
+- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests) after each of the two commits. Not checked: no run-time check on a device or emulator of the keyboard on return to Search and Contacts, of system Back in the Contacts search, or of the TalkBack label on the X.
+- **Status**: applied
 
 ### MEGAGLASS-AND-OPT-03: Open the Open with, Send and link-file chooser only when the app is in front and unlocked
 - **What**: FileOpener.whenUnlocked waits only for lock.locked == false. AppLock sets the lock only in onStart (or lockNow), so the lock is false while the app is in the background. If the user leaves the app while an 'Open with' or 'Send' download runs, view() or send() calls startActivity(chooser) from the background when the download ends. Android blocks this with no exception, and on return the user finds nothing open. PublicLinkViewModel.openCached is worse: for Purpose.OPEN it calls graph.opener.view(target) directly, with no lock wait. A link-file download that ends while the lock screen shows opens the chooser above the lock. The chooser shows a preview of the file. The FileOpener KDoc says that 'the app chooser must not open over' the lock screen, so this path is a gap in an intended guard.

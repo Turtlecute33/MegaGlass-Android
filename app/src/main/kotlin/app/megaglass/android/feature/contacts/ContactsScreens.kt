@@ -1,5 +1,6 @@
 package app.megaglass.android.feature.contacts
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -79,6 +80,7 @@ fun ContactsScreen() {
     val listState = rememberLazyListState()
     val fabExpanded by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    BackHandler(enabled = searching) { searching = false; query = "" }
 
     val contacts = state.contacts
     val filtered = remember(contacts, query) {
@@ -202,7 +204,7 @@ internal fun SearchTopBar(query: String, onQuery: (String) -> Unit, onClose: () 
         },
         navigationIcon = { BackButton(onClose) },
         actions = {
-            if (query.isNotEmpty()) IconAction(R.drawable.ic_close, stringResource(R.string.close), { onQuery("") })
+            if (query.isNotEmpty()) IconAction(R.drawable.ic_close, stringResource(R.string.clear), { onQuery("") })
         },
     )
 }
