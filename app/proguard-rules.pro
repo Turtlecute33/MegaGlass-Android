@@ -1,9 +1,3 @@
-# kotlinx.serialization: navigation keys are saved with their serializers.
--keepclassmembers @kotlinx.serialization.Serializable class ** {
-    *** Companion;
-    kotlinx.serialization.KSerializer serializer(...);
-}
-
 # Release logs: no exception text or file paths (MEGAGLASS-PRIV-004). nz.mega.sdk.AndroidGfxProcessor
 # writes exceptions to System.out and System.err.
 -assumenosideeffects class java.lang.Throwable {

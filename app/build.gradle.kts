@@ -4,7 +4,6 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.kotlin.serialization)
 }
 
 // Release signing: keystore.properties (not in git) names the keystore and the Keychain items
@@ -147,6 +146,8 @@ dependencies {
     implementation(project(":sdk"))
 
     implementation(libs.kotlinx.coroutines.android)
+    // No app code uses it: it keeps kotlinx-serialization-core (from navigation3) at the
+    // MEGAGLASS-SEC-010 version.
     implementation(libs.kotlinx.serialization.json)
 
     implementation(platform(libs.compose.bom))
