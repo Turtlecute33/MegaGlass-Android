@@ -18,5 +18,8 @@ license: GPL-3.0-only
 tags: [cloud-storage, encryption, privacy]
 icon: ./docs/icon.png
 images:
+  - ./docs/screenshots/drive.png
+  - ./docs/screenshots/photos.jpg
+  - ./docs/screenshots/transfers.png
   - ./docs/banner.png
 metadata_sources: []
