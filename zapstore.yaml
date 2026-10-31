@@ -1,0 +1,22 @@
+# Zapstore listing. The Zapstore indexer reads this file and publishes each new GitHub release.
+repository: https://github.com/Turtlecute33/MegaGlass-Android
+summary: Unofficial MEGA cloud client. End-to-end encrypted, fast and private.
+description: |
+  MegaGlass is an unofficial client for [MEGA](https://mega.io) cloud storage. It uses the
+  official MEGA SDK for encryption and transfers, and Jetpack Compose with Material 3 Expressive
+  for the interface. Chat and calls are not included. No ads, no third-party trackers, no Google
+  Play Services.
+
+  - **Cloud drive**: browse, search, sort, label, move, copy and rename files and folders.
+  - **Fast transfers**: 8 parallel connections in each direction.
+  - **Photos**: timeline, albums and camera uploads.
+  - **Sync and offline**: two-way folder sync, and files that stay available without a network.
+  - **Sharing**: shared folders, public links and contacts.
+  - **Viewers**: images, video, audio and text, with a text editor.
+  - **App lock**: passcode lock and screenshot blocking.
+license: GPL-3.0-only
+tags: [cloud-storage, encryption, privacy]
+icon: ./docs/icon.png
+images:
+  - ./docs/banner.png
+metadata_sources: []
