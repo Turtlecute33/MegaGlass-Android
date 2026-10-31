@@ -53,7 +53,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: Compose UI only. DriveCommon.kt:131 (selectionActions call, b5d1d22, Report) does not change. No storage, schema, preference key, key handling or dependency change.
 - **Verify**: Before the change, confirm the overlap with one emulator screenshot (start a large download, then long-press a file in Drive). After the change: the pill hides while the toolbar shows and comes back when the selection ends. No unit test covers this.
 - **Effort**: S. **Risk**: low. **Net lines**: about +9 (estimate).
-- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests). Not checked: no screenshot before or after the change, and no run-time check of the pill and the toolbars on a device or emulator.
+- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests). Not checked: no screenshot before or after the change, and no run-time check of the pill and the toolbars on a device or emulator. Phone (2026-10-31, release 0.2.5): the owner checked the transfer pill and reported it as good.
 - **Status**: applied
 
 ### MEGAGLASS-AND-OPT-02: Do not reopen the keyboard on return to a search; make Back close the Contacts search
@@ -65,7 +65,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: Compose focus and back handling only. SearchScreen.kt:162 (15957d8, Report) does not change. Uses an existing string. No storage, key or dependency change.
 - **Verify**: Emulator: search, open a result, go back: no keyboard. Open Search fresh: the keyboard opens. In Contacts, start a search and push system Back: the search closes and the screen stays. TalkBack reads 'Clear' on the X.
 - **Effort**: S. **Risk**: low. **Net lines**: about +2 (estimate).
-- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests) after each of the two commits. Not checked: no run-time check on a device or emulator of the keyboard on return to Search and Contacts, of system Back in the Contacts search, or of the TalkBack label on the X.
+- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests) after each of the two commits. Not checked: no run-time check on a device or emulator of the keyboard on return to Search and Contacts, of system Back in the Contacts search, or of the TalkBack label on the X. Phone (2026-10-31, release 0.2.5): the owner checked the search keyboard and Back and reported them as good. The owner did not name the TalkBack label on the X.
 - **Status**: applied
 
 ### MEGAGLASS-AND-OPT-03: Open the Open with, Send and link-file chooser only when the app is in front and unlocked
@@ -89,7 +89,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: UI-only change in one composable. The 475a5c8 a11y timeout lines stay the same. No storage, schema, preference, key or dependency change.
 - **Verify**: Device or emulator: play a video, pause it, and wait longer than the screen timeout: the screen turns off. While the video plays, the screen stays on. While paused, the buffered bar does not move (accepted).
 - **Effort**: S. **Risk**: low. **Net lines**: about +1 (estimate).
-- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests). Added to the written change: `&& loadError == null`. When a stream or not-found error shows, the player gets no events, so `buffering` keeps its start value (true). Not checked: no run-time check on a device or emulator of the screen timeout after a pause, an end or an error, or of the screen-on state while the video plays.
+- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests). Added to the written change: `&& loadError == null`. When a stream or not-found error shows, the player gets no events, so `buffering` keeps its start value (true). Not checked: no run-time check on a device or emulator of the screen timeout after a pause, an end or an error, or of the screen-on state while the video plays. Phone (2026-10-31, release 0.2.5): the owner checked the video and the screen timeout and reported them as good.
 - **Status**: applied
 
 ### MEGAGLASS-AND-OPT-05: Drop duplicate nodes from paged search results
@@ -114,7 +114,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Verify**: After the build: unzip -l shows no libdatastore_shared_counter.so. Change a setting and restart: the setting stays. After a DataStore update, check again that R8 still removes NativeSharedCounter.
 - **Effort**: S. **Risk**: low. **Net lines**: about +2 (estimate).
 - **Owner decision**: English-only library strings in all apps. This reverses the eb730fa (MEGAGLASS-PERF-006) decision ON PURPOSE. Make two commits: first the localeFilters part from the section 'Removed after the constraint check' (the commit body says that the owner reversed PERF-006 for one rule in all apps), then the DataStore .so exclude.
-- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests) after each commit, and `./gradlew :app:assembleRelease` passed in a separate command. Release APK: `unzip -l` shows no libdatastore_shared_counter.so, `apkanalyzer resources configs --type string` shows only `default`, resources.arsc is 96,660 bytes (before: 619,140), usage.txt still lists NativeSharedCounter as removed, and the APK is about 539 KB smaller (estimate: 32,750,754 to 32,211,800 bytes; the earlier APK is from 82e41e5). Device (emulator, API 35, release APK): the APK has no libdatastore_shared_counter.so and no locale configurations. The app starts with no UnsatisfiedLinkError, and a dark theme setting stays after two cold starts. Not checked: library text and TalkBack labels in English (they need login and TalkBack).
+- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests) after each commit, and `./gradlew :app:assembleRelease` passed in a separate command. Release APK: `unzip -l` shows no libdatastore_shared_counter.so, `apkanalyzer resources configs --type string` shows only `default`, resources.arsc is 96,660 bytes (before: 619,140), usage.txt still lists NativeSharedCounter as removed, and the APK is about 539 KB smaller (estimate: 32,750,754 to 32,211,800 bytes; the earlier APK is from 82e41e5). Device (emulator, API 35, release APK): the APK has no libdatastore_shared_counter.so and no locale configurations. The app starts with no UnsatisfiedLinkError, and a dark theme setting stays after two cold starts. Not checked: library text and TalkBack labels in English (they need login and TalkBack). Phone (2026-10-31, release 0.2.5): the owner checked the English library labels and reported them as good.
 - **Status**: applied
 
 ### MEGAGLASS-AND-OPT-07: Keep the activity on font, bold-text, language, keyboard and wallpaper-colour changes
@@ -126,7 +126,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: Changes one manifest attribute (1813fb8) and adds one remember key in the theme (not a Report line). FLAG_SECURE, setRecentsScreenshotEnabled and the lock activityObserver stay and still apply, because the window and activity stay alive. No storage, schema, preference key or key-handling change. No dependency.
 - **Verify**: Not checked on a device. Emulator (API 36+): open the text editor, type, change the font size: the content and back stack stay. Change the wallpaper with dynamic colour on: the colours change. If not, remove assetsPaths.
 - **Effort**: S. **Risk**: low. **Net lines**: about +1 (estimate).
-- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests), and `./gradlew :app:assembleRelease` and `./gradlew :app:lintDebug` passed in separate commands. Release APK: `aapt2 dump xmltree` and `apkanalyzer manifest print` show MainActivity configChanges 0xd0003ff4 (the 7 earlier flags plus fontScale, fontWeightAdjustment, locale, layoutDirection, keyboard, navigation and assetsPaths). Device (emulator, API 35, Login step): font size, bold text, language, right-to-left layout and rotation keep the activity and the typed password. A palette change updates the colours in place, so assetsPaths can stay on API 35. Not checked: the text editor and the back stack (they need an account), a hardware keyboard, and a wallpaper change on API 36+.
+- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests), and `./gradlew :app:assembleRelease` and `./gradlew :app:lintDebug` passed in separate commands. Release APK: `aapt2 dump xmltree` and `apkanalyzer manifest print` show MainActivity configChanges 0xd0003ff4 (the 7 earlier flags plus fontScale, fontWeightAdjustment, locale, layoutDirection, keyboard, navigation and assetsPaths). Device (emulator, API 35, Login step): font size, bold text, language, right-to-left layout and rotation keep the activity and the typed password. A palette change updates the colours in place, so assetsPaths can stay on API 35. Not checked: the text editor and the back stack (they need an account), a hardware keyboard, and a wallpaper change on API 36+. Phone (2026-10-31, release 0.2.5): the owner checked the text editor with a font size change and reported it as good. The owner did not name the wallpaper change or the hardware keyboard.
 - **Status**: applied
 
 ### MEGAGLASS-AND-OPT-08: Ask before Remove link on an album, as for files
@@ -138,7 +138,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: Adds a guard. It applies the UX-012 rule to one more place and does not change ccaa166 code or the c2d551e run helper. No new strings. No storage, schema or key change.
 - **Verify**: Emulator with a test account (owner only): share an album, then overflow > Remove link. A dialog shows. Cancel keeps the link. Confirm removes it and shows 'Link removed'.
 - **Effort**: S. **Risk**: low. **Net lines**: about +12 (estimate).
-- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests). Not checked: no run-time check on a device or emulator (the dialog shows, Cancel keeps the link, Confirm removes it and shows 'Link removed'), because this needs a test account.
+- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (107 tests). Not checked: no run-time check on a device or emulator (the dialog shows, Cancel keeps the link, Confirm removes it and shows 'Link removed'), because this needs a test account. Phone (2026-10-31, release 0.2.5): the owner checked the album Remove link and reported it as good.
 - **Status**: applied
 
 ### MEGAGLASS-AND-OPT-09: Remove the unused serialization plugin, an unused dependency and unused build lines
@@ -150,7 +150,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: git blame: all deleted lines come from 1813fb8, 774e497 or caff632, no 'Report:' commit. The SEC-010 version line (51f639f) and the json dependency line stay. 00fb064 (SEC-012) changed only the preBuild check in sdk/build.gradle.kts. The kept sdk rule still keeps all members, native methods included, so JNI and SWIG directors work as before. The app does not persist the navigation state, so no stored data changes.
 - **Verify**: Merged from two lens findings (serialization plugin; unused dependencies and build settings). Both remove unused build config and need the same verification-metadata regeneration. Check: `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`, then `:app:assembleRelease` in a separate command. `./gradlew :app:dependencies` shows kotlinx-serialization-core 1.12.0. Do a cold-start smoke test and go through each tab on the emulator. The Compose reports can be a manual check tool: the owner must confirm.
 - **Effort**: S. **Risk**: low. **Net lines**: about -18 (estimate).
-- **Verified**: Applied by hand after the agent was blocked, with route (b): only the entries of the removed components left gradle/verification-metadata.xml (3 plugin entries in commit 1, adaptive-layout and adaptive-layout-android in commit 2); a missing entry fails the build. `./gradlew :app:dependencies` and `buildEnvironment`: only those components leave the graph; kotlinx-serialization-core stays 1.12.0. `:app:testDebugUnitTest` (106 tests), `:app:assembleDebug`, `:app:lintDebug`, `:app:assembleDebugAndroidTest` and `:app:assembleRelease` pass. The release APK is 16,384 B smaller after commit 1 and has no kotlinx.serialization package. One part is not applied: the sdk keeps core-ktx, because without it the sdk resolves androidx.annotation-jvm 1.8.1, and that needs a new trusted checksum in the verification metadata. A comment in sdk/build.gradle.kts gives the reason. Device (emulator, API 35): debug and release cold starts open the Auth screen with no crash. The debug DEX has no route serializers, and the release mapping has no kotlinx.serialization. Not checked: the walk through each tab (it needs an account).
+- **Verified**: Applied by hand after the agent was blocked, with route (b): only the entries of the removed components left gradle/verification-metadata.xml (3 plugin entries in commit 1, adaptive-layout and adaptive-layout-android in commit 2); a missing entry fails the build. `./gradlew :app:dependencies` and `buildEnvironment`: only those components leave the graph; kotlinx-serialization-core stays 1.12.0. `:app:testDebugUnitTest` (106 tests), `:app:assembleDebug`, `:app:lintDebug`, `:app:assembleDebugAndroidTest` and `:app:assembleRelease` pass. The release APK is 16,384 B smaller after commit 1 and has no kotlinx.serialization package. One part is not applied: the sdk keeps core-ktx, because without it the sdk resolves androidx.annotation-jvm 1.8.1, and that needs a new trusted checksum in the verification metadata. A comment in sdk/build.gradle.kts gives the reason. Device (emulator, API 35): debug and release cold starts open the Auth screen with no crash. The debug DEX has no route serializers, and the release mapping has no kotlinx.serialization. Not checked: the walk through each tab (it needs an account). Phone (2026-10-31, release 0.2.5): the owner went through the tabs and reported them as good.
 - **Status**: applied
 
 ### MEGAGLASS-AND-OPT-10: Delete dead properties and functions
@@ -162,7 +162,7 @@ How to fix MEGAGLASS-SHARED-1 in this repo: the three apps pin the same SDK comm
 - **Safety**: git blame: all lines come from 1813fb8; Format.percent and FormatTest from caff632 (alpha audit, not a Report commit). The app never calls Settings.reset(), so its removal keeps the DataStore keys the same. No storage format, preference key or encryption change.
 - **Verify**: Check: `:app:testDebugUnitTest`, `:app:lintDebug` and `:app:assembleDebug` compile (a missed caller makes the build fail). Open Contacts on the emulator: the list loads as before.
 - **Effort**: S. **Risk**: low. **Net lines**: about -25 (estimate).
-- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (106 tests), then `./gradlew :app:lintDebug` passed. Not checked: no run-time check of the Contacts list on a device or emulator.
+- **Verified**: `./gradlew :app:testDebugUnitTest :app:assembleDebug` passed (106 tests), then `./gradlew :app:lintDebug` passed. Not checked: no run-time check of the Contacts list on a device or emulator. Phone (2026-10-31, release 0.2.5): the owner opened Contacts and reported it as good.
 - **Status**: applied
 
 ## Areas in good shape
@@ -202,7 +202,7 @@ Branch optimize, 2026-10-30, at commit 461d02f. This pass did not use adb, an em
   - none of the approved items. MEGAGLASS-AND-OPT-09 was blocked for the agent and then applied by hand (route b), without the sdk core-ktx removal.
   - MEGAGLASS-AND-OPT-03 and MEGAGLASS-AND-OPT-05: rejected (owner, 2026-10-30).
   - MEGAGLASS-SHARED-1: rejected (owner, 2026-10-30) for this version.
-- **Owner checks by hand**: see 'Still for the owner' in Device checks below.
+- **Owner checks by hand**: done by the owner on 2026-10-31 (most steps). See Phone session below.
 
 ### Device checks (2026-10-30)
 
@@ -233,12 +233,17 @@ Method: a debug build of branch optimize (d75d967) ran on an Android emulator, A
 
 Crashes and ANRs: none (crash log empty, no ANR, no fatal exception, no UnsatisfiedLinkError).
 
-Still for the owner (device; this app has no Windows check):
-- MEGAGLASS-AND-OPT-01: start a large download, then select files in Drive and in a folder link. The pill hides while the toolbar shows, and it comes back when the selection ends.
-- MEGAGLASS-AND-OPT-02: search, open a result, go back: no keyboard. Open Search again: the keyboard opens. Do the same in Contacts with ContactDetail. In a Contacts search, system Back closes the search and the screen stays. TalkBack reads 'Clear' on the X.
-- MEGAGLASS-AND-OPT-04 (phone): play a video, pause it, and wait longer than the screen timeout: the screen turns off. Do the same at the end of a video and after a stream error. While the video plays, the screen stays on. The phone gives the real screen timeout and hardware decoding.
-- MEGAGLASS-AND-OPT-06: with TalkBack on and a non-English device language, library text and TalkBack labels are in English. The automatic review found one problem: the body of 0a517dd names 'Report: MEGAGLASS-PERF-006' in a sentence, so an unanchored `git log --grep='Report:'` lists it. The owner chose the anchored grep above; the history stays as it is.
-- MEGAGLASS-AND-OPT-07 (phone, Android 16): open the text editor, type, and change the font size: the text and the back stack stay. With dynamic colour on, change the wallpaper: the colours change. If not, remove assetsPaths. Attach a USB or Bluetooth keyboard: the screen stays.
-- MEGAGLASS-AND-OPT-08 (test account): share an album, then overflow > Remove link. A dialog shows. Cancel keeps the link. Confirm removes it and shows 'Link removed'.
-- MEGAGLASS-AND-OPT-09: go through each tab.
-- MEGAGLASS-AND-OPT-10: open Contacts. The list loads as before.
+Still for the owner (device; this app has no Windows check): done by the owner on 2026-10-31 (most steps). The owner did not name the skipped steps. These steps are not in the owner report, so they stay open:
+- MEGAGLASS-AND-OPT-02: TalkBack reads 'Clear' on the X.
+- MEGAGLASS-AND-OPT-07: with dynamic colour on, change the wallpaper: the colours change. If not, remove assetsPaths. Attach a USB or Bluetooth keyboard: the screen stays.
+
+The automatic review of MEGAGLASS-AND-OPT-06 found one problem: the body of 0a517dd names 'Report: MEGAGLASS-PERF-006' in a sentence, so an unanchored `git log --grep='Report:'` lists it. The owner chose the anchored grep; the history stays as it is.
+
+### Phone session (2026-10-31)
+
+Phone session on 2026-10-31 with the owner, on the owner Pixel 9 Pro XL (GrapheneOS, Android 17). Claude built the release APK of branch optimize. Claude checked that its signing certificate is the same as the certificate of the installed release. Claude installed it over the installed release with `adb install -r`, so the app data stayed. The owner did the steps on the phone and reported them as good. Claude read logcat after each app: no crash and no ANR for the app.
+
+- Build: release 0.2.5 (versionCode 10).
+- Certificate: 84c7ed69...5241, the same as the installed release. The APK went over it, and the login session stayed.
+- Owner checks: the owner did most steps of the owner list and reported them as good: tabs, Contacts, transfer pill, search keyboard and Back, video and screen timeout, text editor and font size, album Remove link, and English library labels.
+- Crashes and ANRs: none in logcat.
