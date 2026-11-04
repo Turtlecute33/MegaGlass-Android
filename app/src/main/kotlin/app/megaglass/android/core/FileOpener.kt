@@ -97,6 +97,9 @@ class FileOpener(
         }
     }
 
+    /** Opens [file] in another app when the app lock is open (see [whenUnlocked]). */
+    fun viewWhenUnlocked(file: File) = whenUnlocked { file.takeIf { it.exists() }?.let(::view) }
+
     private fun cacheFile(handle: Long, name: String) =
         File(File(files.openDir, MegaApiJava.handleToBase64(handle)), localFileName(name))
 

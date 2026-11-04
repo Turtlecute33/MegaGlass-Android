@@ -24,9 +24,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import nz.mega.sdk.MegaApiJava
 import nz.mega.sdk.MegaError
 import nz.mega.sdk.MegaEvent
 import nz.mega.sdk.MegaTransfer
@@ -92,8 +94,14 @@ class Session(
         }
         scope.launch {
             mega.events.collect { event ->
-                if (event.type == MegaEvent.EVENT_ACCOUNT_BLOCKED) {
-                    _state.value = SessionState.Blocked(event.text ?: res.getString(R.string.auth_blocked))
+                if (event.type != MegaEvent.EVENT_ACCOUNT_BLOCKED) return@collect
+                val text = event.text ?: res.getString(R.string.auth_blocked)
+                // 500 and 700: the user unblocks the account on mega.nz and the SDK keeps the session, so Retry resumes it.
+                val temporary = event.number == MegaApiJava.ACCOUNT_BLOCKED_VERIFICATION_EMAIL.toLong() ||
+                    event.number == MegaApiJava.ACCOUNT_BLOCKED_VERIFICATION_SMS.toLong()
+                _state.update {
+                    if (it !is SessionState.Loading && it != SessionState.Ready) it
+                    else if (temporary) SessionState.Failed(text) else SessionState.Blocked(text)
                 }
             }
         }
@@ -124,6 +132,8 @@ class Session(
                 catching {
                     _state.value = SessionState.Loading(SessionState.Stage.LOGIN, null)
                     try {
+                        // After a temporary block the SDK is still logged in; a second fastLogin needs a clean client.
+                        if (api.isLoggedIn != 0) abortLogin()
                         mega.useDeviceId()
                         val sent = withTimeoutOrNull(LOGIN_TIMEOUT_MS) { api.await { fastLogin(saved, it) } }
                         if (sent == null) throw MegaException(MegaError.API_EAGAIN, res.getString(R.string.auth_timed_out))
@@ -139,7 +149,7 @@ class Session(
                     if (e is MegaException && (e.code == MegaError.API_ESID || e.code == MegaError.API_ENOENT)) {
                         clearLocal()
                     } else {
-                        _state.value = SessionState.Failed(res.userMessage(e))
+                        _state.update { if (it is SessionState.Loading) SessionState.Failed(res.userMessage(e)) else it }
                     }
                 }
             }
@@ -204,7 +214,7 @@ class Session(
                     progressAt.set(System.nanoTime())
                     val total = r.totalBytes
                     if (total > 0) {
-                        _state.value = SessionState.Loading(SessionState.Stage.FETCH_NODES, r.transferredBytes.toFloat() / total)
+                        _state.update { if (it is SessionState.Loading) SessionState.Loading(SessionState.Stage.FETCH_NODES, r.transferredBytes.toFloat() / total) else it }
                     }
                 }) { fetchNodes(it) }
             } finally {
@@ -214,7 +224,7 @@ class Session(
         api.dumpSession()?.let { withContext(Dispatchers.IO) { store.save(it) } }
         applyTransferSettings(settings.current)
         onReady()
-        _state.value = SessionState.Ready
+        _state.update { if (it is SessionState.Loading) SessionState.Ready else it }
     }
 
     suspend fun createAccount(email: String, password: String, firstName: String, lastName: String) {

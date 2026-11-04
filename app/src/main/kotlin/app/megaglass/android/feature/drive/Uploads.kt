@@ -157,6 +157,7 @@ fun rememberUploader(parent: Long): Uploader {
                     val file = File(dir, name)
                     withContext(Dispatchers.IO) { file.writeText("") }
                     graph.transfers.upload(listOf(LocalSource(file.absolutePath, name, temporary = true)), target)
+                    graph.messenger.show(resources.getQuantityString(R.plurals.upload_started, 1, 1))
                 }
             },
             onDismiss = { askTextName = false },

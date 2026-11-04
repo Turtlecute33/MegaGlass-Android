@@ -17,7 +17,6 @@ import android.provider.MediaStore
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
-import androidx.work.WorkInfo
 import androidx.work.WorkerParameters
 import app.megaglass.android.MainActivity
 import app.megaglass.android.MegaGlassApp
@@ -87,6 +86,7 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
         val prefs = CuPrefs(context)
         val settings = graph.settings.current
         var queued = false
+        var owner = false // This run set the status (it holds the lock).
         try {
             if (!settings.cameraUploads) return Result.success()
             if (!CameraUploads.hasPermission(context, settings.cuIncludeVideos)) {
@@ -104,6 +104,7 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
             // Another worker that runs now uploads the same media: wait for it, then scan again.
             CameraUploads.running.withLock {
                 CameraUploads.setStatus(CuStatus.Scanning)
+                owner = true
                 val folder = CameraUploads.ensureFolder(graph.mega, context.getString(R.string.cu_default_folder))
                     ?: return Result.retry()
 
@@ -187,12 +188,12 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                 return Result.success()
             }
         } catch (e: CancellationException) {
-            // Wi-Fi or charging was lost: the queued uploads stop too, so that the settings also
-            // hold for them. The next run queues them again. After other stops (time limit) the
-            // queue continues, and CameraUploads stops it when the settings no longer hold.
-            if (queued && (stopReason in CONSTRAINT_STOPS || !graph.settings.current.cameraUploads)) {
+            // The queued uploads continue in the SDK after a stop (network blip, low battery, time
+            // limit). CameraUploads stops them when Wi-Fi only, charging or camera uploads no longer hold.
+            if (queued && !graph.settings.current.cameraUploads) {
                 withContext(NonCancellable) { graph.transfers.cancelUploads(Purpose.CAMERA) }
             }
+            if (owner && graph.settings.current.cameraUploads) CameraUploads.setStatus(CuStatus.Idle(prefs.lastRun))
             throw e
         } catch (e: Exception) {
             CameraUploads.setStatus(CuStatus.Failed(context.resources.userMessage(e, R.string.cu_error)))
@@ -328,11 +329,6 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
         const val SESSION_TIMEOUT_MS = 90_000L
         /** Six hours, in seconds. */
         const val RESCAN_WINDOW_S = 6 * 60 * 60L
-        val CONSTRAINT_STOPS = setOf(
-            WorkInfo.STOP_REASON_CONSTRAINT_CONNECTIVITY,
-            WorkInfo.STOP_REASON_CONSTRAINT_CHARGING,
-            WorkInfo.STOP_REASON_CONSTRAINT_BATTERY_NOT_LOW,
-        )
         /** Long uploads continue in the SDK queue after this; the next run checks again. */
         const val UPLOAD_TIMEOUT_MS = 5 * 60 * 60 * 1000L
     }

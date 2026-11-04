@@ -63,6 +63,7 @@ import nz.mega.sdk.MegaShare
  * Full-screen folder chooser (move, copy, upload, import). Shows Cloud drive and the incoming
  * shares the user can write to. [exclude] hides folders that cannot be the target (the items
  * being moved). [detail] shows below the title, for example the names of the items.
+ * [disabled] is a target that cannot be confirmed (the current parent of the items being moved).
  */
 @Composable
 fun FolderPickerDialog(
@@ -71,6 +72,7 @@ fun FolderPickerDialog(
     onPick: (Long) -> Unit,
     onDismiss: () -> Unit,
     exclude: Set<Long> = emptySet(),
+    disabled: Long? = null,
     start: Long? = null,
     detail: String? = null,
 ) {
@@ -168,7 +170,7 @@ fun FolderPickerDialog(
                     Spacer(Modifier.width(12.dp))
                     Button(
                         onClick = { target?.let { onPick(it); onDismiss() } },
-                        enabled = target != null && canWrite && stack.none { it.handle in exclude },
+                        enabled = target != null && target != disabled && canWrite && stack.none { it.handle in exclude },
                         modifier = Modifier.padding(end = 16.dp),
                     ) { Text(confirmLabel) }
                 }

@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
@@ -122,11 +123,9 @@ fun AudioPlayerScreen(route: AudioPlayer) {
         val hidden = graph.lock.isEnabled
         val items = withContext(Dispatchers.IO) {
             if (list.any { !it.isLocal } && !StreamServer.holdForPlayback(api)) return@withContext null
-            list.zip(PlaybackQueue.add(list)).mapIndexed { i, (e, id) ->
-                // Artwork: the cached thumbnail; the start item loads its thumbnail now.
-                val art = if (hidden) null else cachedArt(e) ?: if (e.hasThumbnail && i == index) {
-                    catching { graph.images.load(NodeImage(e.handle, folderLink = e.folderLink)) }.getOrNull()?.let(Uri::fromFile)
-                } else null
+            list.zip(PlaybackQueue.add(list)).map { (e, id) ->
+                // Artwork: the cached thumbnail only. The start item loads its thumbnail after play starts.
+                val art = if (hidden) null else cachedArt(e)
                 val metadata = if (hidden) hiddenMetadata(appName) else trackMetadata(e, art)
                 MediaItem.Builder()
                     .setMediaId(id)
@@ -139,10 +138,17 @@ fun AudioPlayerScreen(route: AudioPlayer) {
             error = serverError
             return@LaunchedEffect
         }
-        c.setMediaItems(items, index.coerceIn(0, (items.size - 1).coerceAtLeast(0)), 0)
+        val start = index.coerceIn(0, items.size - 1)
+        c.setMediaItems(items, start, 0)
         c.prepare()
         c.play()
         started = true
+        // Load the start thumbnail without making playback wait for it.
+        val entry = list[start]
+        if (hidden || !entry.hasThumbnail || items[start].mediaMetadata.artworkUri != null) return@LaunchedEffect
+        val art = catching { graph.images.load(NodeImage(entry.handle, folderLink = entry.folderLink)) }.getOrNull()?.let(Uri::fromFile) ?: return@LaunchedEffect
+        val at = (0 until c.mediaItemCount).firstOrNull { c.getMediaItemAt(it).mediaId == items[start].mediaId } ?: return@LaunchedEffect
+        if (!graph.lock.isEnabled) c.replaceMediaItem(at, items[start].buildUpon().setMediaMetadata(trackMetadata(entry, art)).build())
     }
 
     Scaffold(
@@ -170,6 +176,7 @@ private fun AudioContent(player: Player) {
     DisposableEffect(player) {
         player.addListener(ui.listener)
         ui.update()
+        ui.error = player.playerError?.let { it.message ?: it.errorCodeName }
         onDispose { player.removeListener(ui.listener) }
     }
     LaunchedEffect(ui) {
@@ -252,6 +259,15 @@ private fun AudioContent(player: Player) {
                             tint = if (ui.repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                }
+                ui.error?.let { message ->
+                    Spacer(Modifier.height(16.dp))
+                    Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+                    TextButton(onClick = {
+                        ui.error = null
+                        player.prepare()
+                        player.play()
+                    }) { Text(stringResource(R.string.retry)) }
                 }
                 if (queue.size > 1) {
                     Spacer(Modifier.height(24.dp))

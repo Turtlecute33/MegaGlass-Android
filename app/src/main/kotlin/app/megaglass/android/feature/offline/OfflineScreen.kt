@@ -119,6 +119,7 @@ fun OfflineScreen(path: String?) {
                             onClick = {
                                 if (!entry.verified) scope.launch {
                                     catching { graph.offline.makeAvailable(listOf(entry.handle)) }
+                                        .onSuccess { graph.messenger.show(graph.context.getString(R.string.offline_started)) }
                                         .onFailure { graph.messenger.show(graph.context.resources.userMessage(it)) }
                                 } else if (entry.isFolder) nav.navigate(OfflineFolder(entry.file.absolutePath)) else nav.openLocal(entry.file)
                             },
@@ -131,7 +132,10 @@ fun OfflineScreen(path: String?) {
                                         val saved = withContext(Dispatchers.IO) {
                                             catching {
                                                 val dir = graph.files.downloadDir(graph.settings.current)
-                                                if (entry.file.copyRecursively(File(dir, availableName(localFileName(entry.name), entry.isFolder) { File(dir, it).exists() }))) dir else null
+                                                val target = File(dir, availableName(localFileName(entry.name), entry.isFolder) { File(dir, it).exists() })
+                                                // A failed copy leaves no partial file under the real name.
+                                                runCatching { entry.file.copyRecursively(target) }.onFailure { target.deleteRecursively() }.getOrThrow()
+                                                dir
                                             }.getOrNull()
                                         }
                                         graph.messenger.show(
@@ -217,8 +221,11 @@ private fun OfflineRow(
                         DropdownMenuItem(text = { Text(stringResource(R.string.action_send)) }, leadingIcon = { Ic(R.drawable.ic_share) },
                             onClick = { menu = false; onSend() })
                     }
-                    DropdownMenuItem(text = { Text(stringResource(R.string.save_to_downloads)) }, leadingIcon = { Ic(R.drawable.ic_download) },
-                        onClick = { menu = false; onSave() })
+                    // An unverified copy can be incomplete: do not export it (A03).
+                    if (entry.verified) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.save_to_downloads)) }, leadingIcon = { Ic(R.drawable.ic_download) },
+                            onClick = { menu = false; onSave() })
+                    }
                     if (onInfo != null) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.show_in_cloud)) }, leadingIcon = { Ic(R.drawable.ic_cloud) },
                             onClick = { menu = false; onInfo() })

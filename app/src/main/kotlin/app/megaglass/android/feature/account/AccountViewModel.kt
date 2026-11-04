@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -100,7 +101,9 @@ class AccountViewModel : ViewModel() {
         }
         viewModelScope.launch {
             graph.mega.users
+                // The own handle takes the SDK lock: not on the main thread.
                 .filter { handles -> handles.isEmpty() || api.myUserHandleBinary in handles }
+                .flowOn(Dispatchers.IO)
                 .debounce(300)
                 .collect {
                     invalidateAvatar()

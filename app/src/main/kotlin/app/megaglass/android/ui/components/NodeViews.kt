@@ -195,7 +195,7 @@ fun NodeItem.subtitle(): String = if (isFolder) {
     Format.size(size) + " · " + Format.date(modified)
 }
 
-/** Small status badges: label, favourite, link, offline. */
+/** Small status badges: label, favourite, link, offline, taken down. */
 @Composable
 fun NodeBadges(item: NodeItem, offline: Boolean, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -206,7 +206,7 @@ fun NodeBadges(item: NodeItem, offline: Boolean, modifier: Modifier = Modifier) 
         if (item.isFavourite) Ic(R.drawable.ic_star_fill, stringResource(R.string.favourite), Modifier.size(16.dp), AppTheme.extra.warning)
         if (item.isExported) Ic(R.drawable.ic_link, stringResource(R.string.link), Modifier.size(16.dp), MaterialTheme.colorScheme.primary)
         if (offline) Ic(R.drawable.ic_offline_pin_fill, stringResource(R.string.offline), Modifier.size(16.dp), AppTheme.extra.success)
-        if (item.isTakenDown) Ic(R.drawable.ic_block, null, Modifier.size(16.dp), MaterialTheme.colorScheme.error)
+        if (item.isTakenDown) Ic(R.drawable.ic_block, stringResource(R.string.taken_down), Modifier.size(16.dp), MaterialTheme.colorScheme.error)
     }
 }
 

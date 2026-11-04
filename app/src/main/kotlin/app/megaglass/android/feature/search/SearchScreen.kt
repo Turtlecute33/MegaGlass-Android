@@ -1,6 +1,7 @@
 package app.megaglass.android.feature.search
 
 import app.megaglass.android.core.util.catching
+import app.megaglass.android.core.util.whileObserved
 import app.megaglass.android.core.util.userMessage
 
 import androidx.activity.compose.BackHandler
@@ -73,12 +74,15 @@ import app.megaglass.android.ui.nav.MediaSource
 import app.megaglass.android.ui.nav.ROOT
 import app.megaglass.android.ui.nav.Search
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import nz.mega.sdk.MegaApiJava
@@ -131,7 +135,9 @@ class SearchViewModel(private val parent: Long) : ViewModel() {
                 .debounce(250)
                 .collectLatest { (s, _, _) -> search(s) }
         }
-        viewModelScope.launch { graph.nodes.changes.debounce(1000).collect { trigger.update { it + 1 } } }
+        // The combine above is one permanent subscriber of _state; count only the screen (PERF-010 pattern).
+        val observers = _state.subscriptionCount.map { (it - 1).coerceAtLeast(0) }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+        viewModelScope.launch { graph.nodes.changes.whileObserved(observers).debounce(1000).collect { trigger.update { it + 1 } } }
     }
 
     private suspend fun search(s: SearchState) {

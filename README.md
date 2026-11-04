@@ -51,10 +51,10 @@ Compose with Material 3 Expressive for the interface. Chat and calls are not inc
   check. A changed upload can give a cloud file that fails its check at a later download.
   MegaGlass accepts this risk. Use a network that you trust for important uploads.
 - **Local stream server.** Video and audio play through an HTTP server of the MEGA SDK on
-  127.0.0.1, on a random port, while a file plays. It serves only the files that the app opens.
-  It sends no CORS header, so a web page cannot read a stream. The stream path has no secret:
-  another app on the phone that finds the port and knows the node handle can read the file that
-  plays. MegaGlass accepts this risk.
+  127.0.0.1, on a random port, while a file is open in the player (also when paused). It serves
+  only the files that the app opens. It sends no CORS header, so a web page cannot read a stream.
+  The stream path has no secret: another app on the phone that finds the port and knows the node
+  handle can read the file that is open. MegaGlass accepts this risk.
 
 ## Privacy
 
@@ -67,7 +67,8 @@ Compose with Material 3 Expressive for the interface. Chat and calls are not inc
 - No diagnostic events or error reports go to MEGA. By default, the MEGA SDK sends them, with no
   setting to turn them off, and some contain file fingerprints and MACs. A local patch stops
   them. The SDK also does not keep the journey ID that the server can send, so the API requests
-  do not include it.
+  do not include it. New files and folders go without the analytics tag that tells MEGA how the
+  operation started (upload, import or copy).
 - The user agent is `MegaGlass/<version> (Android) (Android) MegaClient/<SDK version>/64`, the
   same on every device. It has no device model, OS version, kernel release or CPU architecture.
 - Files are encrypted on the device before upload.
@@ -124,7 +125,7 @@ records the commit that it was built from. Commit (and tag) the version change f
 - `patches/mega-sdk-java-factory-ownership.patch`: marks allocating JNI factories and album
   getters as owners of their native results, so that Java can release them safely.
 - `patches/mega-sdk-no-events.patch`: the SDK does not send its diagnostic events and reports
-  to MEGA, and it does not keep the journey ID.
+  to MEGA, it does not keep the journey ID, and it does not tag new nodes for analytics.
 - `patches/mega-sdk-stream-no-cors.patch`: the local stream server does not send
   `Access-Control-Allow-Origin: *`, so a web page cannot read the decrypted stream.
 - `patches/mega-sdk-user-agent.patch`: the SDK puts only "Android" in the user agent, and not

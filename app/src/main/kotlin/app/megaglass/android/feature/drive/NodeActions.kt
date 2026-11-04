@@ -299,7 +299,7 @@ class NodeActionsState internal constructor(
     internal fun setLabel(item: NodeItem, label: Int) = launch { nodes.setLabel(listOf(item.handle), label) }
 
     internal fun copyText(text: String) {
-        copySensitive(appContext, text)
+        copySensitive(appContext, text, expire = true)
         messenger.show(str(R.string.copied))
     }
 
@@ -343,6 +343,8 @@ fun NodeActionsHost(state: NodeActionsState) {
             title = pluralStringResource(if (action == NodeAction.MOVE) R.plurals.move_items else R.plurals.copy_items, items.size, items.size),
             confirmLabel = stringResource(if (action == NodeAction.MOVE) R.string.move_here else R.string.copy_here),
             exclude = items.filter { it.isFolder }.map { it.handle }.toSet(),
+            // Moving into the folder the items are already in does nothing.
+            disabled = if (action == NodeAction.MOVE) items.map { it.parentHandle }.distinct().singleOrNull() else null,
             start = items.first().parentHandle,
             onPick = { target -> state.picked(action, items, target) },
             onDismiss = { state.picking = null },

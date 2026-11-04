@@ -102,7 +102,9 @@ import app.megaglass.android.ui.nav.ImageViewer
 import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.nav.MediaSource
 import app.megaglass.android.ui.nav.VideoPlayer
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Opens a photo in the viewer, a video in the player. */
 private fun AppNavigator.openMedia(item: MediaItem, source: MediaSource) {
@@ -627,7 +629,7 @@ private fun MediaPickerSheet(exclude: Set<Long>, onPick: (Set<Long>) -> Unit, on
     var selection by remember { mutableStateOf(emptySet<Long>()) }
     LaunchedEffect(Unit) {
         val all = catching { PhotosRepository.timeline(MediaFilter.ALL, graph.settings.current.showHidden) }.getOrDefault(emptyList())
-        sections = PhotosViewModel.group(all.filter { it.handle !in exclude }, MediaFilter.ALL)
+        sections = withContext(Dispatchers.Default) { PhotosViewModel.group(all.filter { it.handle !in exclude }, MediaFilter.ALL) }
     }
     val toggle = { m: MediaItem -> selection = if (m.handle in selection) selection - m.handle else selection + m.handle }
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -691,7 +693,7 @@ private fun AlbumLinkDialog(link: String, onDismiss: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { graph.opener.shareText(link) }) { Text(stringResource(R.string.action_send)) }
                 Button(onClick = {
-                    copySensitive(context, link)
+                    copySensitive(context, link, expire = true)
                     graph.messenger.show(resources.getString(R.string.copied))
                 }) { Text(stringResource(R.string.copy_link)) }
             }

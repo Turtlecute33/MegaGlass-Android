@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
@@ -674,7 +673,10 @@ fun TwoFactorSetupScreen() {
                                     1 -> apps[0].activityInfo.let { app ->
                                         authenticator = app.loadLabel(pm).toString() to Intent(intent).setClassName(app.packageName, app.name)
                                     }
-                                    else -> context.startActivity(Intent.createChooser(intent, resources.getString(R.string.security_open_authenticator)))
+                                    else -> {
+                                        graph.lock.expectReturn()
+                                        context.startActivity(Intent.createChooser(intent, resources.getString(R.string.security_open_authenticator)))
+                                    }
                                 }
                             }, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.security_open_authenticator)) }
                         }
@@ -711,6 +713,7 @@ fun TwoFactorSetupScreen() {
             confirmLabel = stringResource(R.string.security_open_authenticator),
             onConfirm = {
                 try {
+                    graph.lock.expectReturn()
                     context.startActivity(intent)
                 } catch (_: ActivityNotFoundException) {
                     graph.messenger.show(resources.getString(R.string.security_no_authenticator))
@@ -805,7 +808,7 @@ fun RecoveryKeyScreen() {
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.security_copy))
                 }
-                Button(onClick = { save.launch("MEGA-RECOVERYKEY.txt") }, modifier = Modifier.weight(1f).height(52.dp)) {
+                Button(onClick = { graph.lock.expectReturn(); save.launch("MEGA-RECOVERYKEY.txt") }, modifier = Modifier.weight(1f).height(52.dp)) {
                     Ic(R.drawable.ic_save, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.save))
@@ -864,7 +867,7 @@ fun PasscodeSetupScreen() {
 
     androidx.compose.material3.Scaffold { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).safeDrawingPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(Modifier.fillMaxWidth()) { BackButton { nav.back() } }

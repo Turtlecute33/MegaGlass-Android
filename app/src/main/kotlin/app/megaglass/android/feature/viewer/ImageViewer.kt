@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -74,12 +75,16 @@ import app.megaglass.android.ui.components.IconAction
 import app.megaglass.android.ui.components.rememberStorageAccess
 import app.megaglass.android.ui.nav.ImageViewer
 import app.megaglass.android.ui.nav.LocalNavigator
+import app.megaglass.android.ui.nav.MediaSource
 import app.megaglass.android.ui.nav.NodeInfo
 import app.megaglass.android.ui.nav.VideoPlayer
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.saket.telephoto.zoomable.ZoomSpec
@@ -135,10 +140,22 @@ fun ImageViewerScreen(route: ImageViewer) {
     var entries by remember { mutableStateOf<List<MediaEntry>?>(null) }
     var start by remember { mutableIntStateOf(0) }
     LaunchedEffect(route) {
-        val (list, index) = catching { loadEntries(route.source, route.handle, setOf(FileType.IMAGE, FileType.VIDEO)) }
-            .getOrDefault(emptyList<MediaEntry>() to 0)
-        entries = list
+        val types = setOf(FileType.IMAGE, FileType.VIDEO)
+        val (list, index) = catching { loadEntries(route.source, route.handle, types) }.getOrDefault(emptyList<MediaEntry>() to 0)
         start = index
+        entries = list
+        // The menu can move, rename or hide the item: reload on node changes, so that the pager does not show it after that (UX-2).
+        if (route.source is MediaSource.Local || route.source is MediaSource.FolderLink) return@LaunchedEffect
+        MegaGlassApp.graph.nodes.changes
+            .filter { c -> c.touches(route.handle) || entries.orEmpty().any { c.touches(it.handle) } }
+            .debounce(300).conflate()
+            .collect {
+                // A failed reload keeps the current list; only an empty result closes the viewer.
+                catching { loadEntries(route.source, route.handle, types) }.onSuccess { (l, _) ->
+                    entries = l
+                    if (l.isEmpty()) nav.backFrom(route)
+                }
+            }
     }
     var chrome by rememberSaveable { mutableStateOf(true) }
     ImmersiveSystemBars(hidden = !chrome)
@@ -250,7 +267,7 @@ private fun ImagePage(entry: MediaEntry, onTap: () -> Unit) {
         if (original == null) withContext(Dispatchers.IO) { entry.offlineCopy() ?: PreviewCache.cached(entry) }?.let { original = it }
         checked = true
     }
-    val zoomed = (zoom.zoomableState.zoomFraction ?: 0f) > 0.01f
+    val zoomed by remember(zoom) { derivedStateOf { (zoom.zoomableState.zoomFraction ?: 0f) > 0.01f } }
     // The original downloads when the preview is not enough: the user zooms in, or there is no
     // preview. Only after the check above, so that a local copy does not download.
     val wantOriginal = checked && original == null && !failed && entry.size in 1..MAX_ORIGINAL && (zoomed || !entry.hasPreview)

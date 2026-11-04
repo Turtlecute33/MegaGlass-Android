@@ -204,13 +204,13 @@ fun LockScreen() {
             Spacer(Modifier.height(40.dp))
             NumberPad(
                 onDigit = { d ->
-                    if (checking || wiping || code.length >= length) return@NumberPad
+                    if (checking || wiping || attempts >= MAX_ATTEMPTS || code.length >= length) return@NumberPad
                     wrong = false
                     code += d
                     if (code.length == length) check(code)
                 },
                 onDelete = { code = code.dropLast(1) },
-                extra = if (useBiometric) {
+                extra = if (useBiometric && attempts < MAX_ATTEMPTS) {
                     {
                         IconButton(onClick = biometric, modifier = Modifier.size(64.dp)) {
                             Ic(R.drawable.ic_fingerprint, stringResource(R.string.lock_use_biometric), Modifier.size(32.dp))

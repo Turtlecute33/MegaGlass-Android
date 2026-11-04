@@ -41,6 +41,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,6 +76,8 @@ fun CameraUploadsSettingsScreen() {
     val settings by graph.settings.state.collectAsStateWithLifecycle()
     val status by CameraUploads.status.collectAsStateWithLifecycle()
     var askExisting by remember { mutableStateOf(false) }
+    // True only when the enable switch asked for the permission (not the videos switch).
+    var enabling by rememberSaveable { mutableStateOf(false) }
     var picking by remember { mutableStateOf(false) }
     var folderName by remember { mutableStateOf<String?>(null) }
     var folderHandle by remember { mutableStateOf<Long?>(null) }
@@ -94,15 +97,17 @@ fun CameraUploadsSettingsScreen() {
         val videos = result[Manifest.permission.READ_MEDIA_VIDEO] == true
         val partial = context.checkSelfPermission(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
         when {
-            images && (videos || !settings.cuIncludeVideos) -> askExisting = true
+            images && (videos || !settings.cuIncludeVideos) -> askExisting = enabling
             partial -> graph.messenger.show(resources.getString(R.string.cu_partial_access))
             else -> graph.messenger.show(resources.getString(R.string.cu_permission_denied))
         }
+        enabling = false
     }
     val requestEnable = {
         if (CameraUploads.hasPermission(context, settings.cuIncludeVideos)) {
             askExisting = true
         } else {
+            enabling = true
             permissions.launch(arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO))
         }
     }

@@ -134,6 +134,11 @@ class TransferNotifications(private val context: Context) {
         val title = when {
             // Copies for uploads, viewer copies, or a queue that the SDK has not resumed yet.
             state.active.isEmpty() -> context.getString(R.string.notif_preparing)
+            // Pause all, or each transfer paused: the progress does not move until a resume.
+            state.active.all {
+                it.status == TransferStatus.PAUSED ||
+                    if (it.direction == Direction.UPLOAD) state.uploadsPaused else state.downloadsPaused
+            } -> context.getString(R.string.notif_paused)
             state.downloads > 0 && state.uploads > 0 ->
                 context.getString(R.string.notif_transfers_both, state.downloads, state.uploads)
             state.uploads > 0 -> context.resources.getQuantityString(R.plurals.notif_uploading, state.uploads, state.uploads)

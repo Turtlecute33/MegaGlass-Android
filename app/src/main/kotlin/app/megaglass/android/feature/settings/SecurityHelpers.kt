@@ -38,6 +38,7 @@ import app.megaglass.android.MegaGlassApp
 import app.megaglass.android.R
 import app.megaglass.android.core.mega.awaitResult
 import app.megaglass.android.ui.components.Ic
+import app.megaglass.android.ui.components.NoLearning
 import app.megaglass.android.ui.theme.AppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -77,29 +78,31 @@ fun PasswordInput(
     supporting: String? = null,
 ) {
     var visible by rememberSaveable { mutableStateOf(false) }
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        label = { Text(label) },
-        leadingIcon = { Ic(R.drawable.ic_password) },
-        trailingIcon = {
-            IconButton(onClick = { visible = !visible }) {
-                Ic(
-                    if (visible) R.drawable.ic_visibility_off else R.drawable.ic_visibility,
-                    stringResource(if (visible) R.string.auth_hide_password else R.string.auth_show_password),
-                )
-            }
-        },
-        singleLine = true,
-        isError = isError,
-        supportingText = supporting?.let { { Text(it) } },
-        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = imeAction, autoCorrectEnabled = false),
-        keyboardActions = KeyboardActions(onDone = { onDone() }),
-        modifier = Modifier.fillMaxWidth().semantics {
-            contentType = if (newPassword) ContentType.NewPassword else ContentType.Password
-        },
-    )
+    NoLearning {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onChange,
+            label = { Text(label) },
+            leadingIcon = { Ic(R.drawable.ic_password) },
+            trailingIcon = {
+                IconButton(onClick = { visible = !visible }) {
+                    Ic(
+                        if (visible) R.drawable.ic_visibility_off else R.drawable.ic_visibility,
+                        stringResource(if (visible) R.string.auth_hide_password else R.string.auth_show_password),
+                    )
+                }
+            },
+            singleLine = true,
+            isError = isError,
+            supportingText = supporting?.let { { Text(it) } },
+            visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = imeAction, autoCorrectEnabled = false),
+            keyboardActions = KeyboardActions(onDone = { onDone() }),
+            modifier = Modifier.fillMaxWidth().semantics {
+                contentType = if (newPassword) ContentType.NewPassword else ContentType.Password
+            },
+        )
+    }
 }
 
 /** Five bars for MegaApiJava.getPasswordStrength (0 very weak .. 4 strong); nothing for -1. */

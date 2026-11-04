@@ -245,7 +245,8 @@ class Mega(context: Context) {
         }
 
         override fun onEvent(api: MegaApiJava, event: MegaEvent?) {
-            if (event != null) _events.tryEmit(event)
+            // Only the events the app reads, so frequent network-activity events cannot fill the buffer.
+            if (event != null && (event.type == MegaEvent.EVENT_NODES_CURRENT || event.type == MegaEvent.EVENT_ACCOUNT_BLOCKED)) _events.tryEmit(event)
         }
 
         override fun onSetsUpdate(api: MegaApiJava, sets: ArrayList<MegaSet>?) {

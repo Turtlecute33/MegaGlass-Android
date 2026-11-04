@@ -98,7 +98,14 @@ class AppGraph(val context: Context) {
         }
         // Thumbnails of changed files are stale.
         scope.launch {
-            nodes.changes.filter { it.imagesChanged.isNotEmpty() }.collect { change -> change.imagesChanged.forEach(images::invalidate) }
+            nodes.changes.filter { it.imagesChanged.isNotEmpty() }.collect { change ->
+                change.imagesChanged.forEach(images::invalidate)
+                // Decoded bitmaps in memory are stale too (PERF-13). Match on the key prefix: Coil can add extras to the key.
+                SingletonImageLoader.get(context).memoryCache?.let { cache ->
+                    val prefixes = change.imagesChanged.map { "node:$it:" }
+                    cache.keys.filter { k -> prefixes.any { k.key.startsWith(it) } }.forEach(cache::remove)
+                }
+            }
         }
         // The cached photo timeline is stale after each node change. Undispatched: no change
         // can arrive before the collector starts (MEGAGLASS-PERF-004).

@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -304,7 +305,7 @@ fun TextEditorScreen(route: TextEditor) {
                     modifier = Modifier.fillMaxSize().padding(16.dp),
                 )
                 else -> {
-                    val lines = remember(t) { displayLines(t) }
+                    val lines by produceState(emptyList<String>(), t) { value = withContext(Dispatchers.Default) { displayLines(t) } }
                     SelectionContainer {
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
                             itemsIndexed(lines) { _, line -> Text(line, style = style) }

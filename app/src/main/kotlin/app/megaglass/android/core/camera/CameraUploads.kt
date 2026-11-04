@@ -108,9 +108,9 @@ object CameraUploads {
                 }
         }
         // Uploads can outlive their worker (time limit, changed settings) or run without one
-        // (resumed by the SDK after a restart). They also stop when Wi-Fi or charging is lost;
-        // the next run queues them again. The check runs only while camera uploads are in the
-        // queue, so an idle process has no timer (MEGAGLASS-PERF-009).
+        // (resumed by the SDK after a restart). They also stop when Wi-Fi or charging is lost. The check
+        // runs only while camera uploads are in the queue, so an idle process has no timer
+        // (MEGAGLASS-PERF-009).
         graph.scope.launch {
             graph.transfers.state
                 .map { state -> state.active.any { it.direction == Direction.UPLOAD && it.purpose == Purpose.CAMERA } }

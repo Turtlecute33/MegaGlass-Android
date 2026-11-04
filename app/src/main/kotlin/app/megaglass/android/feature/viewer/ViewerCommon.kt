@@ -101,7 +101,7 @@ suspend fun loadEntries(source: MediaSource, handle: Long, types: Set<FileType>)
                 }
                 media.filter { it.node.type in types }.map { it.node.toEntry(false) }
             }
-            MediaSource.Single -> listOfNotNull(graph.mega.api.getNodeByHandle(handle)?.toItem(graph.mega.api, withCounts = false)?.toEntry(false))
+            MediaSource.Single -> listOfNotNull(graph.mega.api.getNodeByHandle(handle)?.takeUnless { graph.mega.api.isInRubbish(it) }?.toItem(graph.mega.api, withCounts = false)?.toEntry(false))
             is MediaSource.Local -> {
                 val start = File(source.path)
                 val dir = if (start.isDirectory) start else start.parentFile
@@ -116,7 +116,8 @@ suspend fun loadEntries(source: MediaSource, handle: Long, types: Set<FileType>)
         if (index < 0 && source !is MediaSource.Local) {
             // The start item is not in the list (other type or filtered): show it alone.
             val api = if (source is MediaSource.FolderLink) graph.mega.folderApi else graph.mega.api
-            val single = api.getNodeByHandle(handle)?.toItem(api, withCounts = false)?.toEntry(source is MediaSource.FolderLink)
+            // A start item that is now in the Rubbish bin does not come back alone after a reload (UX-2).
+            val single = api.getNodeByHandle(handle)?.takeUnless { api.isInRubbish(it) }?.toItem(api, withCounts = false)?.toEntry(source is MediaSource.FolderLink)
             return@withContext if (single != null) listOf(single) to 0 else list to 0
         }
         if (index < 0) index = 0

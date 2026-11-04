@@ -319,9 +319,13 @@ private fun AddPeople(model: ShareFolderModel, onCancel: () -> Unit, onShared: (
             .filter { q.isEmpty() || q in it.name.lowercase() || q in it.email.lowercase() }
             .take(30)
     }
+    // Reads the current query, so that onValueChange can call it after it sets the query.
+    val typedEmail = {
+        query.trim().trimEnd(',', ';').takeIf { emailPattern.matches(it) && it.lowercase() !in existing && it !in recipients }
+    }
     val addTyped = {
-        val e = query.trim().trimEnd(',', ';')
-        if (emailPattern.matches(e) && e.lowercase() !in existing && e !in recipients) {
+        val e = typedEmail()
+        if (e != null) {
             recipients = recipients + e
             query = ""
         }
@@ -404,10 +408,11 @@ private fun AddPeople(model: ShareFolderModel, onCancel: () -> Unit, onShared: (
             TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
             Button(
                 onClick = {
+                    addTyped()
                     val emails = recipients
                     scope.launch { if (model.share(emails, access)) onShared() }
                 },
-                enabled = recipients.isNotEmpty() && !model.busy,
+                enabled = (recipients.isNotEmpty() || typedEmail() != null) && !model.busy,
             ) { Text(stringResource(R.string.share_action)) }
         }
     }

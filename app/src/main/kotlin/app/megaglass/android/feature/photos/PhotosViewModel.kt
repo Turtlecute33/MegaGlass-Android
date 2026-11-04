@@ -15,6 +15,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.drop
@@ -49,7 +50,7 @@ class PhotosViewModel : ViewModel() {
     init {
         load()
         // Each upload changes the nodes: the full timeline loads again only while it shows.
-        viewModelScope.launch { graph.nodes.changes.whileObserved(_state.subscriptionCount).debounce(1000).collect { load() } }
+        viewModelScope.launch { graph.nodes.changes.whileObserved(_state.subscriptionCount).debounce(1000).conflate().collect { loadJob?.join(); load() } }
         viewModelScope.launch { graph.mega.sets.whileObserved(_state.subscriptionCount).debounce(300).collect { loadAlbums() } }
         viewModelScope.launch {
             graph.settings.state.distinctUntilChangedBy { it.showHidden }.drop(1).collect { load() }
@@ -80,7 +81,8 @@ class PhotosViewModel : ViewModel() {
     private suspend fun loadAlbums() {
         val all = _state.value.all ?: return
         val user = catching { PhotosRepository.userAlbums(graph.settings.current.showHidden) }.getOrDefault(emptyList())
-        _state.update { it.copy(albums = PhotosRepository.systemAlbums(all) + user) }
+        val system = withContext(Dispatchers.Default) { PhotosRepository.systemAlbums(all) }
+        _state.update { it.copy(albums = system + user) }
     }
 
     fun setFilter(filter: MediaFilter) = viewModelScope.launch {
@@ -173,7 +175,7 @@ class AlbumViewModel(private val id: Long, private val isSystem: Boolean, privat
     init {
         load()
         viewModelScope.launch { graph.mega.sets.whileObserved(_state.subscriptionCount).debounce(300).collect { load() } }
-        viewModelScope.launch { graph.nodes.changes.whileObserved(_state.subscriptionCount).debounce(1000).collect { load() } }
+        viewModelScope.launch { graph.nodes.changes.whileObserved(_state.subscriptionCount).debounce(1000).conflate().collect { loadJob?.join(); load() } }
     }
 
     fun load() {
@@ -186,7 +188,7 @@ class AlbumViewModel(private val id: Long, private val isSystem: Boolean, privat
         if (isSystem) {
             catching { PhotosRepository.timeline(MediaFilter.ALL, showHidden) }
                 .onSuccess { all ->
-                    val items = PhotosRepository.systemAlbum(id, all).map { AlbumEntry(it.handle, it) }
+                    val items = withContext(Dispatchers.Default) { PhotosRepository.systemAlbum(id, all).map { AlbumEntry(it.handle, it) } }
                     _state.update { it.copy(name = systemName, entries = items, error = null) }
                 }
                 .onFailure { e -> _state.update { it.copy(name = systemName, entries = it.entries ?: emptyList(), error = graph.context.resources.userMessage(e)) } }

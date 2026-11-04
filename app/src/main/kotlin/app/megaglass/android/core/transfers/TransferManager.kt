@@ -208,6 +208,8 @@ class TransferManager(
     private val tokens = HashMap<Int, MegaCancelToken>()
     private val uploadGate = Mutex()
     private val reservedNames = HashSet<Pair<Long, String>>()
+    /** History items whose Retry already started (tag, finishedAt). Stops a double tap from starting two copies. */
+    private val retrying = HashSet<Pair<Int, Long>>()
 
     /**
      * Transfers of the folder link instance get negative tags, so that the two SDK instances
@@ -640,6 +642,18 @@ class TransferManager(
      * an upload is gone, or the target folder is gone.
      */
     suspend fun retry(item: TransferItem): Boolean {
+        val key = item.tag to item.finishedAt
+        if (!synchronized(lock) { retrying.add(key) }) return true
+        var started = false
+        try {
+            started = startRetry(item)
+            return started
+        } finally {
+            if (!started) synchronized(lock) { retrying.remove(key) }
+        }
+    }
+
+    private suspend fun startRetry(item: TransferItem): Boolean {
         if (item.tag < 0) return false
         val ready = withContext(Dispatchers.IO) {
             if (item.direction == Direction.DOWNLOAD) {
@@ -684,7 +698,7 @@ class TransferManager(
         pending.set(0)
         cancelAll()
         synchronized(lock) {
-            records.clear(); finished.clear(); batches.clear(); targets.clear(); reservedNames.clear(); tokens.clear()
+            records.clear(); finished.clear(); batches.clear(); targets.clear(); reservedNames.clear(); retrying.clear(); tokens.clear()
         }
         overQuota = false
         _state.value = TransfersState()

@@ -191,11 +191,14 @@ class LocalFiles(private val context: Context) {
     }.getOrNull()
 
     /**
-     * Removes upload copies that no upload in the SDK queue ([inUse]) reads. Copies of this run
-     * stay, for Retry, unless [all]; then only the copies of the last minutes stay.
+     * Removes upload copies and text editor save copies that no upload in the SDK queue ([inUse])
+     * reads. Copies of this run stay, for Retry, unless [all]; then only the copies of the last
+     * minutes stay.
      */
     fun cleanUploadTemp(inUse: Set<String>, all: Boolean = false) {
-        removeUploadCopies(uploadTmpDir, inUse, if (all) System.currentTimeMillis() - 120_000 else startedAt)
+        val before = if (all) System.currentTimeMillis() - 120_000 else startedAt
+        // Text editor saves (cache/edit) use the same folder-per-copy layout.
+        listOf(uploadTmpDir, File(context.cacheDir, "edit")).forEach { removeUploadCopies(it, inUse, before) }
     }
 
     /** Photos from "Take photo", a folder each, until their upload succeeds. */

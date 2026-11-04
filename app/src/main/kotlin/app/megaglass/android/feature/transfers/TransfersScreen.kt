@@ -305,10 +305,10 @@ private fun statusText(item: TransferItem): String = when (item.status) {
 
 @Composable
 private fun FinishedRow(item: TransferItem, onOpen: () -> Unit, onRetry: () -> Unit, onRemove: () -> Unit, modifier: Modifier = Modifier) {
-    val (icon, tint) = when (item.status) {
-        TransferStatus.COMPLETED -> R.drawable.ic_check_circle_fill to AppTheme.extra.success
-        TransferStatus.CANCELLED -> R.drawable.ic_cancel to MaterialTheme.colorScheme.onSurfaceVariant
-        else -> R.drawable.ic_error to MaterialTheme.colorScheme.error
+    val (icon, tint, desc) = when (item.status) {
+        TransferStatus.COMPLETED -> Triple(R.drawable.ic_check_circle_fill, AppTheme.extra.success, R.string.status_completed)
+        TransferStatus.CANCELLED -> Triple(R.drawable.ic_cancel, MaterialTheme.colorScheme.onSurfaceVariant, R.string.status_cancelled)
+        else -> Triple(R.drawable.ic_error, MaterialTheme.colorScheme.error, R.string.status_failed)
     }
     ListItem(
         onClick = onOpen,
@@ -316,7 +316,7 @@ private fun FinishedRow(item: TransferItem, onOpen: () -> Unit, onRetry: () -> U
         leadingContent = { TransferIcon(item) },
         supportingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Ic(icon, null, Modifier.size(16.dp), tint)
+                Ic(icon, stringResource(desc), Modifier.size(16.dp), tint)
                 Spacer(Modifier.width(6.dp))
                 Text(
                     item.error ?: (Format.size(item.total) + " · " + Format.date(item.finishedAt / 1000)),

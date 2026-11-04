@@ -61,3 +61,20 @@ index 6c359f3..a90694a 100644
  }
  
  void MegaClient::sendevent(int event, const char *message, int tag, const char *viewId, bool addJourneyId)
+diff --git a/src/commands.cpp b/src/commands.cpp
+--- a/src/commands.cpp
++++ b/src/commands.cpp
+@@ -1135,11 +1135,8 @@ CommandPutNodes::CommandPutNodes(MegaClient* client,
+ 
+     arg("sm", 1);
+ 
+-    if (pitag)
+-    {
+-        const auto pitagStr = pitagToString(*pitag);
+-        arg("p", pitagStr.c_str());
+-    }
++    // MegaGlass: no analytics tag. The tag only tells MEGA how the operation started.
++    (void)pitag;
+ 
+     if (cauth)
+     {

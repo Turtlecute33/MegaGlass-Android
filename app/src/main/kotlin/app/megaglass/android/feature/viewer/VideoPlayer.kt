@@ -128,6 +128,8 @@ class PlayerUi(val player: Player) {
         itemCount = player.mediaItemCount
         shuffle = player.shuffleModeEnabled
         repeatMode = player.repeatMode
+        // The error goes away when playback recovers by any control, not only by Retry.
+        if (player.playerError == null) error = null
     }
 }
 
@@ -182,6 +184,8 @@ fun VideoPlayerScreen(route: VideoPlayer) {
         ExoPlayer.Builder(context)
             // Takes audio focus: background audio and other apps pause while the video plays.
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
+            // Pauses when headphones disconnect, so that the audio does not go to the speaker.
+            .setHandleAudioBecomingNoisy(true)
             .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(20_000, 120_000, 1_500, 3_000).build())
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)

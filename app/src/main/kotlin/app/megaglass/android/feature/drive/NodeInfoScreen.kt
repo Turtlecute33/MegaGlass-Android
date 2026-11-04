@@ -356,6 +356,8 @@ fun VersionsScreen(route: Versions) {
     // The current version: route.handle becomes a previous version after a restore, and can then be deleted.
     var anchor by remember { mutableLongStateOf(route.handle) }
     val actions = rememberNodeActions(NodeContext.CLOUD)
+    // Restore and delete need full access; a read-only incoming share only downloads.
+    val full = (versions?.firstOrNull()?.access ?: MegaShare.ACCESS_READ) >= MegaShare.ACCESS_FULL
     LaunchedEffect(reload) {
         versions = catching { graph.nodes.versions(anchor) }.getOrDefault(emptyList())
         versions?.firstOrNull()?.let { anchor = it.handle }
@@ -376,7 +378,7 @@ fun VersionsScreen(route: Versions) {
                 title = { Text(stringResource(R.string.action_versions)) },
                 navigationIcon = { BackButton { nav.back() } },
                 actions = {
-                    if ((versions?.size ?: 0) > 1) {
+                    if (full && (versions?.size ?: 0) > 1) {
                         IconAction(R.drawable.ic_delete_forever, stringResource(R.string.delete_previous_versions), { confirmAll = true })
                     }
                 },
@@ -399,7 +401,7 @@ fun VersionsScreen(route: Versions) {
                         )
                         Row(Modifier.padding(start = 72.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = { actions.download(listOf(v)) }) { Text(stringResource(R.string.action_download)) }
-                            if (!current) {
+                            if (full && !current) {
                                 TextButton(onClick = { act { graph.nodes.restoreVersion(v.handle) } }) { Text(stringResource(R.string.action_restore)) }
                                 TextButton(onClick = { confirmDelete = v }) { Text(stringResource(R.string.delete)) }
                             }

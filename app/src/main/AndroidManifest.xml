@@ -2,16 +2,27 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- MEGA API and storage servers. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Wi-Fi-only camera uploads (CameraUploads) and WorkManager network constraints. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Transfer and camera upload progress notifications. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Live-update transfer notification (setRequestPromotedOngoing in TransferJobService). -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <!-- User-initiated transfer jobs (TransferJobService). -->
     <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
+    <!-- Camera uploads (dataSync) and media playback (mediaPlayback) foreground services. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Streamed playback keeps the network on (WAKE_MODE_NETWORK); WorkManager also needs it. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- App lock (BiometricPrompt). -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- Hides the overlays of other apps while MegaGlass is visible, so that they cannot cover the
+         passcode pad or secret screens (SEC-DATA-1). -->
+    <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
     <!-- Optional; the app asks for it before use. The MEGA SDK uses real file paths for downloads to
          Download/MegaGlass, folder upload and two-way sync. The app does not sync a SAF tree URI: that
          path is not tested, and a two-way sync deletes a file that it does not see from the cloud
@@ -45,11 +56,13 @@
         android:theme="@style/Theme.MegaGlass"
         tools:targetApi="37">
 
+        <!-- Empty affinity: no other app can join this task (SEC-SURFACE-2). -->
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|uiMode|fontScale|fontWeightAdjustment|locale|layoutDirection|keyboard|navigation|assetsPaths"
             android:exported="true"
             android:launchMode="singleTask"
+            android:taskAffinity=""
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

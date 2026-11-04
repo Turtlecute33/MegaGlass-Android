@@ -45,6 +45,7 @@
     <string name="favourite">Favourite</string>
     <string name="link">Link</string>
     <string name="offline">Offline</string>
+    <string name="taken_down">Taken down</string>
     <string name="invalid_name">A name cannot contain \\ / : * ? \" &lt; &gt; |</string>
     <string name="name_exists">A folder with this name already exists</string>
 
@@ -65,6 +66,7 @@
     <string name="channel_transfers">Transfers</string>
     <string name="notif_transfers_both">%1$d downloads, %2$d uploads</string>
     <string name="notif_preparing">Preparing transfers</string>
+    <string name="notif_paused">Transfers paused</string>
     <plurals name="notif_uploading">
         <item quantity="one">Uploading %d file</item>
         <item quantity="other">Uploading %d files</item>

@@ -451,8 +451,7 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
             val item = graph.transfers.completed.first { t -> t.localPath == target.absolutePath && t.purpose == purpose }
             _preparing.update { it - id }
             if (item.status == TransferStatus.COMPLETED) {
-                // FileOpener opens OPEN downloads by itself.
-            if (purpose == Purpose.OPEN) graph.opener.view(target) else _openLocal.tryEmit(target)
+                if (purpose == Purpose.OPEN) graph.opener.viewWhenUnlocked(target) else _openLocal.tryEmit(target)
             } else {
                 graph.messenger.show(item.error ?: res.getString(R.string.error_title))
             }

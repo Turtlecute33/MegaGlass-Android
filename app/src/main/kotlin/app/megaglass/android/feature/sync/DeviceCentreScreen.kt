@@ -204,7 +204,11 @@ fun DeviceCentreScreen() {
     LaunchedEffect(reload) {
         catching { loadDevices() }
             .onSuccess { devices = it; error = null }
-            .onFailure { error = graph.context.resources.userMessage(it) }
+            .onFailure {
+                // A failed refresh keeps the old list and shows a snackbar.
+                val message = graph.context.resources.userMessage(it)
+                if (devices == null) error = message else graph.messenger.show(message)
+            }
         refreshing = false
     }
 

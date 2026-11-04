@@ -77,6 +77,7 @@ import app.megaglass.android.R
 import app.megaglass.android.feature.settings.NoticeCard
 import app.megaglass.android.ui.components.BackButton
 import app.megaglass.android.ui.components.Ic
+import app.megaglass.android.ui.components.NoLearning
 import app.megaglass.android.ui.theme.AppTheme
 
 @Composable
@@ -241,27 +242,29 @@ private fun PasswordField(
     onDone: () -> Unit = {},
 ) {
     var visible by rememberSaveable { mutableStateOf(false) }
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        label = { Text(label) },
-        leadingIcon = { Ic(R.drawable.ic_password) },
-        trailingIcon = {
-            IconButton(onClick = { visible = !visible }) {
-                Ic(
-                    if (visible) R.drawable.ic_visibility_off else R.drawable.ic_visibility,
-                    stringResource(if (visible) R.string.auth_hide_password else R.string.auth_show_password),
-                )
-            }
-        },
-        singleLine = true,
-        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = imeAction, autoCorrectEnabled = false),
-        keyboardActions = KeyboardActions(onDone = { onDone() }),
-        modifier = Modifier.fillMaxWidth().semantics {
-            contentType = if (newPassword) ContentType.NewPassword else ContentType.Password
-        },
-    )
+    NoLearning {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onChange,
+            label = { Text(label) },
+            leadingIcon = { Ic(R.drawable.ic_password) },
+            trailingIcon = {
+                IconButton(onClick = { visible = !visible }) {
+                    Ic(
+                        if (visible) R.drawable.ic_visibility_off else R.drawable.ic_visibility,
+                        stringResource(if (visible) R.string.auth_hide_password else R.string.auth_show_password),
+                    )
+                }
+            },
+            singleLine = true,
+            visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = imeAction, autoCorrectEnabled = false),
+            keyboardActions = KeyboardActions(onDone = { onDone() }),
+            modifier = Modifier.fillMaxWidth().semantics {
+                contentType = if (newPassword) ContentType.NewPassword else ContentType.Password
+            },
+        )
+    }
 }
 
 @Composable
@@ -308,33 +311,35 @@ private fun TwoFactor(state: AuthState, vm: AuthViewModel) {
 fun OtpField(code: String, onChange: (String) -> Unit, length: Int = 6) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
-    BasicTextField(
-        value = code,
-        onValueChange = { v -> onChange(v.filter(Char::isDigit).take(length)) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
-        modifier = Modifier.focusRequester(focus).semantics { contentType = ContentType.SmsOtpCode },
-        decorationBox = {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                repeat(length) { i ->
-                    val char = code.getOrNull(i)
-                    val active = i == code.length
-                    Box(
-                        Modifier.weight(1f).height(60.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                            .border(
-                                if (active) 2.dp else 0.dp,
-                                if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                RoundedCornerShape(16.dp),
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(char?.toString() ?: "", style = MaterialTheme.typography.headlineSmall)
+    NoLearning {
+        BasicTextField(
+            value = code,
+            onValueChange = { v -> onChange(v.filter(Char::isDigit).take(length)) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+            modifier = Modifier.focusRequester(focus).semantics { contentType = ContentType.SmsOtpCode },
+            decorationBox = {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    repeat(length) { i ->
+                        val char = code.getOrNull(i)
+                        val active = i == code.length
+                        Box(
+                            Modifier.weight(1f).height(60.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .border(
+                                    if (active) 2.dp else 0.dp,
+                                    if (active) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                    RoundedCornerShape(16.dp),
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(char?.toString() ?: "", style = MaterialTheme.typography.headlineSmall)
+                        }
                     }
                 }
-            }
-        },
-    )
+            },
+        )
+    }
 }
 
 @Composable

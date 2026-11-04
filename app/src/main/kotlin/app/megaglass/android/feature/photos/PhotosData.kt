@@ -22,6 +22,7 @@ import nz.mega.sdk.MegaHandleList
 import nz.mega.sdk.MegaNode
 import nz.mega.sdk.MegaSearchFilter
 import nz.mega.sdk.MegaSet
+import nz.mega.sdk.MegaShare
 import nz.mega.sdk.MegaStringList
 import java.time.Instant
 import java.time.LocalDate
@@ -77,8 +78,8 @@ object PhotosRepository {
     private val graph get() = MegaGlassApp.graph
     private val api: MegaApiJava get() = graph.mega.api
 
-    fun MegaNode.toMedia(api: MegaApiJava): MediaItem =
-        MediaItem(node = toItem(api, withCounts = false), takenAt = mediaTakenAt(mediaCaptureTimeMs, modificationTime))
+    fun MegaNode.toMedia(api: MegaApiJava, access: Int? = null): MediaItem =
+        MediaItem(node = toItem(api, withCounts = false, access = access), takenAt = mediaTakenAt(mediaCaptureTimeMs, modificationTime))
 
     /** Shown in albums: not in the rubbish bin and, unless [showHidden], not hidden. */
     private fun isShown(node: MegaNode, showHidden: Boolean): Boolean =
@@ -116,7 +117,8 @@ object PhotosRepository {
         val context = currentCoroutineContext()
         cancellable { token -> api.search(f, MegaApiJava.ORDER_MEDIATS_DESC, token, null) }
             .asSequence()
-            .map { context.ensureActive(); it.toMedia(api) }
+            // Only Cloud drive nodes: all are own nodes, so no getAccess for each node (PERF-1).
+            .map { context.ensureActive(); it.toMedia(api, MegaShare.ACCESS_OWNER) }
             // The SDK category is by extension; keep the types this app can show.
             .filter { it.node.type == FileType.IMAGE || it.node.type == FileType.VIDEO }
             .sortedByDescending { it.takenAt }

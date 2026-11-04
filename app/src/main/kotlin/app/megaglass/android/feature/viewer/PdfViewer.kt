@@ -51,6 +51,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -77,9 +79,6 @@ import app.megaglass.android.ui.nav.LocalNavigator
 import app.megaglass.android.ui.nav.PdfViewer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -98,16 +97,16 @@ internal fun pdfPageRatio(width: Int, height: Int): Float =
  * Renders PDF pages with the platform PdfRenderer. One page renders at a time (the renderer is
  * not thread-safe); rendered pages stay in a memory cache sized from the app memory class.
  */
-private class PdfDocument(file: File, context: Context, job: Job) {
+private class PdfDocument(file: File, context: Context) {
     private val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
     private val renderer = try { PdfRenderer(fd) } catch (e: Exception) { fd.close(); throw e }
     private val lock = Mutex()
     val pageCount = renderer.pageCount
-    /** Width / height of each page. */
     private var closed = false
-    val ratios: List<Float> = try {
-        // A cancel of [job] stops the scan: a file with very many pages does not continue after Back.
-        (0 until pageCount).map { i -> job.ensureActive(); renderer.openPage(i).use { pdfPageRatio(it.width, it.height) } }
+    /** Width / height of each page. Page 0 gives the placeholder; each page sets its real value at first render (VIEWERS-7). */
+    val ratios: SnapshotStateList<Float> = try {
+        val first = if (pageCount > 0) renderer.openPage(0).use { pdfPageRatio(it.width, it.height) } else 1f
+        List(pageCount) { first }.toMutableStateList()
     } catch (e: Exception) { renderer.close(); fd.close(); throw e }
     private val cache = object : LruCache<Int, Bitmap>(cacheBytes(context)) {
         override fun sizeOf(key: Int, value: Bitmap) = value.allocationByteCount
@@ -122,11 +121,13 @@ private class PdfDocument(file: File, context: Context, job: Job) {
     }
 
     suspend fun render(index: Int, width: Int): Bitmap = withContext(Dispatchers.IO) {
-        val (w, h) = size(index, width)
-        cache.get(index)?.takeIf { it.width >= w }?.let { return@withContext it }
+        cache.get(index)?.takeIf { it.width >= size(index, width).first }?.let { return@withContext it }
         lock.withLock {
             check(!closed) { "PDF is closed" }
             val bitmap = renderer.openPage(index).use { page ->
+                val ratio = pdfPageRatio(page.width, page.height)
+                if (ratios[index] != ratio) ratios[index] = ratio
+                val (w, h) = size(index, width)
                 Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { b ->
                     b.eraseColor(AndroidColor.WHITE)
                     page.render(b, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
@@ -194,12 +195,12 @@ fun PdfViewerScreen(route: PdfViewer) {
     }
 
     var document by remember { mutableStateOf<PdfDocument?>(null) }
-    LaunchedEffect(file) {
+    LaunchedEffect(file, attempt) {
         val f = file ?: return@LaunchedEffect
-        // Opening reads every page size: off the main thread.
+        // Opening parses the file: off the main thread.
         var opened: PdfDocument? = null
         try {
-            withContext(Dispatchers.IO) { opened = catching { PdfDocument(f, context, coroutineContext.job) }.getOrNull() }
+            withContext(Dispatchers.IO) { opened = catching { PdfDocument(f, context) }.getOrNull() }
         } catch (e: CancellationException) {
             // The screen closed after the document opened: nothing else closes it.
             opened?.close()
@@ -297,8 +298,10 @@ private fun PdfPages(doc: PdfDocument, listState: androidx.compose.foundation.la
             },
     ) {
         val density = LocalDensity.current
-        // Render at twice the screen width so that pages stay sharp when zoomed.
-        val renderWidth = with(density) { (maxWidth.toPx() * 2).toInt() }
+        // Screen width at 1x; twice the screen width when zoomed, so that pages stay sharp.
+        // At 1x the page cache then holds several pages (an A4 page at 2x is about 32 MB).
+        val zoomed by remember { derivedStateOf { scale > 1f } }
+        val renderWidth = with(density) { (maxWidth.toPx() * if (zoomed) 2 else 1).toInt() }
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().graphicsLayer {

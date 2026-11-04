@@ -221,7 +221,7 @@ fun TextInputDialog(
     if (!rememberDialogAllowed()) return
     val end = if (selectBaseName && initial.contains('.')) initial.lastIndexOf('.') else initial.length
     var value by remember { mutableStateOf(TextFieldValue(initial, TextRange(0, end))) }
-    val error = validate(value.text)
+    val error = validate(value.text.trim())
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     val submit = { if (error == null) { onConfirm(value.text.trim()); onDismiss() } }
@@ -229,21 +229,24 @@ fun TextInputDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            OutlinedTextField(
-                value = value,
-                onValueChange = { value = it },
-                label = { Text(label) },
-                singleLine = true,
-                isError = error != null && error.isNotEmpty(),
-                supportingText = if (!error.isNullOrEmpty()) { { Text(error) } } else null,
-                visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = if (password) KeyboardType.Password else keyboardType,
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(onDone = { submit() }),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus),
-            )
+            val field = @Composable {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    label = { Text(label) },
+                    singleLine = true,
+                    isError = error != null && error.isNotEmpty(),
+                    supportingText = if (!error.isNullOrEmpty()) { { Text(error) } } else null,
+                    visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = if (password && keyboardType == KeyboardType.Text) KeyboardType.Password else keyboardType,
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { submit() }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                )
+            }
+            if (password) NoLearning(field) else field()
         },
         confirmButton = { Button(onClick = submit, enabled = error == null) { Text(confirmLabel) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },

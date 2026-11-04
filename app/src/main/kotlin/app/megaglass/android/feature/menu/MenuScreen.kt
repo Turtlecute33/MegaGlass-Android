@@ -57,6 +57,8 @@ import app.megaglass.android.ui.nav.Shared
 import app.megaglass.android.ui.nav.Syncs
 import app.megaglass.android.ui.nav.Transfers
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -67,7 +69,9 @@ fun MenuScreen(vm: AccountViewModel = viewModel()) {
     val graph = MegaGlassApp.graph
     val nav = LocalNavigator.current
     val account by vm.state.collectAsStateWithLifecycle()
-    val transfers by graph.transfers.state.collectAsStateWithLifecycle()
+    // Only the count: the transfer state changes many times each second.
+    val active by remember { graph.transfers.state.map { it.active.size }.distinctUntilChanged() }
+        .collectAsStateWithLifecycle(0)
     val offline by graph.offline.handles.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var unreadAlerts by remember { mutableIntStateOf(0) }
@@ -86,7 +90,6 @@ fun MenuScreen(vm: AccountViewModel = viewModel()) {
         merge(graph.mega.alerts, graph.mega.contactRequests).collect { refresh() }
     }
 
-    val active = transfers.active.size
     val filesRows = listOf(
         SettingRow.Link(R.drawable.ic_photo_library, stringResource(R.string.tab_photos)) { nav.navigate(Photos) },
         SettingRow.Link(R.drawable.ic_folder_shared, stringResource(R.string.shared_title)) { nav.navigate(Shared()) },
