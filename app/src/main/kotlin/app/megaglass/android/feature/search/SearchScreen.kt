@@ -167,10 +167,11 @@ class SearchViewModel(private val parent: Long) : ViewModel() {
 
     fun retry() = trigger.update { it + 1 }
 
-    fun setQuery(q: String) = _state.update { it.copy(query = q, results = null, selection = emptySet()) }
-    fun setType(t: TypeFilter) = _state.update { it.copy(type = t, results = null, selection = emptySet()) }
-    fun setDate(d: DateFilter) = _state.update { it.copy(date = d, results = null, selection = emptySet()) }
-    fun setInFolder(v: Boolean) = _state.update { it.copy(inFolder = v, results = null, selection = emptySet()) }
+    // The same value starts no new search (distinctUntilChanged), so it must not clear the results.
+    fun setQuery(q: String) = _state.update { if (it.query == q) it else it.copy(query = q, results = null, selection = emptySet()) }
+    fun setType(t: TypeFilter) = _state.update { if (it.type == t) it else it.copy(type = t, results = null, selection = emptySet()) }
+    fun setDate(d: DateFilter) = _state.update { if (it.date == d) it else it.copy(date = d, results = null, selection = emptySet()) }
+    fun setInFolder(v: Boolean) = _state.update { if (it.inFolder == v) it else it.copy(inFolder = v, results = null, selection = emptySet()) }
     fun toggle(item: NodeItem) = _state.update {
         it.copy(selection = if (item.handle in it.selection) it.selection - item.handle else it.selection + item.handle)
     }
