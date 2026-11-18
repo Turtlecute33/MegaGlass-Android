@@ -203,10 +203,13 @@ class NodeRepository(private val mega: Mega) {
         batched(selected) { node -> api.await { remove(node, it) } }
     }
 
-    /** Moves items out of the Rubbish bin to where they were, or to Cloud drive. */
+    /** Moves items out of the Rubbish bin to where they were, or to Cloud drive; nothing when one of them is no longer there. */
     suspend fun restore(handles: Collection<Long>) = io {
+        val selected = handles.distinct().map(::require)
+        // Restored meanwhile on another device: a second move would take the live item away.
+        if (selected.any { !api.isInRubbish(it) }) throw MegaException(MegaError.API_EARGS, "An item is no longer in the rubbish bin")
         val used = HashMap<Long, MutableSet<String>>()
-        val planned = handles.distinct().map(::require).map { node ->
+        val planned = selected.map { node ->
             val original = api.getNodeByHandle(node.restoreHandle)
             val dest = original?.takeIf { !api.isInRubbish(it) } ?: require(rootHandle)
             // Into an incoming share the SDK uses copy-delete, which replaces a file of the same
