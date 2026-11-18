@@ -62,7 +62,7 @@
     <string name="settings_on_device">On this device</string>
     <string name="settings_clear_cache">Clear cache</string>
     <string name="settings_cache_summary">Thumbnails and temporary files: %1$s</string>
-    <string name="settings_clear_cache_text">Thumbnails and temporary copies are deleted. They download again when needed.</string>
+    <string name="settings_clear_cache_text">Thumbnails and temporary copies are deleted. They download again when needed. Failed uploads cannot be retried after this.</string>
     <string name="settings_cache_kept">Temporary copies are kept while files download to them. Clear the cache again when the downloads end.</string>
     <string name="settings_clear_offline">Remove offline files</string>
     <string name="settings_offline_summary">Files kept on this device: %1$s</string>
