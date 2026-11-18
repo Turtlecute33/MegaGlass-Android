@@ -129,9 +129,10 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                 withContext(Dispatchers.IO) { graph.transfers.cancelUploads(Purpose.CAMERA) { !isContentUri(it) } }
                 val inQueue = graph.transfers.uploadingPaths()
                 val handled = prefs.handled
+                // The folder can go away after ensureFolder: try again later, and keep the marker.
                 val selection = withContext(Dispatchers.IO) {
                     selectNew(media, folder, settings.cuKeepFileNames, prefs.marker, handled, inQueue)
-                }
+                } ?: return Result.retry()
                 val pending = selection.upload
                 val busy = selection.busy
 
@@ -238,13 +239,14 @@ class CameraUploadWorker(context: Context, params: WorkerParameters) : Coroutine
      * Media that is not in the cloud yet, with the name to upload it under. Media in [handled]
      * was uploaded or skipped by an earlier run. Without that record (before the first run),
      * media up to [marker] counts as handled. Other media up to [marker] is new to this app
-     * (published late), but is skipped when a copy is in the Rubbish bin.
+     * (published late), but is skipped when a copy is in the Rubbish bin. Null when [folder] is
+     * not in the node tree.
      */
     private fun selectNew(
         media: List<Media>, folder: Long, keepNames: Boolean, marker: Long, handled: Set<String>?, inQueue: Set<String>,
-    ): Selection {
+    ): Selection? {
         val api = MegaGlassApp.graph.mega.api
-        val parent = api.getNodeByHandle(folder) ?: return Selection(emptyList(), emptyList(), emptyList(), emptyList())
+        val parent = api.getNodeByHandle(folder) ?: return null
         val used = HashSet<String>()
         val out = ArrayList<Upload>()
         val skipped = ArrayList<Media>()
