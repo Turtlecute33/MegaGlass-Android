@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
         intent ?: return
         val uri = intent.data
         if (intent.action == Intent.ACTION_VIEW && uri != null && isMegaLink(uri.toString()) &&
-            (listOf("recover", "confirm", "verify").any { uri.fragment.orEmpty().startsWith(it) } ||
+            (listOf("recover", "confirm", "verify", "cancel").any { uri.fragment.orEmpty().startsWith(it) } ||
                 listOf("/recover", "/register", "/confirm").any { uri.path.orEmpty().startsWith(it) })) {
             // These account flows are implemented by MEGA's website. The root-path link filter
             // also matches them, so explicitly exclude this activity to prevent a redirect loop.
