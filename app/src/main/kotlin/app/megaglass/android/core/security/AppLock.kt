@@ -185,7 +185,8 @@ class AppLock(private val settings: Settings) : DefaultLifecycleObserver {
                 lockFailures = 0,
             )
         }
-        _locked.value = false
+        // Only turning the lock off unlocks: a lock that engaged during a change must stay.
+        if (value == null) _locked.value = false
     }
 
     private fun derive(passcode: String, salt: ByteArray): ByteArray {
