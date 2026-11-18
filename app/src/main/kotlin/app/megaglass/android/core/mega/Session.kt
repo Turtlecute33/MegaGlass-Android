@@ -111,6 +111,11 @@ class Session(
         }
     }
 
+    /** The next [start] logs out on this device instead of a resume (as after a failed cleanup). */
+    fun discardSaved() {
+        cleanupRequired = true
+    }
+
     /** Resumes the saved session, if there is one. Safe to call more than once. */
     @Synchronized
     fun start() {

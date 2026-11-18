@@ -3,12 +3,14 @@ package app.megaglass.android.core.storage
 import app.megaglass.android.core.util.catching
 
 import android.content.Context
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.preferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.CoroutineScope
@@ -68,7 +70,13 @@ data class AppSettings(
     val startPage: StartPage = StartPage.HOME,
 )
 
-private val Context.dataStore by preferencesDataStore(name = "settings")
+/** Set when a corrupt settings file was replaced with empty settings: the passcode is gone. */
+internal val SETTINGS_LOST = booleanPreferencesKey("settings_lost")
+
+/** Without a handler, a corrupt file throws at each start, before any screen (a crash loop). */
+internal val settingsCorruptionHandler = ReplaceFileCorruptionHandler { preferencesOf(SETTINGS_LOST to true) }
+
+private val Context.dataStore by preferencesDataStore(name = "settings", corruptionHandler = settingsCorruptionHandler)
 
 class Settings(context: Context, scope: CoroutineScope) {
 
@@ -156,9 +164,18 @@ class Settings(context: Context, scope: CoroutineScope) {
      * Current settings. The first value is read synchronously at startup (a few hundred bytes),
      * so that the theme and the lock are correct on the first frame.
      */
+    private val first = runBlocking { store.data.first() }
+
+    /** The settings file was corrupt and is now empty (see MegaGlassApp). */
+    val lost: Boolean = first[SETTINGS_LOST] == true
+
     val state: StateFlow<AppSettings> = store.data
         .map { it.toSettings() }
-        .stateIn(scope, SharingStarted.Eagerly, runBlocking { store.data.first().toSettings() })
+        .stateIn(scope, SharingStarted.Eagerly, first.toSettings())
+
+    suspend fun clearLost() {
+        store.edit { it.remove(SETTINGS_LOST) }
+    }
 
     val current: AppSettings get() = state.value
 

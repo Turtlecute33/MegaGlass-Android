@@ -10,6 +10,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import app.megaglass.android.core.FileOpener
 import app.megaglass.android.core.camera.CameraUploads
+import app.megaglass.android.core.mega.SessionState
 import app.megaglass.android.feature.contacts.ContactDirectory
 import app.megaglass.android.feature.photos.PhotosRepository
 import app.megaglass.android.feature.viewer.PreviewCache
@@ -177,6 +178,15 @@ class MegaGlassApp : Application(), SingletonImageLoader.Factory {
                 graph.scope.launch(Dispatchers.IO) { graph.mega.holdSyncsWithoutAccess() }
             }
         })
+        // A corrupt settings file is now empty, so the passcode is gone: the saved session must
+        // not open without it. Log out on this device, as "Clear data" would.
+        if (graph.settings.lost) {
+            graph.session.discardSaved()
+            graph.scope.launch {
+                graph.session.state.first { it == SessionState.LoggedOut }
+                graph.settings.clearLost()
+            }
+        }
         graph.session.start()
     }
 
