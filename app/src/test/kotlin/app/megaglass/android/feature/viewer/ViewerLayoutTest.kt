@@ -22,6 +22,20 @@ class ViewerLayoutTest {
         assertEquals(line, parts.joinToString(""))
     }
 
+    @Test fun lineBreaksAreTheSameAsStringLines() {
+        for (text in listOf("", "a", "a\n", "a\r\nb\rc\n", "\n\n", "a\r", "x".repeat(9) + "\n" + "y".repeat(3))) {
+            assertEquals(text.lines().flatMap { it.chunked(4) .ifEmpty { listOf("") } }, displayLines(text, max = 4))
+        }
+    }
+
+    @Test fun manyShortLinesKeepOnlyOffsets() {
+        val text = "a\n".repeat(1_000_000)
+        val starts = displayLineStarts(text)
+        assertEquals(1_000_001, starts.size)
+        assertEquals("a", displayLine(text, starts[999_999]))
+        assertEquals("", displayLine(text, starts[1_000_000]))
+    }
+
     @Test fun splitKeepsSurrogatePairs() {
         val text = "a".repeat(3) + "😀" + "b"
         val parts = displayLines(text, max = 4)

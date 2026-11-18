@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
@@ -84,24 +83,47 @@ import java.nio.charset.CodingErrorAction
 private const val EDIT_LIMIT = 512L * 1024
 
 /**
- * Lines for the read-only view. Very long lines (minified code) split into parts of [max]
- * characters: one Text with millions of characters freezes the screen while it is measured.
+ * Start offsets of the lines of the read-only view, with the line breaks of [String.lines]. Very
+ * long lines (minified code) split into parts of [max] characters: one Text with millions of
+ * characters freezes the screen while it is measured. Offsets, not strings: a 5 MiB file of short
+ * lines would make millions of objects and can use all the memory.
  */
-internal fun displayLines(text: String, max: Int = 4096): List<String> {
+internal fun displayLineStarts(text: String, max: Int = 4096): IntArray {
     require(max > 1)
-    val out = ArrayList<String>()
-    for (line in text.lines()) {
-        var start = 0
-        while (line.length - start > max) {
-            // Keep a surrogate pair together.
-            val end = if (Character.isHighSurrogate(line[start + max - 1])) start + max - 1 else start + max
-            out += line.substring(start, end)
-            start = end
+    var starts = IntArray(256)
+    var count = 0
+    var lineStart = 0
+    while (true) {
+        var lineEnd = lineStart
+        while (lineEnd < text.length && text[lineEnd] != '\n' && text[lineEnd] != '\r') lineEnd++
+        var start = lineStart
+        while (true) {
+            if (count == starts.size) starts = starts.copyOf(count * 2)
+            starts[count++] = start
+            if (lineEnd - start <= max) break
+            start = splitEnd(text, start, max)
         }
-        out += line.substring(start)
+        if (lineEnd == text.length) break
+        lineStart = lineEnd + if (text[lineEnd] == '\r' && lineEnd + 1 < text.length && text[lineEnd + 1] == '\n') 2 else 1
     }
-    return out
+    return starts.copyOf(count)
 }
+
+/** The part of the read-only view that starts at [start], one of [displayLineStarts]. */
+internal fun displayLine(text: String, start: Int, max: Int = 4096): String {
+    val limit = minOf(text.length, start + max + 1)
+    var end = start
+    while (end < limit && text[end] != '\n' && text[end] != '\r') end++
+    return text.substring(start, if (end - start > max) splitEnd(text, start, max) else end)
+}
+
+/** All parts as text (for tests: the view keeps only the offsets). */
+internal fun displayLines(text: String, max: Int = 4096): List<String> =
+    displayLineStarts(text, max).map { displayLine(text, it, max) }
+
+/** Keeps a surrogate pair together. */
+private fun splitEnd(text: String, start: Int, max: Int): Int =
+    if (Character.isHighSurrogate(text[start + max - 1])) start + max - 1 else start + max
 
 /** The text, and true when the file is valid UTF-8. Files in other encodings open read-only, so that a save cannot damage them. */
 private fun readText(file: File): Pair<String, Boolean> {
@@ -307,10 +329,10 @@ fun TextEditorScreen(route: TextEditor) {
                     modifier = Modifier.fillMaxSize().padding(16.dp),
                 )
                 else -> {
-                    val lines by produceState(emptyList<String>(), t) { value = withContext(Dispatchers.Default) { displayLines(t) } }
+                    val starts by produceState(IntArray(0), t) { value = withContext(Dispatchers.Default) { displayLineStarts(t) } }
                     SelectionContainer {
                         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
-                            itemsIndexed(lines) { _, line -> Text(line, style = style) }
+                            items(starts.size) { i -> Text(displayLine(t, starts[i]), style = style) }
                         }
                     }
                 }
