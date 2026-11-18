@@ -322,8 +322,10 @@ class Mega(context: Context) {
      * which has the names of all files, and the caches of the public folders that were open.
      */
     suspend fun clearCaches() {
+        // Before the lock: an open folder link sees the new owner and stops its load, which can
+        // hold the lock for a long time (a large link or no network).
+        folderOwner.value++
         folderSessionLock.withLock {
-            folderOwner.value++
             if (folderApiInstance.isInitialized() && folderApi.isLoggedIn != 0) {
                 withTimeoutOrNull(LOGOUT_TIMEOUT_MS) { catching { folderApi.await { localLogout(it) } } }
             }
