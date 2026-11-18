@@ -15,6 +15,7 @@ import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
@@ -186,12 +187,15 @@ object CameraUploads {
 
     /** Runs a scan and upload now (expedited when quota allows). */
     fun uploadNow(context: Context, s: AppSettings) {
-        val now = OneTimeWorkRequestBuilder<CameraUploadWorker>()
-            .setConstraints(constraints(s, triggers = false))
-            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-            .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(NOW, ExistingWorkPolicy.KEEP, now)
+        WorkManager.getInstance(context).enqueueUniqueWork(NOW, ExistingWorkPolicy.KEEP, nowRequest(s))
     }
+
+    /** Expedited work allows only network and storage constraints: with "Charging only", build() throws. */
+    internal fun nowRequest(s: AppSettings): OneTimeWorkRequest =
+        OneTimeWorkRequestBuilder<CameraUploadWorker>()
+            .setConstraints(constraints(s, triggers = false))
+            .apply { if (!s.cuRequireCharging) setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST) }
+            .build()
 
     /** Stops all camera uploads work and forgets the scan state (it belongs to the account). */
     fun cancel(context: Context) {
