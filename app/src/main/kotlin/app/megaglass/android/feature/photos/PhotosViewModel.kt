@@ -176,6 +176,10 @@ class AlbumViewModel(private val id: Long, private val isSystem: Boolean, privat
         load()
         viewModelScope.launch { graph.mega.sets.whileObserved(_state.subscriptionCount).debounce(300).collect { load() } }
         viewModelScope.launch { graph.nodes.changes.whileObserved(_state.subscriptionCount).debounce(1000).conflate().collect { loadJob?.join(); load() } }
+        // Hidden items must go when "Show hidden" is turned off, as in the timeline.
+        viewModelScope.launch {
+            graph.settings.state.distinctUntilChangedBy { it.showHidden }.drop(1).collect { load() }
+        }
     }
 
     fun load() {
