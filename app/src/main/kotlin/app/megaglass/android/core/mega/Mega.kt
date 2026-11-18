@@ -336,7 +336,8 @@ class Mega(context: Context) {
 
     /**
      * Deletes the SDK files of public folder links: their node cache has the names of all files
-     * in the link (MEGAGLASS-PRIV-002). Also deletes the decrypted copies of their files. Call only
+     * in the link (MEGAGLASS-PRIV-002). Also deletes the decrypted images and previews of their
+     * files ("Open with" copies stay in the open cache, which has a size limit). Call only
      * with [folderSessionLock] held and [folderApi] logged out.
      */
     fun clearFolderCache() {

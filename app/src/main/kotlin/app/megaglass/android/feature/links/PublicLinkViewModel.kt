@@ -489,6 +489,16 @@ class PublicLinkViewModel(rawUrl: String) : ViewModel() {
     }
 
     override fun onCleared() {
+        // The decrypted previews and thumbnails of a file or album link must not stay after it
+        // closes (folder links: clearFolderCache below).
+        val copies = (listOfNotNull(fileNode) + albumNodes.values).map { MegaApiJava.handleToBase64(it.handle) }
+        if (copies.isNotEmpty()) graph.scope.launch(Dispatchers.IO) {
+            copies.forEach { name ->
+                File(cacheDir, name).deleteRecursively()
+                File(cacheDir, "$name.t.jpg").delete()
+                File(cacheDir, "$name.p.jpg").delete()
+            }
+        }
         if (usedFolderApi) graph.scope.launch {
             graph.mega.folderSessionLock.withLock {
                 if (folderOwner == graph.mega.folderOwner.value) {
