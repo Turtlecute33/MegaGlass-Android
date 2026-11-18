@@ -128,6 +128,9 @@ records the commit that it was built from. Commit (and tag) the version change f
   to MEGA, it does not keep the journey ID, and it does not tag new nodes for analytics.
 - `patches/mega-sdk-stream-no-cors.patch`: the local stream server does not send
   `Access-Control-Allow-Origin: *`, so a web page cannot read the decrypted stream.
+- `patches/mega-sdk-upload-new-key.patch`: when a cached upload resumes and the local file has
+  changed, the SDK makes a new key and IV, so the two contents are not encrypted with one
+  keystream.
 - `patches/mega-sdk-user-agent.patch`: the SDK puts only "Android" in the user agent, and not
   the kernel release and the CPU architecture.
 - libmega.so exports only its JNI functions (`scripts/libmega.map`), and its relative
