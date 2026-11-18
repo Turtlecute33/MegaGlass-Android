@@ -180,7 +180,7 @@
     <string name="lock_biometric_reset">Biometric unlock is off. Enter your passcode, then turn it on again in Settings.</string>
 
     <!-- About -->
-    <string name="about_privacy">MegaGlass has no ads and no third-party analytics. The MEGA SDK sends some diagnostic events, such as errors and timings, to MEGA. Files are encrypted on this device before they are uploaded. The app connects only to MEGA.</string>
+    <string name="about_privacy">MegaGlass has no ads and no third-party analytics. No diagnostic events or error reports go to MEGA. Files are encrypted on this device before they are uploaded. The app connects only to MEGA.</string>
     <string name="about_versions">Versions</string>
     <string name="about_app_version">MegaGlass</string>
     <string name="about_sdk_version">MEGA SDK</string>
