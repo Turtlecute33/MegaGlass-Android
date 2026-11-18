@@ -250,6 +250,9 @@ class Session(
         startJob?.cancelAndJoin()
         authJob?.cancelAndJoin()
         lifecycle.withLock {
+            // Forget the saved session first: if the process dies during the server logout (up to
+            // 15 s), the next start must not resume it. clearLocal tries again and shows a failure.
+            catching { store.clear() }
             // Without a login in the SDK (for example after a failed resume) a logout cannot reach the server.
             val remote = if (localOnly || api.isLoggedIn == 0) null
             else withTimeoutOrNull(LOGOUT_TIMEOUT_MS) { catching { api.await { logout(it) } } }
