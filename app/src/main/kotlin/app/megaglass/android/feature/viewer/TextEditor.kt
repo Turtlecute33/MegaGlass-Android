@@ -130,6 +130,8 @@ class TextEditorModel : ViewModel() {
     val editorState = TextFieldState()
     var original by mutableStateOf("")
     var saving by mutableStateOf(false)
+    /** In the ViewModel: after a return to the editor, Back must ask before the text compares again. */
+    var dirty by mutableStateOf(false)
     /** Set by Save in the leave dialog: the editor closes when the save succeeds. */
     var closeAfterSave = false
     /** The entry left the back stack: a save that ends later must not close another editor of the same file. */
@@ -161,7 +163,7 @@ fun TextEditorScreen(route: TextEditor) {
     var progress by remember { mutableFloatStateOf(0f) }
     var saving by m::saving
     var attempt by remember { mutableIntStateOf(0) }
-    var dirty by remember { mutableStateOf(false) }
+    var dirty by m::dirty
     var askDiscard by remember { mutableStateOf(false) }
 
     LaunchedEffect(route, attempt) {
