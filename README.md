@@ -120,6 +120,9 @@ records the commit that it was built from. Commit (and tag) the version change f
 - `patches/mega-sdk-android-request-size.patch`: the SDK limits each transfer request to 2 MB on
   Android. The patch scales the limit with device RAM (up to 16 MB, the desktop value). This
   decreases the overhead of each request on fast connections.
+- `patches/mega-sdk-android-copy-errors.patch`: a copy through the Android file wrapper fails
+  when a read, write or truncate fails. A rename that falls back to copy and delete then keeps the
+  source.
 - `patches/mega-sdk-android-scan-size.patch`: the sync scan gives each file its own size, not
   the size of its folder. Before, the scan could not reuse a fingerprint and read each file again
   at each scan.

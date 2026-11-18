@@ -1,0 +1,46 @@
+diff --git a/src/android/androidFileSystem.cpp b/src/android/androidFileSystem.cpp
+index 9777223..a69a298 100644
+--- a/src/android/androidFileSystem.cpp
++++ b/src/android/androidFileSystem.cpp
+@@ -2738,9 +2738,12 @@ bool AndroidFileSystemAccess::copy(const LocalPath& oldname,
+     }
+ 
+     {
++        // MegaGlass: a failed truncate, read or write fails the copy. The caller deletes the
++        // source after a copy that succeeds, so a partial copy must not count as one.
+         if (!newFile->ftruncate(0))
+         {
+             LOG_warn << "Failed to truncate destination before copy: " << newname;
++            return false;
+         }
+         constexpr uint32_t BUFFER_SIZE{16384};
+         unsigned char buffer[BUFFER_SIZE];
+@@ -2756,18 +2759,24 @@ bool AndroidFileSystemAccess::copy(const LocalPath& oldname,
+                 bytesToRead = static_cast<unsigned>(oldFile->size) - static_cast<unsigned>(pos);
+                 moreData = false;
+             }
++            if (!bytesToRead) break;
+             followRead = oldFile->frawread(static_cast<byte*>(buffer),
+                                            bytesToRead,
+                                            static_cast<m_off_t>(pos),
+                                            true,
+                                            FSLogging::logOnError);
+-            newFile->fwrite(static_cast<const byte*>(buffer),
+-                            bytesToRead,
+-                            static_cast<m_off_t>(pos));
++            if (!followRead ||
++                !newFile->fwrite(static_cast<const byte*>(buffer),
++                                 bytesToRead,
++                                 static_cast<m_off_t>(pos)))
++            {
++                LOG_warn << "Unable to read or write, copy failed: " << newname;
++                return false;
++            }
+ 
+             pos += bytesToRead;
+         }
+-        while (followRead && moreData);
++        while (moreData);
+         oldFile->closef();
+         newFile->closef();
+         LOG_verbose << "Copying via read/write";
