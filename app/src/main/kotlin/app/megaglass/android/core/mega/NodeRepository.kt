@@ -162,7 +162,12 @@ class NodeRepository(private val mega: Mega) {
     }
 
     suspend fun copy(handles: Collection<Long>, target: Long) = io {
-        copyNodes(handles.distinct().map(::require), require(target))
+        copyNodes(topLevel(handles).map(::require), require(target))
+    }
+
+    /** [handles] without the items inside a folder that is also in [handles] (see [withoutNested]). */
+    suspend fun topLevel(handles: Collection<Long>): List<Long> = io {
+        withoutNested(handles.distinct()) { api.getNodeByHandle(it)?.parentHandle }
     }
 
     /** Copies [nodes] into [dest] without replacing an item there. Also public (link) nodes. */
@@ -178,7 +183,7 @@ class NodeRepository(private val mega: Mega) {
     suspend fun moveToRubbish(handles: Collection<Long>) = io {
         val dest = require(rubbishHandle)
         val used = HashSet<String>()
-        val planned = handles.distinct().map(::require).map { node ->
+        val planned = topLevel(handles).map(::require).map { node ->
             // Across share boundaries the SDK uses copy-delete, which can overwrite a file in the
             // target. Preserve existing trash entries with a distinct target name. An ordinary
             // same-account move (null) retains the node and permits duplicate names.
@@ -198,14 +203,14 @@ class NodeRepository(private val mega: Mega) {
 
     /** Deletes items in the Rubbish bin; nothing when one of them is no longer there (restored meanwhile). */
     suspend fun deleteFromRubbish(handles: Collection<Long>) = io {
-        val selected = handles.distinct().map(::require)
+        val selected = topLevel(handles).map(::require)
         if (selected.any { !api.isInRubbish(it) }) throw MegaException(MegaError.API_EARGS, "An item is no longer in the rubbish bin")
         batched(selected) { node -> api.await { remove(node, it) } }
     }
 
     /** Moves items out of the Rubbish bin to where they were, or to Cloud drive; nothing when one of them is no longer there. */
     suspend fun restore(handles: Collection<Long>) = io {
-        val selected = handles.distinct().map(::require)
+        val selected = topLevel(handles).map(::require)
         // Restored meanwhile on another device: a second move would take the live item away.
         if (selected.any { !api.isInRubbish(it) }) throw MegaException(MegaError.API_EARGS, "An item is no longer in the rubbish bin")
         val used = HashMap<Long, MutableSet<String>>()

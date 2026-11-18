@@ -200,7 +200,7 @@ class NodeActionsState internal constructor(
             NodeAction.VERSIONS -> navigator.navigate(Versions(items.first().handle))
             NodeAction.DOWNLOAD -> storage.ensure {
                 launch {
-                    graph.transfers.download(handles, graph.files.downloadDir(graph.settings.current))
+                    graph.transfers.download(nodes.topLevel(handles), graph.files.downloadDir(graph.settings.current))
                     messenger.show(appContext.resources.getQuantityString(R.plurals.download_started, items.size, items.size))
                 }
                 onDone()
@@ -247,7 +247,9 @@ class NodeActionsState internal constructor(
     }
 
     private fun moveToRubbish(items: List<NodeItem>) = launch {
-        val parents = items.associate { it.handle to it.parentHandle }
+        // Undo moves back only what moved: an item inside a moved folder stays in it.
+        val top = nodes.topLevel(items.map { it.handle }).toSet()
+        val parents = items.filter { it.handle in top }.associate { it.handle to it.parentHandle }
         nodes.moveToRubbish(parents.keys)
         onDone()
         val text = appContext.resources.getQuantityString(R.plurals.moved_to_rubbish, items.size, items.size)
