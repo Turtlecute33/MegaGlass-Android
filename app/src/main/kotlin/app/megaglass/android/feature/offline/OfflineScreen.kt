@@ -63,6 +63,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import nz.mega.sdk.MegaApiJava
 import java.io.File
+import java.io.IOException
 
 /** Files kept on this device. [path] is a folder inside an offline folder, or null for the top level. */
 @Composable
@@ -132,9 +133,18 @@ fun OfflineScreen(path: String?) {
                                         val saved = withContext(Dispatchers.IO) {
                                             catching {
                                                 val dir = graph.files.downloadDir(graph.settings.current)
-                                                val target = File(dir, availableName(localFileName(entry.name), entry.isFolder) { File(dir, it).exists() })
+                                                // Reserve the name first: an item that another save or a download makes
+                                                // under the same name in the meantime is not ours to delete.
+                                                val target = File(dir, availableName(localFileName(entry.name), entry.isFolder) {
+                                                    val f = File(dir, it)
+                                                    when {
+                                                        f.exists() -> true
+                                                        if (entry.isFolder) f.mkdir() else f.createNewFile() -> false
+                                                        else -> throw IOException("Cannot create $f")
+                                                    }
+                                                })
                                                 // A failed copy leaves no partial file under the real name.
-                                                runCatching { entry.file.copyRecursively(target) }.onFailure { target.deleteRecursively() }.getOrThrow()
+                                                runCatching { entry.file.copyRecursively(target, overwrite = true) }.onFailure { target.deleteRecursively() }.getOrThrow()
                                                 dir
                                             }.getOrNull()
                                         }
