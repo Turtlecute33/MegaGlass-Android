@@ -120,6 +120,9 @@ records the commit that it was built from. Commit (and tag) the version change f
 - `patches/mega-sdk-android-request-size.patch`: the SDK limits each transfer request to 2 MB on
   Android. The patch scales the limit with device RAM (up to 16 MB, the desktop value). This
   decreases the overhead of each request on fast connections.
+- `patches/mega-sdk-android-scan-size.patch`: the sync scan gives each file its own size, not
+  the size of its folder. Before, the scan could not reuse a fingerprint and read each file again
+  at each scan.
 - `patches/mega-sdk-device-id.patch`: adds `MegaApi::setStatsId`, so that the app can give the
   SDK a random device ID. The SDK does not read the Android ID.
 - `patches/mega-sdk-java-factory-ownership.patch`: marks allocating JNI factories and album

@@ -1,0 +1,14 @@
+diff --git a/src/android/androidFileSystem.cpp b/src/android/androidFileSystem.cpp
+index e226706..9777223 100644
+--- a/src/android/androidFileSystem.cpp
++++ b/src/android/androidFileSystem.cpp
+@@ -2550,7 +2550,8 @@ ScanResult AndroidFileSystemAccess::directoryScan(const LocalPath& targetPath,
+         }
+ 
+         result.type = FILENODE;
+-        result.fingerprint.size = metadata.st_size;
++        // MegaGlass: the size of this file, not of the folder (as in the posix scan).
++        result.fingerprint.size = childStat.st_size;
+ 
+         // Check if existing fingerprint can be reused (same inode, mtime, size).
+         auto it = known.find(result.localname);
