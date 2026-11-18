@@ -241,7 +241,11 @@ class LocalFiles(private val context: Context) {
             (resolver.openOutputStream(uri) ?: throw IOException("Cannot save the photo")).use { out ->
                 photo.inputStream().use { it.copyTo(out) }
             }
-            resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+            // A row that stays pending is not in the gallery, and MediaStore deletes it later:
+            // the capture must stay then.
+            if (resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null) != 1) {
+                throw IOException("Cannot save the photo")
+            }
         } catch (e: Exception) {
             catching { resolver.delete(uri, null, null) }
             throw e
