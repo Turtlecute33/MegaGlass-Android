@@ -18,6 +18,8 @@
     <string name="settings_security_summary">Passcode, two-factor authentication, sessions</string>
     <string name="settings_account_summary">Profile, plan, storage use</string>
     <string name="settings_about_summary">Version %1$s, licences</string>
+    <string name="settings_support">Support</string>
+    <string name="settings_donate">Donate bitcoin</string>
 
     <!-- Appearance -->
     <string name="settings_theme">Theme</string>

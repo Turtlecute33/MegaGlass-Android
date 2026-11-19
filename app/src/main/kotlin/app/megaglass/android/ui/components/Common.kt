@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.os.PersistableBundle
@@ -62,6 +63,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -339,6 +341,13 @@ fun copySensitive(context: Context, text: String, expire: Boolean = false) {
         clearSecretClip(app, id)
         WorkManager.getInstance(app).cancelUniqueWork(work)
     }, SECRET_CLIP_MS)
+}
+
+/** Opens an https [url] in the browser. With no browser, nothing happens. */
+fun openWebLink(context: Context, url: String) {
+    val uri = url.toUri()
+    if (uri.scheme != "https") return
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
 }
 
 /** Clears clip [id]. In the background the clipboard cannot be read (null): clear it anyway, the secret must not stay. */

@@ -66,6 +66,7 @@ import app.megaglass.android.core.util.Format
 import app.megaglass.android.ui.components.ConfirmDialog
 import app.megaglass.android.ui.components.Ic
 import app.megaglass.android.ui.components.SectionHeader
+import app.megaglass.android.ui.components.openWebLink
 import app.megaglass.android.ui.components.rememberDialogAllowed
 import app.megaglass.android.ui.components.rememberStorageAccess
 import app.megaglass.android.ui.nav.Account
@@ -92,6 +93,7 @@ private fun updateSettings(transform: (AppSettings) -> AppSettings) {
 @Composable
 fun SettingsScreen() {
     val nav = LocalNavigator.current
+    val context = LocalContext.current
     val general = listOf(
         SettingRow.Link(R.drawable.ic_palette, stringResource(R.string.settings_appearance), summary = stringResource(R.string.settings_appearance_summary)) {
             nav.navigate(SettingsAppearance)
@@ -122,12 +124,22 @@ fun SettingsScreen() {
             nav.navigate(SettingsAbout)
         },
     )
+    // The browser opens these links; the app does not connect to these hosts.
+    val support = listOf(
+        SettingRow.Link(R.drawable.ic_currency_bitcoin, stringResource(R.string.settings_donate), summary = "btcpay.priorato.org") {
+            openWebLink(context, DONATE_URL)
+        },
+        SettingRow.Link(R.drawable.ic_alternate_email, "X", summary = "@turtlecute33") { openWebLink(context, X_URL) },
+        SettingRow.Link(R.drawable.ic_hub, "Nostr", summary = "turtlecute@primal.net") { openWebLink(context, NOSTR_URL) },
+    )
     val generalTitle = stringResource(R.string.settings_general)
     val privacyTitle = stringResource(R.string.settings_privacy)
+    val supportTitle = stringResource(R.string.settings_support)
     SettingsScaffold(title = stringResource(R.string.settings_title)) {
         settingsGroup(generalTitle, general)
         settingsGroup(privacyTitle, privacy)
         settingsGroup(null, about)
+        settingsGroup(supportTitle, support)
     }
 }
 
@@ -530,3 +542,8 @@ fun AboutScreen() {
         )
     }
 }
+
+private const val DONATE_URL =
+    "https://btcpay.priorato.org/api/v1/invoices?storeId=31ntjiLSTmSSuTC6FrR81z6AAku46bLF2FKAL3MFHtV5&orderId=Donation&checkoutDesc=Donation&currency=USD"
+private const val X_URL = "https://x.com/turtlecute33"
+private const val NOSTR_URL = "https://primal.net/turtlecute"

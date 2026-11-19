@@ -59,6 +59,8 @@ Compose with Material 3 Expressive for the interface. Chat and calls are not inc
 ## Privacy
 
 - No ads, no third-party analytics, no Google Play Services. The app connects only to MEGA.
+- Settings > Support has links to donate and to the developer on X and Nostr. They open in your
+  browser. The app itself does not connect to these hosts.
 - At each login, the MEGA SDK sends a device ID. By default, this is a hash of the Android ID,
   which stays the same after a reinstall. MegaGlass gives the SDK a random ID in its place. The
   ID stays until you log out, and the next login gets a new ID, so Device Centre shows each login

@@ -25,6 +25,7 @@ manage_accounts phonelink_lock vpn_key devices_other folder_copy cloud_sync sync
 progress_activity folder_off pause_circle+ play_circle+ cleaning_services auto_delete layers bolt north_east south_west
 remove_selection screen_rotation queue_music zoom_in
 backspace emoji_events workspace_premium no_photography gavel delete_sweep lock_clock brightness_auto
+currency_bitcoin alternate_email hub
 """.split()
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

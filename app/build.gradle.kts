@@ -26,8 +26,8 @@ android {
         applicationId = "app.megaglass.android"
         minSdk = 35
         targetSdk = 37
-        versionCode = 13
-        versionName = "0.2.8"
+        versionCode = 14
+        versionName = "0.2.9"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += "arm64-v8a" }
     }
